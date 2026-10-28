@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "Orilio",
+  "version": "0.2.0",
+  "description": "Shows and controls YouTube Music, Spotify and SoundCloud in Orilio, the macOS notch app. Talks only to Orilio on this Mac.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAmLMpe7PMPkvoA64ajgzg+dY7E+uxofSqd4MLgEzCWqdwPjAAUcspuDymLDHTYDAFJgwK3eqyKrrgUynhjmsZubtO/X4GB062NPcPdomY9CjRDELfK73hlNg1W6ONmtF1AeMXC5KGlG0MbXkbfSTWzu07LPOSH5Q1TFYIhT7O2GG5GNRhdZqjRNrfpoFn9gUxiP1bZtCU3Rpr/yrQfeeM8pJyyIQds6kiY8oY33fT57NQ9gcIWk++khFxbJh5wxUYz+99mSu9/+JhJHLgAkxzpZurWcFls65y3IiEuEP6Z8gb2JvM7ZFgoGXnUAwwqrDo7GuZZ6+WCgjPQ0VfQTZryQIDAQAB",
+  "minimum_chrome_version": "116",
+  "permissions": [
+    "nativeMessaging",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://music.youtube.com/*",
+    "https://open.spotify.com/*",
+    "https://soundcloud.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://music.youtube.com/*",
+        "https://open.spotify.com/*",
+        "https://soundcloud.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}
