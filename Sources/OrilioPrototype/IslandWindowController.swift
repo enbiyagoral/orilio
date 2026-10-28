@@ -254,8 +254,10 @@ final class IslandWindowController {
         panel.contentView = host
         panel.onEscape = { [weak model] in model?.dismiss() }
         panel.onKey = { [weak model] event in
-            guard let model, model.state == .pinned, model.tab == .shelf else { return false }
+            guard let model, model.state == .pinned else { return false }
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            if model.tab == .clipboard { return model.clipboard.handleKey(keyCode: event.keyCode, command: flags == .command) }
+            guard model.tab == .shelf else { return false }
             switch model.shelfSection {
             case .files: return model.shelf.handleKey(keyCode: event.keyCode, command: flags == .command)
             case .screenshots: return model.library.handleKey(keyCode: event.keyCode, command: flags == .command)

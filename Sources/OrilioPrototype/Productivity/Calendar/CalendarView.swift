@@ -31,15 +31,15 @@ struct CalendarPanel: View {
                 CalendarToday(module: module, day: CalendarDay(events: module.day.events, now: fixedNow ?? context.date))
             }
         case .off, .needsAccess:
-            CalendarMessage(symbol: "calendar", title: "See your next meeting here",
+            ModuleMessage(symbol: "calendar", title: "See your next meeting here",
                             detail: "Orilio reads the calendars in the Calendar app (iCloud, Google, Exchange). Events stay on this Mac.",
                             action: ("Turn On Calendar", { Task { await module.enable() } }))
         case .denied:
-            CalendarMessage(symbol: "calendar.badge.exclamationmark", title: "Calendar access is off",
+            ModuleMessage(symbol: "calendar.badge.exclamationmark", title: "Calendar access is off",
                             detail: "Allow Orilio in System Settings › Privacy & Security › Calendars.",
                             action: ("Open System Settings", { NSWorkspace.shared.open(CalendarModule.privacySettingsURL) }))
         case .restricted:
-            CalendarMessage(symbol: "lock", title: "Calendar access is restricted",
+            ModuleMessage(symbol: "lock", title: "Calendar access is restricted",
                             detail: "A device policy prevents apps from reading calendars on this Mac.", action: nil)
         }
     }
@@ -280,19 +280,22 @@ private struct EventRow: View {
     }
 }
 
-private struct CalendarMessage: View {
+/// An empty or permission state: a tinted symbol, a title, a detail and an optional action.
+struct ModuleMessage: View {
     let symbol: String
     let title: String
     let detail: String
     let action: (String, () -> Void)?
+    var tint: Color? = nil
 
     var body: some View {
+        let tint = tint ?? Design.blue
         HStack(spacing: 18) {
             Image(systemName: symbol)
                 .font(.system(size: 30, weight: .light))
-                .foregroundStyle(Design.blue)
+                .foregroundStyle(tint)
                 .frame(width: 64, height: 64)
-                .background(Design.blue.opacity(0.14), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .background(tint.opacity(0.14), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
             VStack(alignment: .leading, spacing: 6) {
                 Text(title).font(.system(size: 17, weight: .semibold))
                 Text(detail)

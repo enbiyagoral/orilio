@@ -19,6 +19,7 @@ enum ShelfSection: String, CaseIterable, Identifiable {
 /// The island's modules, in the order of the tab bar (the M3 hub design's order).
 enum IslandTab: String, CaseIterable, Identifiable {
     case calendar = "Calendar"
+    case clipboard = "Clipboard"
     case music = "Now Playing"
     case shelf = "Shelf"
     var id: Self { self }
@@ -26,6 +27,7 @@ enum IslandTab: String, CaseIterable, Identifiable {
     var symbol: String {
         switch self {
         case .calendar: "calendar"
+        case .clipboard: "list.clipboard"
         case .music: "music.note"
         case .shelf: "tray"
         }
@@ -68,6 +70,7 @@ final class IslandModel {
     let shelf: ShelfModel
     let library: ScreenshotLibrary
     let calendar: CalendarModule
+    let clipboard: ClipboardModule
     /// Whether the drag over the island carries something the shelf can take.
     private(set) var dropIsValid = true
     /// Where a drop will go: the screenshot library if it is what's on screen, else the File Shelf.
@@ -77,13 +80,17 @@ final class IslandModel {
          library: ScreenshotLibrary = ScreenshotLibrary(store: ScreenshotStore(
              directory: FileManager.default.temporaryDirectory.appending(path: "orilio-unused-library"))),
          calendar: CalendarModule = CalendarModule(source: NoCalendarSource(), reminders: NoReminders(),
-                                                   defaults: UserDefaults(suiteName: "orilio.unused") ?? .standard)) {
+                                                   defaults: UserDefaults(suiteName: "orilio.unused") ?? .standard),
+         clipboard: ClipboardModule = ClipboardModule(
+             store: ClipboardStore(directory: FileManager.default.temporaryDirectory.appending(path: "orilio-unused-clipboard")),
+             defaults: UserDefaults(suiteName: "orilio.unused") ?? .standard)) {
         let showDemo = UserDefaults.standard.bool(forKey: SettingsKeys.showDemoSource)
         demo = DemoMediaProvider(enabled: showDemo)
         media = MediaCoordinator(providers: providers + [demo])
         self.shelf = shelf
         self.library = library
         self.calendar = calendar
+        self.clipboard = clipboard
     }
 
     /// A meeting about to start, for the collapsed island (only when Calendar is on and readable).
