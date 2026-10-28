@@ -373,18 +373,88 @@ private struct MusicCard: View {
     @Environment(\.reducesMotion) private var reduceMotion
 
     var body: some View {
+        let access = PlayerAccess.shared
+        let session = media.current
+        let state = NowPlayingCardState.resolve(
+            sessionApp: session.flatMap { PlayerAccess.isScriptable($0.providerID) ? $0.providerID : nil },
+            access: session.flatMap { access.access($0.providerID, statuses: media.statuses) },
+            declined: session.map { access.declined($0.providerID) } ?? false,
+            revokedApps: media.statuses.filter { $0.value == .permissionDenied }.keys.sorted().map(media.providerName),
+            spotifyInstalled: PlayerAccess.installed(.spotify), musicInstalled: PlayerAccess.installed(.music),
+            hasSession: session != nil)
         ZStack {
-            if let session = media.current {
-                NowPlaying(session: session, media: media)
-                    // A different source is a different card: cross-fade, and start with fresh control state.
-                    .id(session.sourceID)
-                    .transition(.opacity)
-            } else {
-                EmptyMusicState(media: media)
-                    .transition(.opacity)
+            switch state {
+            case .session(let ask):
+                if let ask, let session {
+                    let name = media.providerName(ask)
+                    StatusCard(tone: .ask(tile: MusicEar.warm.opacity(0.16), ink: MusicEar.warm), symbol: "music.note",
+                               title: "Let Orilio control \(name)?",
+                               detail: "Needed for play, pause and skip from the notch. macOS asks once for each music app.",
+                               primary: .init("Continue") { Task { await media.requestControl(session.providerID) } },
+                               secondary: .init("Not now") { access.decline(session.providerID) }, layout: .ask)
+                        .padding(EdgeInsets(top: 10, leading: 20, bottom: 20, trailing: 20))
+                } else if let session {
+                    NowPlaying(session: session, media: media)
+                        // A different source is a different card: cross-fade, and start with fresh control state.
+                        .id(session.sourceID)
+                        .transition(.opacity)
+                }
+            case .revoked(let app):
+                StatusCard(tone: .warn, symbol: "exclamationmark.shield", title: "Orilio can no longer control \(app)",
+                           detail: "Access was turned off. Re-enable it in Privacy & Security › Automation.",
+                           primary: .init("Open System Settings") { PrivacyPane.open(PrivacyPane.automation) }, layout: .banner)
+            case .nothingPlaying(let spotify, let music):
+                StatusCard(tone: .empty, symbol: "music.note", title: "Nothing playing",
+                           detail: "Start something and it shows up here.",
+                           primary: spotify ? .init("Open Spotify") { PlayerAccess.open(.spotify) }
+                               : music ? .init("Open Music") { PlayerAccess.open(.music) } : nil,
+                           secondary: spotify && music ? .init("Open Music") { PlayerAccess.open(.music) } : nil)
+                    .padding(EdgeInsets(top: 10, leading: 20, bottom: 20, trailing: 20))
+            case .spotifyMissing:
+                StatusCard(tone: .empty, symbol: "arrow.down.to.line", title: "Spotify isn’t installed",
+                           detail: "Orilio works with Music too.", primary: .init("Use Music") { PlayerAccess.open(.music) })
+                    .padding(EdgeInsets(top: 10, leading: 20, bottom: 20, trailing: 20))
             }
         }
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: media.current?.sourceID)
+    }
+}
+
+/// Automation access for the scriptable players, as Orilio knows it, and Not now per app.
+@MainActor @Observable
+final class PlayerAccess {
+    static let shared = PlayerAccess()
+    private var declinedApps: Set<String>
+    private static let bundles = ["spotify": ScriptablePlayer.spotify.bundleID, "music": ScriptablePlayer.music.bundleID]
+
+    private init() {
+        declinedApps = Set(UserDefaults.standard.stringArray(forKey: "automation.askDeclined") ?? [])
+    }
+
+    static func isScriptable(_ providerID: String) -> Bool { bundles[providerID] != nil }
+
+    /// Granted once an Apple Event got through (remembered by the provider), denied when macOS said no.
+    func access(_ providerID: String, statuses: [String: MediaProviderStatus]) -> ControlAccess? {
+        guard let bundle = Self.bundles[providerID] else { return nil }
+        if statuses[providerID] == .permissionDenied { return .denied }
+        return UserDefaults.standard.bool(forKey: "automationGranted.\(bundle)") ? .granted : .undetermined
+    }
+
+    func declined(_ providerID: String) -> Bool { declinedApps.contains(providerID) }
+
+    /// Not now: playback info still shows; the controls ask again when used.
+    func decline(_ providerID: String) {
+        declinedApps.insert(providerID)
+        UserDefaults.standard.set(declinedApps.sorted(), forKey: "automation.askDeclined")
+    }
+
+    static func installed(_ player: ScriptablePlayer) -> Bool {
+        NSWorkspace.shared.urlForApplication(withBundleIdentifier: player.bundleID) != nil
+    }
+
+    static func open(_ player: ScriptablePlayer) {
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: player.bundleID) else { return }
+        NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
     }
 }
 
@@ -452,7 +522,13 @@ private struct NowPlaying: View {
 
                 HStack(spacing: 22) {
                     if denied && !caps.contains(.playPause) {
-                        PermissionLink(text: "Allow control of \(session.sourceName)")
+                        // The design's "Control denied": playback info still shows; one way back.
+                        HStack(spacing: 10) {
+                            Label("Can’t control \(session.sourceName)", systemImage: "exclamationmark.shield")
+                                .font(.system(size: 12.5, weight: .medium))
+                                .foregroundStyle(SettingsDesign.amber)
+                            PermissionLink(text: "Fix in Settings")
+                        }
                     } else {
                         // Unsupported controls stay in place, dimmed, so the layout doesn't jump between sources.
                         IconButton(symbol: "backward.fill", label: "Previous track", glyph: 20, frame: 44) { run(.skip, .previous, step: -1) }
@@ -692,35 +768,6 @@ private struct SourceBadge: View {
     }
 }
 
-private struct EmptyMusicState: View {
-    let media: MediaCoordinator
-
-    var body: some View {
-        let denied = media.statuses.filter { $0.value == .permissionDenied }.keys.map(media.providerName).sorted()
-        HStack(spacing: Metrics.padding) {
-            RoundedRectangle(cornerRadius: Metrics.innerRadius, style: .continuous)
-                .fill(.white.opacity(0.06))
-                .frame(width: 96, height: 96)
-                .overlay(Image(systemName: denied.isEmpty ? "music.note" : "lock.fill")
-                    .font(.system(size: 28)).foregroundStyle(.white.opacity(0.3)))
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 4) {
-                if denied.isEmpty {
-                    Text("Nothing playing").font(.system(size: 15, weight: .semibold)).foregroundStyle(.white)
-                    Text("Start music in a supported app and it appears here.")
-                        .font(.system(size: 12)).foregroundStyle(.white.opacity(0.55))
-                } else {
-                    Text("Permission needed").font(.system(size: 15, weight: .semibold)).foregroundStyle(.white)
-                    Text("Allow Orilio to control \(denied.formatted()) in Privacy & Security › Automation.")
-                        .font(.system(size: 12)).foregroundStyle(.white.opacity(0.55))
-                    PermissionLink(text: "Open System Settings").padding(.top, 4)
-                }
-            }
-            Spacer(minLength: 0)
-        }
-    }
-}
-
 private struct PermissionLink: View {
     let text: String
 
@@ -915,6 +962,7 @@ private struct MusicEar: View {
     let session: MediaSessionSnapshot
     let side: EarSide
     static let barColor = NSColor(red: 0.969, green: 0.71, blue: 0.431, alpha: 1)
+    static let warm = Color(nsColor: barColor) // #F7B56E
 
     var body: some View {
         if side == .leading {

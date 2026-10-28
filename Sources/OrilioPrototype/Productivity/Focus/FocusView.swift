@@ -13,6 +13,18 @@ struct FocusPanel: View {
     @State private var customOpen = false
 
     var body: some View {
+        if let ended = module.endedWhileAsleep {
+            // The deadline passed while the Mac slept: say when, once, and offer the next one.
+            StatusCard(tone: .good, symbol: "moon.zzz", title: "Session ended at \(ended.formatted(date: .omitted, time: .shortened))",
+                       detail: "Your Mac was asleep, so Orilio stayed quiet.",
+                       primary: .init("Start another") { module.begin() },
+                       secondary: .init("Dismiss") { module.dismissEndedNotice() })
+        } else {
+            timer
+        }
+    }
+
+    private var timer: some View {
         HStack(spacing: 28) {
             // Redrawn once a second only while running, and only the ring and the time.
             TimelineView(.animation(minimumInterval: 1, paused: !module.isRunning)) { context in

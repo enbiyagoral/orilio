@@ -54,7 +54,7 @@ struct ShelfView: View {
                 }
             }
             switch section {
-            case .files: FilesStrip(shelf: shelf, draggedOut: draggedOut)
+            case .files: FilesStrip(shelf: shelf, screenshotsComeIn: library.addsSystemScreenshots, draggedOut: draggedOut)
             case .screenshots: ScreenshotsView(library: library)
             }
         }
@@ -71,16 +71,41 @@ struct ShelfView: View {
     }
 }
 
+private extension FilesStrip {
+    /// Asks where the file is now (the open panel is Orilio's own; no permission is needed).
+    func locate(_ item: ShelfItem) {
+        let panel = NSOpenPanel()
+        panel.message = "Where is \(item.name) now?"
+        panel.canChooseDirectories = item.isFolder
+        panel.canChooseFiles = !item.isFolder
+        panel.directoryURL = item.url.deletingLastPathComponent()
+        NSApp.activate()
+        if panel.runModal() == .OK, let url = panel.url { shelf.relocate(item, to: url) }
+    }
+}
+
 private struct FilesStrip: View {
     let shelf: ShelfModel
+    let screenshotsComeIn: Bool
     let draggedOut: () -> Void
 
     var body: some View {
-        if shelf.items.isEmpty && shelf.pending.isEmpty {
-            EmptyShelf()
+        let state = ShelfCardState.resolve(shelf.items, pending: shelf.pending.count)
+        if state == .empty {
+            // The design says screenshots land on the Shelf; in Orilio they go to Screenshots, and
+            // only when that's turned on, so the line says what really happens.
+            StatusCard(tone: .empty, symbol: "tray.and.arrow.down", title: "Drop files here",
+                       detail: screenshotsComeIn ? "New screenshots from ⇧⌘4 go to Screenshots." : "They stay where they are; the Shelf only keeps a link.")
         } else {
             // The M3 hub design: five tiles a row (radius 16, padding 10, gap 10) over a drop hint.
             VStack(spacing: 12) {
+                if case .missing(let id) = state, let item = shelf.items.first(where: { $0.id == id }) {
+                    StatusCard(tone: .warn, symbol: "doc.badge.ellipsis", title: "File moved or deleted",
+                               detail: "\(item.name) is no longer where it was.",
+                               primary: .init("Locate…") { locate(item) }, secondary: .init("Remove") { shelf.remove(item) },
+                               layout: .banner)
+                        .background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                }
                 ScrollView {
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 5), spacing: 10) {
                         ForEach(shelf.pending) { PendingTile(pending: $0) }
@@ -179,28 +204,6 @@ private struct PendingTile: View {
         .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Receiving \(pending.name)")
-    }
-}
-
-private struct EmptyShelf: View {
-    var body: some View {
-        let shape = RoundedRectangle(cornerRadius: Metrics.innerRadius, style: .continuous)
-        HStack(spacing: 12) {
-            Image(systemName: "tray.and.arrow.down")
-                .font(.system(size: 22))
-                .foregroundStyle(.white.opacity(Metrics.secondaryText))
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Drop files on the notch")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.white)
-                Text("They stay where they are; the Shelf only keeps a link.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.white.opacity(Metrics.secondaryText))
-            }
-        }
-        .frame(maxWidth: .infinity, minHeight: 84)
-        .overlay(shape.strokeBorder(.white.opacity(0.2), style: StrokeStyle(lineWidth: 1, dash: [5, 4])))
-        .accessibilityElement(children: .combine)
     }
 }
 

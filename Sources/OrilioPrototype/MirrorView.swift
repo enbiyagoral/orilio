@@ -28,95 +28,39 @@ struct MirrorView: View {
     let close: () -> Void
 
     var body: some View {
+        let mint = Design.mint
         Group {
             if hoverOnly {
-                MirrorCard(symbol: "camera", title: "Camera Mirror", detail: "Click to turn on the camera. It stops the moment the island closes.")
+                StatusCard(tone: .ask(tile: mint.opacity(0.12), ink: mint), symbol: "camera", title: "Camera Mirror",
+                           detail: "Click to turn on the camera. It stops the moment the island closes.", layout: .ask)
             } else {
                 switch mirror.state {
                 case .off, .needsConsent:
-                    MirrorCard(symbol: "camera", title: "Use the camera as a mirror?",
+                    StatusCard(tone: .ask(tile: mint.opacity(0.12), ink: mint), symbol: "camera", title: "Use the camera as a mirror?",
                                detail: "Preview only. Nothing is recorded, saved or sent. macOS will ask you to confirm next.",
-                               secondary: ("Not now", close), primary: ("Continue", { mirror.send(.consented) }))
+                               primary: .init("Continue") { mirror.send(.consented) }, secondary: .init("Not now", close), layout: .ask)
                 case .requesting:
-                    MirrorCard(symbol: "camera", title: "Use the camera as a mirror?",
-                               detail: "Confirm in the macOS dialog to see yourself here.", secondary: ("Not now", close))
+                    StatusCard(tone: .ask(tile: mint.opacity(0.12), ink: mint), symbol: "camera", title: "Use the camera as a mirror?",
+                               detail: "Confirm in the macOS dialog to see yourself here.", secondary: .init("Not now", close), layout: .ask)
                 case .denied:
-                    MirrorCard(symbol: "camera", title: "Camera access is off",
-                               detail: "Allow Orilio in System Settings › Privacy & Security › Camera.",
-                               secondary: ("Close", close),
-                               primary: ("Open System Settings", { NSWorkspace.shared.open(CameraDevices.privacySettingsURL) }))
+                    StatusCard(tone: .warn, symbol: "video.slash", title: "Camera access is off",
+                               detail: "Turn on Orilio in Privacy & Security › Camera to use the mirror.",
+                               primary: .init("Open System Settings") { NSWorkspace.shared.open(CameraDevices.privacySettingsURL) },
+                               secondary: .init("Close", close))
                 case .noCamera:
-                    MirrorCard(symbol: "camera", title: "No camera found",
-                               detail: "Connect one, or use your iPhone with Continuity Camera.", secondary: ("Close", close))
+                    StatusCard(tone: .empty, symbol: "camera", title: "No camera found",
+                               detail: "Connect one, or use your iPhone with Continuity Camera.", secondary: .init("Close", close))
                 case .inUseElsewhere:
-                    MirrorCard(symbol: "camera", title: "Camera is in use",
-                               detail: "Close the call to see yourself here.", secondary: ("Close", close),
-                               primary: ("Try again", { mirror.send(.hidden); mirror.setVisible(true) }))
+                    StatusCard(tone: .warn, symbol: "video.slash", title: "Camera is in use",
+                               detail: "Another app is using it. Close the call to see yourself here.",
+                               primary: .init("Try again") { mirror.send(.hidden); mirror.setVisible(true) },
+                               secondary: .init("Close", close))
                 case .live:
                     LiveMirror(mirror: mirror, close: close)
                 }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-    }
-}
-
-/// The design's card: a 52 pt camera tile, a 17 pt title, a 13 pt note, and its buttons.
-private struct MirrorCard: View {
-    let symbol: String
-    let title: String
-    let detail: String
-    var secondary: (String, () -> Void)? = nil
-    var primary: (String, () -> Void)? = nil
-
-    var body: some View {
-        VStack(spacing: 14) {
-            Image(systemName: symbol)
-                .font(.system(size: 24, weight: .regular))
-                .foregroundStyle(Design.mint)
-                .frame(width: 52, height: 52)
-                .background(Design.mint.opacity(0.12), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-            VStack(spacing: 6) {
-                Text(title).font(.system(size: 17, weight: .semibold)).tracking(-0.17)
-                Text(detail)
-                    .font(.system(size: 13))
-                    .lineSpacing(13 * 0.45 - 2)
-                    .foregroundStyle(.white.opacity(0.62))
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: 380)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            if secondary != nil || primary != nil {
-                HStack(spacing: 8) {
-                    if let secondary {
-                        Button(action: secondary.1) {
-                            Text(secondary.0)
-                                .font(.system(size: 14, weight: .medium))
-                                .padding(.horizontal, 18)
-                                .frame(height: 40)
-                                .background(.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                        }
-                        .buttonStyle(PressableStyle())
-                    }
-                    if let primary {
-                        Button(action: primary.1) {
-                            Text(primary.0)
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundStyle(Design.ink)
-                                .padding(.horizontal, 20)
-                                .frame(height: 40)
-                                .background(Design.mint, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                                .shadow(color: Design.mint.opacity(0.4), radius: 11)
-                        }
-                        .buttonStyle(PressableStyle())
-                    }
-                }
-                .padding(.top, 4)
-            }
-        }
-        .padding(EdgeInsets(top: 52, leading: 36, bottom: 28, trailing: 36))
-        .frame(maxWidth: .infinity)
-        .accessibilityElement(children: .contain)
     }
 }
 

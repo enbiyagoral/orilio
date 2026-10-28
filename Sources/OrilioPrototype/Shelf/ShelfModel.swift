@@ -255,6 +255,14 @@ final class ShelfModel {
 
     func remove(_ item: ShelfItem) { remove([item]) }
 
+    /// "Locate…" on a missing file: the shelf points at the file the user picked, in the same place.
+    func relocate(_ item: ShelfItem, to url: URL) {
+        guard let index = items.firstIndex(where: { $0.id == item.id }), let fresh = ShelfItem.load(url, origin: .reference) else { return }
+        items[index] = fresh
+        selection.remove(item.id)
+        scheduleSave()
+    }
+
     /// True only for a folder strictly inside `root`, after resolving `..` and symbolic links, so a
     /// forged or corrupted record like `Received/../../Documents` can never point the delete elsewhere.
     nonisolated static func isInside(_ folder: URL, _ root: URL) -> Bool {

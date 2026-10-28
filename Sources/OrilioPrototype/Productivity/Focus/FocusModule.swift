@@ -105,6 +105,11 @@ final class FocusModule {
     /// Notifications were asked for and macOS said no.
     private(set) var notificationsDenied = false
     private(set) var completedToday = 0
+    /// When a session ended while the Mac was asleep (noticed more than a minute late): the panel
+    /// says so once, with Start another.
+    private(set) var endedWhileAsleep: Date?
+
+    func dismissEndedNotice() { endedWhileAsleep = nil }
 
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let notifier: any FocusNotifier
@@ -162,6 +167,7 @@ final class FocusModule {
     }
 
     func begin() {
+        endedWhileAsleep = nil
         guard session == nil else { return }
         update(.start(Double(minutes * 60), at: now()))
     }
@@ -200,6 +206,9 @@ final class FocusModule {
     /// session is cleared by the first call, so it completes exactly once.
     func check() {
         guard let session, session.isRunning, session.remaining(at: now()) <= 0 else { return }
+        if let deadline = session.endsAt, FocusCardState.endedWhileAsleep(deadline: deadline, noticedAt: now()) {
+            endedWhileAsleep = deadline
+        }
         self.session = nil
         save()
         timer?.invalidate()

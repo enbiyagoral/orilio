@@ -104,6 +104,7 @@ enum CalendarKeys {
     static let enabled = "calendar.enabled"
     static let hiddenCalendars = "calendar.hiddenCalendars"
     static let reminderLead = "calendar.reminderLeadMinutes" // -1 off, 0 at start, 5, 10
+    static let declined = "calendar.askDeclined"
 }
 
 /// The Calendar module's state for the views. Nothing happens, and nothing is requested, until the
@@ -119,6 +120,16 @@ final class CalendarModule {
     private(set) var day = CalendarDay(events: [], now: Date())
     private(set) var calendars: [CalendarInfo] = []
     private(set) var lastUpdated: Date?
+    /// The first timed event after today (within a week), for "Nothing else today · Next up".
+    private(set) var nextLater: CalendarEvent?
+
+    /// The user chose Not now on the first card; the panel then shows "access off" with Turn on.
+    var declined: Bool { defaults.bool(forKey: CalendarKeys.declined) }
+
+    func decline() {
+        defaults.set(true, forKey: CalendarKeys.declined)
+        status = .off // observable change; the card follows
+    }
 
     @ObservationIgnored private let source: any CalendarSource
     @ObservationIgnored private let reminders: any ReminderScheduler
@@ -159,6 +170,7 @@ final class CalendarModule {
     /// The user turned Calendar on: this is the only place that may show the permission prompt.
     func enable() async {
         defaults.set(true, forKey: CalendarKeys.enabled)
+        defaults.set(false, forKey: CalendarKeys.declined)
         if await source.access() == .notDetermined { _ = await source.requestAccess() }
         observe()
         await reload()
@@ -208,8 +220,11 @@ final class CalendarModule {
         let hidden = hiddenCalendarIDs
         async let fetchedCalendars = source.calendars()
         let events = await source.events(from: start, to: end).filter { !hidden.contains($0.calendarID) }
+        let later = Calendar.current.date(byAdding: .day, value: 7, to: end) ?? end
+        let upcoming = await source.events(from: end, to: later).first { !$0.isAllDay && !hidden.contains($0.calendarID) }
         guard !Task.isCancelled else { return }
         calendars = await fetchedCalendars
+        nextLater = upcoming
         day = CalendarDay(events: events, now: time)
         lastUpdated = time
         status = .ready

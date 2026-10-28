@@ -82,7 +82,10 @@ struct NotesModuleTests {
     @Test func pendingSaveLandsWithoutAnExplicitFlush() async throws {
         let (module, directory) = await makeModule()
         module.currentText = "autosaved"
-        try await Task.sleep(for: NotesModule.saveDelay + .milliseconds(300))
+        try await Task.sleep(for: NotesModule.saveDelay)
+        // The coalesced save lands on its own; wait for the file rather than a fixed time.
+        let file = directory.appending(path: "notes.json")
+        for _ in 0..<100 where !FileManager.default.fileExists(atPath: file.path) { try await Task.sleep(for: .milliseconds(20)) }
         let (again, _) = await makeModule(directory)
         #expect(again.currentText == "autosaved")
     }

@@ -18,17 +18,40 @@ struct ClipboardPanel: View {
     let library: ScreenshotLibrary
 
     var body: some View {
-        switch module.status {
+        switch ClipboardCardState.resolve(status: module.status, declined: module.declined, isEmpty: module.items.isEmpty,
+                                          privacyPaused: module.privacyPaused) {
+        case .ask:
+            // Opt-in only: no system prompt here.
+            StatusCard(tone: .ask(tile: SettingsDesign.mint.opacity(0.12), ink: SettingsDesign.mint), symbol: "list.clipboard",
+                       title: "Keep a clipboard history?",
+                       detail: "Copied text, links and images stay on this Mac for \(keptFor). Password managers and hidden items are always skipped.",
+                       primary: .init("Turn on") { Task { await module.enable() } },
+                       secondary: .init("Not now") { module.decline() }, layout: .ask)
         case .off:
-            ModuleMessage(symbol: "list.clipboard", title: "Keep a history of what you copy",
-                          detail: "Starts from now. Kept on this Mac only; items marked private and copies from password managers are skipped.",
-                          action: ("Turn On Clipboard History", { Task { await module.enable() } }), tint: accent(.action))
+            StatusCard(tone: .empty, symbol: "list.clipboard", title: "Clipboard history is off",
+                       detail: module.retentionDays == 0 ? "Keep your copies, only on this Mac." : "Keep the last \(keptFor) of copies, only on this Mac.",
+                       primary: .init("Turn on") { Task { await module.enable() } })
         case .blocked:
-            ModuleMessage(symbol: "hand.raised", title: "Clipboard access is off",
-                          detail: "macOS is set to deny Orilio reading other apps' copies. Allow it in System Settings › Privacy & Security › Paste from Other Apps.",
-                          action: ("Open System Settings", { NSWorkspace.shared.open(ClipboardModule.pasteSettingsURL) }), tint: accent(.action))
-        case .on, .paused:
+            StatusCard(tone: .warn, symbol: "hand.raised", title: "Clipboard access is off",
+                       detail: "macOS denies Orilio reading other apps’ copies. Allow it in Privacy & Security › Paste from Other Apps.",
+                       primary: .init("Open System Settings") { NSWorkspace.shared.open(ClipboardModule.pasteSettingsURL) }, layout: .banner)
+        case .privacyPaused:
+            StatusCard(tone: .empty, symbol: "pause", title: "Paused for privacy",
+                       detail: "A password manager is in front. History resumes when you switch away.")
+        case .empty:
+            StatusCard(tone: .empty, symbol: "list.clipboard", title: "Copy something",
+                       detail: "Text, links and images you copy with ⌘C appear here.")
+        case .history:
             ClipboardHistory(module: module, library: library)
+        }
+    }
+
+    /// The real retention ("7 days"), not a fixed number.
+    private var keptFor: String {
+        switch module.retentionDays {
+        case 0: "as long as you keep them"
+        case 1: "1 day"
+        case let days: "\(days) days"
         }
     }
 }

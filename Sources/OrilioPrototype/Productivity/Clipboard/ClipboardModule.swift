@@ -69,6 +69,7 @@ enum ClipboardKeys {
     static let maxItems = "clipboard.maxItems"
     static let retentionDays = "clipboard.retentionDays" // 0 = keep until removed
     static let excludedApps = "clipboard.excludedApps"
+    static let declined = "clipboard.askDeclined"
 }
 
 /// Clipboard history. Off until the user turns it on; nothing from before is imported.
@@ -114,6 +115,30 @@ final class ClipboardModule {
         self.frontmostApp = frontmostApp
         self.now = now
         lastChange = self.pasteboard.changeCount
+        // Event-driven: the app in front changes, and "Paused for privacy" follows it.
+        frontmostObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] note in
+            let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+            let id = app?.bundleIdentifier
+            MainActor.assumeIsolated { self?.frontmostChanged(id) }
+        }
+    }
+
+    @ObservationIgnored private var frontmostObserver: NSObjectProtocol?
+    /// A password manager (an excluded app) is the app the user is in: nothing is recorded.
+    private(set) var privacyPaused = false
+
+    private func frontmostChanged(_ bundleID: String?) {
+        guard bundleID != Bundle.main.bundleIdentifier else { return } // opening the island isn't switching away
+        privacyPaused = bundleID.map(excludedApps.contains) ?? false
+    }
+
+    var declined: Bool { defaults.bool(forKey: ClipboardKeys.declined) }
+
+    /// Not now on the first card: the panel shows "Clipboard history is off" with Turn on.
+    func decline() {
+        defaults.set(true, forKey: ClipboardKeys.declined)
+        status = .off
     }
 
     var isEnabled: Bool { defaults.bool(forKey: ClipboardKeys.enabled) }
@@ -141,6 +166,7 @@ final class ClipboardModule {
     /// Turning history on starts from now: whatever is on the clipboard already is not recorded.
     func enable() async {
         defaults.set(true, forKey: ClipboardKeys.enabled)
+        defaults.set(false, forKey: ClipboardKeys.declined)
         defaults.set(false, forKey: ClipboardKeys.paused)
         items = await store.load()
         lastChange = pasteboard.changeCount

@@ -101,8 +101,12 @@ protocol MediaProvider: Sendable {
     func perform(_ command: MediaCommand, on sourceID: String) async throws(MediaError)
     /// Re-read state now (island opened, Mac woke). Must be cheap and must not prompt the user.
     func refresh()
+    /// The user chose Continue on "Let Orilio control …?": the one place that may show the
+    /// Automation prompt for this app.
+    func requestControl() async
 }
 
 extension MediaProvider {
     func refresh() {}
+    func requestControl() async {}
 }

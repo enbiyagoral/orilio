@@ -1,10 +1,12 @@
 import AppKit
+import Network
 import SwiftUI
 
 // Values follow the M3 hub design: a 290 pt "next" card (radius 22, padding 18) and a list of
 // 38 pt rows (radius 12) on the right.
 private enum Design {
     static let blue = Color(red: 0.43, green: 0.66, blue: 1)          // #6EA8FF
+    static let lightBlue = Color(red: 0.553, green: 0.733, blue: 1)   // #8DBBFF
     static let ink = Color(red: 0, green: 0.078, blue: 0.051)         // #00140D, text on the accent
     static let avatarColors = [Color(red: 0.23, green: 0.29, blue: 0.42), // #3B4A6B
                                Color(red: 0.35, green: 0.25, blue: 0.42), // #5A3F6B
@@ -24,30 +26,63 @@ struct CalendarPanel: View {
     var fixedNow: Date? = nil
 
     var body: some View {
-        switch module.status {
-        case .ready:
-            // Countdowns move once a minute, and only while the panel is on screen.
-            TimelineView(.everyMinute) { context in
-                CalendarToday(module: module, day: CalendarDay(events: module.day.events, now: fixedNow ?? max(context.date, Date()))) // the schedule's date is the minute's start
-            }
-        case .off, .needsAccess:
-            ModuleMessage(symbol: "calendar", title: "See your next meeting here",
-                            detail: "Orilio reads the calendars in the Calendar app (iCloud, Google, Exchange). Events stay on this Mac.",
-                            action: ("Turn On Calendar", { Task { await module.enable() } }))
-        case .denied:
-            ModuleMessage(symbol: "calendar.badge.exclamationmark", title: "Calendar access is off",
-                            detail: "Allow Orilio in System Settings › Privacy & Security › Calendars.",
-                            action: ("Open System Settings", { NSWorkspace.shared.open(CalendarModule.privacySettingsURL) }))
-        case .restricted:
-            ModuleMessage(symbol: "lock", title: "Calendar access is restricted",
-                            detail: "A device policy prevents apps from reading calendars on this Mac.", action: nil)
+        // Countdowns move once a minute, and only while the panel is on screen.
+        TimelineView(.everyMinute) { context in
+            let now = fixedNow ?? max(context.date, Date()) // the schedule's date is the minute's start
+            let day = CalendarDay(events: module.day.events, now: now)
+            card(CalendarCardState.resolve(status: module.status, declined: module.declined, calendarCount: module.calendars.count,
+                                           day: day, nextLater: module.nextLater, offline: NetworkStatus.shared.offline), day: day)
         }
+        // Access can be revoked in System Settings at any time: re-check each time the module opens.
+        .onAppear { if module.status != .off { module.refresh() } }
+    }
+
+    @ViewBuilder private func card(_ state: CalendarCardState, day: CalendarDay) -> some View {
+        switch state {
+        case .ask:
+            StatusCard(tone: .ask(tile: Design.blue.opacity(0.16), ink: Design.lightBlue), symbol: "calendar",
+                       title: "Show your meetings up here?",
+                       detail: "Orilio reads events from calendars already added to this Mac — iCloud, Google, Outlook. Nothing leaves your Mac.",
+                       primary: .init("Continue") { Task { await module.enable() } },
+                       secondary: .init("Not now") { module.decline() }, layout: .ask)
+        case .declined:
+            StatusCard(tone: .warn, symbol: "exclamationmark.shield", title: "Calendar access is off",
+                       detail: "Orilio can’t see your events until access is turned back on.",
+                       primary: .init("Turn on") { Task { await module.enable() } })
+        case .denied:
+            StatusCard(tone: .warn, symbol: "calendar.badge.exclamationmark", title: "Calendar access is off",
+                       detail: "Turn on Orilio in Privacy & Security › Calendars to see your meetings.",
+                       primary: .init("Open System Settings") { PrivacyPane.open(PrivacyPane.calendars) }, layout: .banner)
+                .frame(maxHeight: .infinity)
+        case .restricted:
+            StatusCard(tone: .empty, symbol: "lock", title: "Calendar access is restricted",
+                       detail: "A device policy prevents apps from reading calendars on this Mac.")
+        case .noCalendars:
+            StatusCard(tone: .empty, symbol: "calendar", title: "No calendars on this Mac",
+                       detail: "Add iCloud, Google or Outlook in System Settings › Internet Accounts.",
+                       primary: .init("Open Internet Accounts") { PrivacyPane.open(PrivacyPane.internetAccounts) })
+        case .clearRestOfDay(let next):
+            StatusCard(tone: .good, symbol: "calendar.badge.checkmark", title: "Nothing else today",
+                       detail: next.map { "Next up: \($0.title), \(Self.when($0.start, from: day.now))." } ?? "Nothing on your calendars this week.")
+        case .events(let offline):
+            CalendarToday(module: module, day: day, offline: offline)
+        }
+    }
+
+    /// "tomorrow at 09:30", or "Friday at 09:30".
+    static func when(_ date: Date, from now: Date) -> String {
+        let time = date.formatted(date: .omitted, time: .shortened)
+        if Calendar.current.isDate(date, inSameDayAs: Calendar.current.date(byAdding: .day, value: 1, to: now) ?? now) {
+            return "tomorrow at \(time)"
+        }
+        return "\(date.formatted(.dateTime.weekday(.wide))) at \(time)"
     }
 }
 
 private struct CalendarToday: View {
     let module: CalendarModule
     let day: CalendarDay
+    var offline = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 16) {
@@ -56,7 +91,8 @@ private struct CalendarToday: View {
                 HStack(alignment: .firstTextBaseline) {
                     Text("Today").font(.system(size: 13, weight: .semibold))
                     Spacer()
-                    Text(summary)
+                    // Offline: EventKit's events still show; joining has to wait for the network.
+                    Text(offline ? "Offline · Join links work once you’re back online" : summary)
                         .font(.system(size: 11.5))
                         .foregroundStyle(.white.opacity(0.5))
                 }
@@ -280,45 +316,19 @@ private struct EventRow: View {
     }
 }
 
-/// An empty or permission state: a tinted symbol, a title, a detail and an optional action.
-struct ModuleMessage: View {
-    let symbol: String
-    let title: String
-    let detail: String
-    let action: (String, () -> Void)?
-    var tint: Color? = nil
+/// Whether the Mac has a network path, from the system (no traffic of its own). Only the
+/// calendar's Offline line reads it.
+@MainActor @Observable
+final class NetworkStatus {
+    static let shared = NetworkStatus()
+    private(set) var offline = false
+    @ObservationIgnored private let monitor = NWPathMonitor()
 
-    var body: some View {
-        let tint = tint ?? Design.blue
-        HStack(spacing: 18) {
-            Image(systemName: symbol)
-                .font(.system(size: 30, weight: .light))
-                .foregroundStyle(tint)
-                .frame(width: 64, height: 64)
-                .background(tint.opacity(0.14), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-            VStack(alignment: .leading, spacing: 6) {
-                Text(title).font(.system(size: 17, weight: .semibold))
-                Text(detail)
-                    .font(.system(size: 13))
-                    .foregroundStyle(.white.opacity(0.62))
-                    .fixedSize(horizontal: false, vertical: true)
-                if let action {
-                    Button(action: action.1) {
-                        Text(action.0)
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(Design.ink)
-                            .padding(.horizontal, 16)
-                            .frame(height: 32)
-                            .background(accent(.action), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    }
-                    .buttonStyle(PressableStyle())
-                    .padding(.top, 6)
-                }
-            }
-            Spacer(minLength: 0)
+    private init() {
+        monitor.pathUpdateHandler = { path in
+            let offline = path.status != .satisfied
+            Task { @MainActor in NetworkStatus.shared.offline = offline }
         }
-        .padding(.horizontal, 12)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .accessibilityElement(children: .contain)
+        monitor.start(queue: DispatchQueue(label: "com.deaconcornsoft.orilio.network"))
     }
 }

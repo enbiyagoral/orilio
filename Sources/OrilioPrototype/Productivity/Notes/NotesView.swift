@@ -194,6 +194,7 @@ private struct TaskList: View {
     @Bindable var module: NotesModule
     @State private var draft = ""
     @State private var editing: UUID?
+    @FocusState private var adding: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -208,6 +209,14 @@ private struct TaskList: View {
             .padding(.top, 2)
             .padding(.bottom, 6)
 
+            if NotesCardState.allDone(module.tasks) {
+                StatusCard(tone: .good, symbol: "checkmark.circle", title: "All done for today",
+                           detail: "Nice. Anything else on your mind?",
+                           primary: .init("Add a task") {
+                               NSApp.activate()
+                               adding = true
+                           })
+            } else {
             // Due labels say "Today" or "Tomorrow", so they follow the date.
             TimelineView(.everyMinute) { context in
                 List {
@@ -224,13 +233,16 @@ private struct TaskList: View {
                 .scrollContentBackground(.hidden)
                 .environment(\.defaultMinListRowHeight, 40)
             }
+            }
 
             HStack(spacing: 10) {
                 Image(systemName: "plus").font(.system(size: 13, weight: .semibold)).foregroundStyle(.white.opacity(0.55))
                 TextField("Add a task, press Return", text: $draft)
                     .textFieldStyle(.plain)
                     .font(.system(size: 13))
-                    .modifier(ActivateOnFocus())
+                    .focused($adding)
+                    .onChange(of: adding) { if adding { NSApp.activate() } }
+                    .tint(.white)
                     .onSubmit {
                         module.addTask(draft)
                         draft = ""

@@ -190,6 +190,12 @@ actor ScriptablePlayerProvider: MediaProvider {
 
     nonisolated func refresh() { events.yield(.refresh) }
 
+    /// Reading the player's state is an Apple Event: while undecided, macOS asks now.
+    func requestControl() async {
+        guard isRunning else { return }
+        await fetchState()
+    }
+
     func perform(_ command: MediaCommand, on sourceID: String) async throws(MediaError) {
         guard sourceID == player.bundleID, info != nil else { throw .sessionGone }
         // Sending an Apple Event to a closed app would launch it. Never do that.

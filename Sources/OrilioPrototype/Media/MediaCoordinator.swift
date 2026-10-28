@@ -116,6 +116,9 @@ final class MediaCoordinator {
 
     func providerName(_ providerID: String) -> String { providers[providerID]?.displayName ?? providerID }
 
+    /// Continue on "Let Orilio control …?" (the Automation prompt for that app).
+    func requestControl(_ providerID: String) async { await providers[providerID]?.requestControl() }
+
     static let reappearGrace: TimeInterval = 30
     static let wakeGrace: TimeInterval = 15
 
