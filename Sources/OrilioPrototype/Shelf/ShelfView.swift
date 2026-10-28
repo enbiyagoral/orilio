@@ -66,7 +66,7 @@ struct ShelfView: View {
             }
         }
         .overlay(alignment: .bottom) {
-            if let toast = shelf.toast, section == .files { ShelfToast(toast: toast) { shelf.undoRemove() }.transition(.opacity) }
+            if let toast = shelf.toast, section == .files, shelf.previewing == nil { ShelfToast(toast: toast) { shelf.undoRemove() }.transition(.opacity) }
         }
         .animation(Theme.current.spring(duration: 0.3, bounce: 0.1), value: section)
         .animation(.easeInOut(duration: 0.2), value: shelf.problem)
@@ -202,6 +202,23 @@ private struct FilesStrip: View {
         } else {
             // The M3 hub design: five tiles a row (radius 16, padding 10, gap 10) over a drop hint.
             VStack(spacing: 12) {
+                // The M5 Errors design: a file only in iCloud says so, with one way to get it.
+                if let cloud = shelf.items.first(where: { $0.cloud == .cloudOnly }) {
+                    HStack {
+                        Text("\(cloud.name) is in iCloud only").foregroundStyle(.white.opacity(0.75)).lineLimit(1).truncationMode(.middle)
+                        Spacer(minLength: 8)
+                        Button { shelf.download([cloud]) } label: {
+                            Text("Download").font(.system(size: 12, weight: .semibold))
+                                .padding(.horizontal, 10).frame(height: 26)
+                                .background(.white.opacity(0.14), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        }
+                        .buttonStyle(PressableStyle())
+                    }
+                    .font(.system(size: 12))
+                    .padding(.horizontal, 12)
+                    .frame(height: 40)
+                    .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                }
                 if case .missing(let id) = state, let item = shelf.items.first(where: { $0.id == id }) {
                     StatusCard(tone: .warn, symbol: "doc.badge.ellipsis", title: "File moved or deleted",
                                detail: "\(item.name) is no longer where it was.",

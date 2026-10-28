@@ -106,6 +106,15 @@ final class NotesModule {
     // MARK: Tasks
 
     var visibleTasks: [TaskItem] { NotesPolicy.ordered(tasks) }
+    /// Bumped to put the cursor in the note (a letter typed while the notes module has the keyboard).
+    private(set) var editorRequest = 0
+
+    func requestEditor(typing text: String) {
+        browsing = false
+        currentText += text
+        editorRequest += 1
+    }
+
     /// The task the keyboard is on (↑↓, ⏎ marks it done, ⌘⌫ deletes it).
     var selectedTaskID: UUID?
     func moveTaskSelection(by step: Int) { selectedTaskID = ListCursor.moved(selectedTaskID, in: visibleTasks.map(\.id), by: step) }

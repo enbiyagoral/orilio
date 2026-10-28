@@ -51,7 +51,7 @@ enum IslandKeyAction: Equatable {
     case deleteItem
     /// ⌘F.
     case search
-    /// A letter typed in the clipboard list goes into its search.
+    /// A letter typed in the clipboard list goes into its search; in Notes, into the note.
     case type(String)
     case settings
     /// ⌘⇧P.
@@ -108,7 +108,8 @@ enum IslandKeyRouter {
         case 123: return tab == .shelf ? .move(-1) : nil
         case 124: return tab == .shelf ? .move(1) : nil
         default:
-            if tab == .clipboard, let c = key.characters.first, c.isLetter || c.isNumber { return .type(String(c)) }
+            // A letter goes into the clipboard's search, or starts typing in the note.
+            if tab == .clipboard || tab == .notes, let c = key.characters.first, c.isLetter || c.isNumber { return .type(String(c)) }
             return nil
         }
     }

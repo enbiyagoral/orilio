@@ -144,6 +144,7 @@ private struct CalendarToday: View {
 }
 
 private struct NextCard: View {
+    @Environment(\.keyboardFocusVisible) private var keyboard
     let module: CalendarModule
     let day: CalendarDay
 
@@ -179,7 +180,14 @@ private struct NextCard: View {
                 HStack(spacing: 8) {
                     if event.meeting != nil {
                         Button { module.join(event) } label: {
-                            Label("Join meeting", systemImage: "video")
+                            HStack(spacing: 8) {
+                                Label("Join meeting", systemImage: "video")
+                                if keyboard {
+                                    // Opened from the keyboard: ⏎ joins (the M5 Keyboard design).
+                                    Text("⏎").font(.system(size: 11.5)).padding(.horizontal, 5).frame(height: 20)
+                                        .background(Design.ink.opacity(0.15), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                                }
+                            }
                                 .font(.system(size: 14, weight: .semibold))
                                 .foregroundStyle(Design.ink)
                                 .frame(maxWidth: .infinity, minHeight: 44)

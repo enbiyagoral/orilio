@@ -38,7 +38,12 @@ enum UpdateReminderPolicy {
     /// Once per version, and only while nothing else is live: never during a meeting or a focus session.
     static func shouldRemind(version: String, alreadyReminded: String?, meetingShowing: Bool, focusActive: Bool,
                              transientShowing: Bool) -> Bool {
-        version != alreadyReminded && !meetingShowing && !focusActive && !transientShowing
+        version != alreadyReminded && isQuiet(meetingShowing: meetingShowing, focusActive: focusActive, transientShowing: transientShowing)
+    }
+
+    /// Nothing else is live. A failure notice waits for this instead of being dropped.
+    static func isQuiet(meetingShowing: Bool, focusActive: Bool, transientShowing: Bool) -> Bool {
+        !meetingShowing && !focusActive && !transientShowing
     }
 }
 

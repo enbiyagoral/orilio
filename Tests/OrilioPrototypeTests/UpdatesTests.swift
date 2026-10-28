@@ -27,6 +27,13 @@ struct UpdatesTests {
         #expect(!UpdateReminderPolicy.shouldRemind(version: "0.5.1", alreadyReminded: nil, meetingShowing: false, focusActive: false, transientShowing: true))
     }
 
+    @Test func aFailureNoteWaitsForQuiet() {
+        // An update that couldn't install is never dropped, only held while focus or a meeting shows.
+        #expect(!UpdateReminderPolicy.isQuiet(meetingShowing: false, focusActive: true, transientShowing: false))
+        #expect(!UpdateReminderPolicy.isQuiet(meetingShowing: true, focusActive: false, transientShowing: false))
+        #expect(UpdateReminderPolicy.isQuiet(meetingShowing: false, focusActive: false, transientShowing: false))
+    }
+
     @Test func whatsNewOnceAfterAFeatureUpdate() {
         let defaults = UserDefaults(suiteName: "orilio.whatsnew.\(UUID().uuidString)")!
         #expect(!WhatsNewGate.pending(current: "0.4.0", defaults: defaults)) // the very first launch: onboarding instead

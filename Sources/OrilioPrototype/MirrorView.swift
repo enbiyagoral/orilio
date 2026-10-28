@@ -223,9 +223,14 @@ private struct NoticePill: View {
             switch notice {
             case .available(let camera):
                 Text("\(camera.name) is available").foregroundStyle(.white.opacity(0.85))
-                Button("Switch") { mirror.send(.acceptOffer) }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(Design.mint)
+                Button { mirror.send(.acceptOffer) } label: {
+                    // The M5 Errors design: offered as a mint button, never switched on its own.
+                    Text("Switch").font(.system(size: 11.5, weight: .semibold))
+                        .foregroundStyle(Color(red: 0, green: 0x14 / 255, blue: 0x0D / 255))
+                        .padding(.horizontal, 10).frame(height: 22)
+                        .background(Design.mint, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
+                .buttonStyle(.plain)
             case .switched(let from, let to):
                 Text("\(from) disconnected · switched to \(to)").foregroundStyle(.white.opacity(0.85))
             }

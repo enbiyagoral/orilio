@@ -379,7 +379,8 @@ final class IslandModel {
             default: return false
             }
         case .search: clipboard.requestSearch()
-        case .type(let text): clipboard.requestSearch(typing: text)
+        case .type(let text):
+            if tab == .notes { notes.requestEditor(typing: text) } else { clipboard.requestSearch(typing: text) }
         case .settings: SettingsWindow.show()
         case .togglePin: togglePin()
         case .close:

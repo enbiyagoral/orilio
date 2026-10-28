@@ -145,12 +145,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             island.live.flash(Transient(symbol: "arrow.down.circle.fill", title: "Update ready", module: island.modules.visible[0],
                                         pill: "Restart", action: .restartToUpdate, duration: .seconds(8)))
         }
-        updates.onFailure = { [weak island] in
-            island?.live.flash(Transient(symbol: "exclamationmark.triangle.fill", title: "Update couldn’t install",
-                                         module: island?.modules.visible[0] ?? .calendar, pill: "Details", action: .showUpdates,
-                                         warning: true, duration: .seconds(8)))
+        updates.onFailure = { [weak self, weak island] in
+            guard let island else { return }
+            self?.flashWhenQuiet(Transient(symbol: "exclamationmark.triangle.fill", title: "Update couldn’t install",
+                                           module: island.modules.visible[0], pill: "Details", action: .showUpdates,
+                                           warning: true, duration: .seconds(8)), on: island)
         }
         updates.start()
+    }
+
+    /// Shows the note once nothing else is live (a focus session or a meeting ends first).
+    private func flashWhenQuiet(_ note: Transient, on island: IslandModel) {
+        let quiet = UpdateReminderPolicy.isQuiet(meetingShowing: island.meetingSoon != nil, focusActive: island.focus.showsInEar,
+                                                 transientShowing: island.live.transient != nil)
+        guard !quiet else { return island.live.flash(note) }
+        withObservationTracking { _ = (island.earLayout, island.focus.finished) } onChange: { [weak self, weak island] in
+            Task { @MainActor in
+                guard let self, let island else { return }
+                self.flashWhenQuiet(note, on: island)
+            }
+        }
     }
 
     /// Settings › Startup › "When Orilio starts".

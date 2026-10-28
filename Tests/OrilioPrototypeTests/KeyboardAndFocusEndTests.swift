@@ -63,6 +63,7 @@ struct IslandKeyRouterTests {
         // A letter in the clipboard list jumps into its search; elsewhere it's nothing.
         #expect(IslandKeyRouter.route(key(0, "a"), tab: .clipboard) == .type("a"))
         #expect(IslandKeyRouter.route(key(0, "a"), tab: .calendar) == nil)
+        #expect(IslandKeyRouter.route(key(0, "a"), tab: .notes) == .type("a")) // starts typing in the note
     }
 
     @Test func whileTyping() {
@@ -166,6 +167,20 @@ struct FocusEndTests {
         #expect(island.state == .pinned && island.tab == .focus)
         #expect(focusAtPin == false)
         #expect(!island.keyboardOpened)
+    }
+
+    @Test func typingInNotesWithoutAFieldGoesIntoTheNote() async {
+        let dir = FileManager.default.temporaryDirectory.appending(path: "orilio-notes-\(UUID().uuidString)")
+        let notes = NotesModule(store: NotesStore(directory: dir))
+        await notes.load()
+        let island = IslandModel(notes: notes, focus: focus().0)
+        island.isPointerBusy = { false }
+        island.openFromKeyboard()
+        island.tab = .notes
+        #expect(island.handleKey(KeyPress(keyCode: 4, characters: "h"), editing: .none))
+        #expect(notes.currentText == "h")
+        #expect(notes.editorRequest == 1) // the editor takes the cursor for the rest
+        try? FileManager.default.removeItem(at: dir)
     }
 
     @Test func keyboardOpenShowsTheHintsAndAClickEndsThem() {

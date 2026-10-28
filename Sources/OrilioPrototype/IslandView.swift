@@ -330,6 +330,24 @@ private struct ExpandedContent: View {
         .overlay(alignment: .bottom) {
             if model.keyboardOpened { KeyHintBar(tab: model.tab).transition(.opacity) }
         }
+        .overlay(alignment: .topTrailing) {
+            if model.showsModuleBadges {
+                // The M5 Keyboard design's "⌘ held" while the numbers show.
+                HStack(spacing: 6) {
+                    Text("⌘").padding(.horizontal, 6).frame(height: 20)
+                        .background(.white.opacity(0.18), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                    Text("held")
+                }
+                .font(.system(size: 12, weight: .semibold))
+                .padding(.horizontal, 12)
+                .frame(height: 30)
+                .background(.white.opacity(0.12), in: Capsule())
+                .padding(.top, model.geometry.headerRow + 22)
+                .padding(.trailing, 18)
+                .allowsHitTesting(false)
+                .transition(.opacity)
+            }
+        }
         .environment(\.keyboardFocusVisible, model.keyboardOpened)
         .animation(.easeOut(duration: 0.15), value: model.showsModuleBadges)
         .animation(.easeOut(duration: 0.15), value: model.keyboardOpened)

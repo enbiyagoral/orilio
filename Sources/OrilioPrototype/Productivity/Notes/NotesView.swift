@@ -36,12 +36,15 @@ struct NotesPanel: View {
 
 /// Typing needs Orilio to be the active app; fields take focus only when clicked.
 private struct ActivateOnFocus: ViewModifier {
+    /// Bumped from the keyboard: take the cursor.
+    var request = 0
     @FocusState private var focused: Bool
 
     func body(content: Content) -> some View {
         content
             .focused($focused)
             .onChange(of: focused) { if focused { NSApp.activate() } }
+            .onChange(of: request) { focused = true }
             .tint(.white) // a white caret, not the system's blue
     }
 }
@@ -108,7 +111,7 @@ private struct NoteEditor: View {
             .scrollContentBackground(.hidden)
             .scrollIndicators(.never)
             .autocorrectionDisabled()
-            .modifier(ActivateOnFocus())
+            .modifier(ActivateOnFocus(request: module.editorRequest))
             // The design's 14 pt on every side: 14 above, 9 + the text container's own 5 at the sides,
             // so the caret and the first line start exactly where the placeholder does.
             .padding(EdgeInsets(top: 14, leading: 9, bottom: 14, trailing: 9))
