@@ -66,6 +66,13 @@ struct DesignArtwork: View {
 
 private typealias Design = SettingsDesign
 
+/// Which pane Settings shows; others can open it on a pane (the island's "Details").
+@MainActor @Observable
+final class SettingsNavigation {
+    static let shared = SettingsNavigation()
+    var pane: SettingsView.Pane = .general
+}
+
 /// The Settings window: a sidebar of panes in three groups (the M5 Settings design).
 struct SettingsView: View {
     enum Pane: String, CaseIterable, Identifiable {
@@ -115,9 +122,25 @@ struct SettingsView: View {
         }
     }
 
-    @State var pane: Pane = .general
+    @Bindable private var navigation: SettingsNavigation
+    private var pane: Pane {
+        get { navigation.pane }
+        nonmutating set { navigation.pane = newValue }
+    }
     /// False only for drawing a pane to an image (`ImageRenderer` doesn't draw scroll views).
     var scrolls = true
+
+    /// `pane` draws one pane on its own (render tests); the window uses the shared navigation.
+    init(pane: Pane? = nil, scrolls: Bool = true) {
+        if let pane {
+            let own = SettingsNavigation()
+            own.pane = pane
+            navigation = own
+        } else {
+            navigation = .shared
+        }
+        self.scrolls = scrolls
+    }
 
     var body: some View {
         HStack(spacing: 0) {
@@ -555,7 +578,6 @@ private struct CollapsedIndicators: View {
 
 /// Each module's own settings (beyond the design, in its style).
 private struct ModuleDetails: View {
-    @AppStorage(SettingsKeys.showDemoSource) private var showDemoSource = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
@@ -576,11 +598,7 @@ private struct ModuleDetails: View {
             VStack(alignment: .leading, spacing: 10) {
                 SectionLabel("Privacy")
                 Card {
-                    SettingRow(title: "Show the Demo media source", note: "A labelled fake player for trying the island; plays nothing.") {
-                        DesignSwitch(isOn: showDemoSource, label: "Show the Demo media source") { showDemoSource.toggle() }
-                    }
-                    RowLine()
-                    Text("Spotify and Music are read through their public notifications and controlled with Apple Events after you allow it. Calendar events are read from the Calendar app on this Mac. Clipboard history stays on this Mac. No analytics; the only network use is loading cover art from the music services.")
+                    Text("Spotify and Music are read through their public notifications and controlled with Apple Events after you allow it. Calendar events are read from the Calendar app on this Mac. Clipboard history stays on this Mac. No analytics; the only network use is loading cover art from the music services and checking for signed updates.")
                         .font(.system(size: 12))
                         .foregroundStyle(Design.secondary)
                         .fixedSize(horizontal: false, vertical: true)

@@ -127,9 +127,10 @@ struct LiveActivityCoordinatorTests {
         island.tapEar(.leading)
         #expect(island.tab == .focus)
         island.dismiss()
-        island.live.mockMeeting = meeting(startsIn: 0).with(start: Date())
+        focus.reset()
+        island.live.flash(Transient(title: "Copied", module: .clipboard))
         island.tapEar(.trailing)
-        #expect(island.tab == .calendar)
+        #expect(island.tab == .clipboard) // a confirmation opens its own module
     }
 }
 

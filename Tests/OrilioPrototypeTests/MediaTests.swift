@@ -184,26 +184,6 @@ struct MediaCoordinatorTests {
         await #expect(throws: MediaError.permissionDenied) { try await coordinator.send(.play, to: "com.apple.Music") }
         #expect(coordinator.lastError == .permissionDenied)
     }
-
-    @Test func demoProviderTogglesAndSkips() async throws {
-        let demo = DemoMediaProvider()
-        let coordinator = MediaCoordinator(providers: [demo])
-        await settle(coordinator) { coordinator.current != nil }
-        let first = try #require(coordinator.current)
-        #expect(first.state == .paused)
-
-        try await coordinator.send(.togglePlayPause, to: first.sourceID)
-        await settle(coordinator) { coordinator.current?.state == .playing }
-        #expect(coordinator.current?.state == .playing)
-
-        try await coordinator.send(.next, to: first.sourceID)
-        await settle(coordinator) { coordinator.current?.title != first.title }
-        #expect(coordinator.current?.title != first.title)
-
-        await demo.setEnabled(false)
-        await settle(coordinator) { coordinator.current == nil }
-        #expect(coordinator.current == nil)
-    }
 }
 
 // MARK: - Spotify / Music parsing

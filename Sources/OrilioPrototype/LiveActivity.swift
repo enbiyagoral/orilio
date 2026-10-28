@@ -16,7 +16,16 @@ struct Transient: Equatable {
     var monospaced = false
     /// The module a click opens.
     let module: IslandTab
+    /// A pill on the right ("Restart", "Details") and what a click does instead of opening `module`.
+    var pill: String? = nil
+    var action: TransientAction? = nil
+    /// Amber: something went wrong.
+    var warning = false
+    /// How long it stays (a confirmation 2 s; an update note longer).
+    var duration: Duration = .seconds(2)
 }
+
+enum TransientAction: Equatable { case restartToUpdate, showUpdates }
 
 /// What the focus ear shows: the ring and time, a break (blue, "break" on the right when music
 /// leaves it free), or what just ended and waits for the user.
@@ -169,6 +178,7 @@ extension EarLayout {
         case (.transient(let transient), .leading):
             return 14 + 7 + text(transient.title)
         case (.transient(let transient), .trailing):
+            if let pill = transient.pill { return text(pill, size: 11.5) + 20 }
             return min(96, transient.detail.map { text($0, weight: .regular, mono: transient.monospaced) } ?? 0)
         case (.nowPlaying, .leading):
             return 20
@@ -188,13 +198,11 @@ enum MeetingEar {
 
 // MARK: - Coordinator
 
-/// Holds the one transient confirmation and, in debug builds, stand-in sources. The layout itself
+/// Holds the one transient confirmation. The layout itself
 /// is derived from the modules' observable state (`IslandModel.earLayout`), so nothing polls.
 @MainActor @Observable
 final class LiveActivityCoordinator {
     private(set) var transient: Transient?
-    /// Debug stand-ins, merged with the real modules (see the menu bar's Debug menu).
-    var mockMeeting: CalendarEvent?
 
     @ObservationIgnored private let transientDuration: Duration
     @ObservationIgnored private var expiry: Task<Void, Never>?
@@ -208,7 +216,7 @@ final class LiveActivityCoordinator {
         expiry?.cancel()
         transient = new
         // The only timer here: a one-shot that ends this confirmation.
-        expiry = Task { [weak self, duration = transientDuration] in
+        expiry = Task { [weak self, duration = new.duration == .seconds(2) ? transientDuration : new.duration] in
             try? await Task.sleep(for: duration)
             guard !Task.isCancelled, let self, self.transient?.id == new.id else { return }
             self.transient = nil

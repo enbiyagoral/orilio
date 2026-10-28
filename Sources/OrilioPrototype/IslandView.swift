@@ -751,18 +751,17 @@ private struct SourceBadge: View {
     let media: MediaCoordinator
 
     var body: some View {
-        let isDemo = session.providerID == DemoMediaProvider.providerID
         let canFocus = session.capabilities.contains(.focus)
         let label = HStack(spacing: 4) {
-            Image(systemName: isDemo ? "testtube.2" : session.kind == .video ? "play.rectangle"
+            Image(systemName: session.kind == .video ? "play.rectangle"
                   : session.providerID == BrowserMediaProvider.providerID ? "globe" : "speaker.wave.2.fill")
             Text(session.sourceName)
             if media.sessions.count > 1 { Image(systemName: "chevron.down").font(.system(size: 8, weight: .bold)) }
         }
         .font(.system(size: 10, weight: .semibold))
-        .foregroundStyle(isDemo ? .black : .white.opacity(0.75))
+        .foregroundStyle(.white.opacity(0.75))
         .padding(.horizontal, 8).padding(.vertical, 4)
-        .background(isDemo ? accent(.rest).opacity(0.85) : .white.opacity(0.1), in: Capsule())
+        .background(.white.opacity(0.1), in: Capsule())
 
         if media.sessions.count > 1 {
             Menu {
@@ -798,7 +797,7 @@ private struct SourceBadge: View {
                 .help("Show \(session.sourceName)")
                 .accessibilityLabel("Source: \(session.sourceName). Show it")
         } else {
-            label.accessibilityLabel("Source: \(session.sourceName)\(isDemo ? ", not real playback" : "")")
+            label.accessibilityLabel("Source: \(session.sourceName)")
         }
     }
 
@@ -1014,10 +1013,19 @@ private struct TransientEar: View {
     var body: some View {
         if side == .leading {
             HStack(spacing: 7) {
-                Image(systemName: transient.symbol).font(.system(size: 11, weight: .heavy)).foregroundStyle(accent(.rest))
+                Image(systemName: transient.symbol).font(.system(size: 11, weight: .heavy))
+                    .foregroundStyle(transient.warning ? SettingsDesign.amber : accent(.rest))
                 Text(transient.title).lineLimit(1)
+                    .foregroundStyle(transient.warning ? SettingsDesign.amber : .white)
             }
             .accessibilityElement(children: .combine)
+        } else if let pill = transient.pill {
+            // The M5 System design's "Restart": 22 pt, 14% white.
+            Text(pill)
+                .font(.system(size: 11.5, weight: .semibold))
+                .padding(.horizontal, 10)
+                .frame(height: 22)
+                .background(.white.opacity(0.14), in: Capsule())
         } else if let detail = transient.detail {
             Text(detail)
                 .font(.system(size: 12, design: transient.monospaced ? .monospaced : .default))

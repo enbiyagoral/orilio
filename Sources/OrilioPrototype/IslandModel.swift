@@ -45,7 +45,6 @@ enum SettingsKeys {
     /// Before M5.3; now `Preferences.openOnHover`.
     static let openOnHover = "openOnHover"
     static let preferNotchedDisplay = "preferNotchedDisplay"
-    static let showDemoSource = "showDemoSource"
 }
 
 /// Single source of truth for the island. The window controller only reacts to `onWillChangeState`.
@@ -140,7 +139,6 @@ final class IslandModel {
     var hoverOpens = true
     /// Settings › General › Hover delay.
     @ObservationIgnored var hoverDelay: Duration = .milliseconds(90)
-    let demo: DemoMediaProvider
     let media: MediaCoordinator
     let shelf: ShelfModel
     let library: ScreenshotLibrary
@@ -179,12 +177,9 @@ final class IslandModel {
                                                                      observeSystem: false)
         // Another display's island shows the same music; only its open state is its own.
         if let other {
-            demo = other.demo
             media = other.media
         } else {
-            let showDemo = UserDefaults.standard.bool(forKey: SettingsKeys.showDemoSource)
-            demo = DemoMediaProvider(enabled: showDemo)
-            media = MediaCoordinator(providers: providers + [demo])
+            media = MediaCoordinator(providers: providers)
         }
         self.shelf = shelf
         self.library = library
@@ -226,7 +221,6 @@ final class IslandModel {
     /// A meeting about to start, for the collapsed island (only when Calendar is on and readable),
     /// or the debug stand-in.
     var meetingSoon: CalendarEvent? {
-        if let mock = live.mockMeeting, let soon = CalendarDay(events: [mock], now: Date()).soon() { return soon }
         guard calendar.status == .ready else { return nil }
         return calendar.dayNow().soon(within: calendar.meetingLead)
     }
@@ -238,7 +232,6 @@ final class IslandModel {
 
     /// The trailing ear's Join. The debug stand-in has nowhere to go.
     func join(_ event: CalendarEvent) {
-        guard event.id != live.mockMeeting?.id else { return }
         calendar.join(event)
     }
 
@@ -297,8 +290,20 @@ final class IslandModel {
     /// A click anywhere on the island (outside its buttons) opens the full controller.
     /// A click on the collapsed island opens the module of what it shows, else the default one.
     func tap() {
+        if showWhatsNewIfPending() { return }
         if !state.isOpen { chooseOpeningTab() }
         set(.pinned)
+    }
+
+    /// After a feature update, the first click on the island opens What's New (once).
+    static var pendingWhatsNew: WhatsNew?
+
+    private func showWhatsNewIfPending() -> Bool {
+        guard let notes = Self.pendingWhatsNew, onboarding == nil else { return false }
+        Self.pendingWhatsNew = nil
+        WhatsNewGate.markShown(AboutPane.version, defaults: .standard)
+        WhatsNewWindow.show(notes)
+        return true
     }
 
     // MARK: Keyboard (the M5 Keyboard design)
@@ -473,6 +478,15 @@ final class IslandModel {
     /// A click on one ear of the collapsed island opens that ear's module.
     func tapEar(_ side: EarSide) {
         guard !state.isOpen else { return tap() }
+        if showWhatsNewIfPending() { return }
+        if case .transient(let transient)? = earLayout.activity(at: side)?.payload, let action = transient.action {
+            live.clearTransient()
+            switch action {
+            case .restartToUpdate: UpdateModel.shared.install()
+            case .showUpdates: SettingsWindow.show(pane: .updates)
+            }
+            return
+        }
         tab = earLayout.activity(at: side)?.module ?? openingTab
         set(.pinned)
     }

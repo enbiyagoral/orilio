@@ -86,14 +86,11 @@ final class IslandPositioner {
 
     private func settingsChanged() {
         let new = DisplaySettings(.standard)
-        let defaults = UserDefaults.standard
         let prefs = PreferencesStore.shared.value
         for model in islands.values.map(\.model) + [primary] {
             model.hoverOpens = prefs.openOnHover
             model.hoverDelay = .milliseconds(prefs.hoverDelay)
         }
-        let showDemo = defaults.bool(forKey: SettingsKeys.showDemoSource)
-        Task { [demo = primary.demo] in await demo.setEnabled(showDemo) }
         guard new != settings else { return islands.values.forEach { $0.reposition() } }
         if new.allSpaces != settings.allSpaces { islands.values.forEach { $0.setSpaces(all: new.allSpaces) } }
         settings = new

@@ -611,25 +611,176 @@ private struct Recorder: View {
     }
 }
 
-// MARK: - Updates (M5.6 fills this in)
+// MARK: - Updates
 
 struct UpdatesPane: View {
+    @Bindable var updates = UpdateModel.shared
+
     var body: some View {
-        HStack(spacing: 16) {
-            Image(systemName: "checkmark.circle")
-                .font(.system(size: 22))
-                .foregroundStyle(Design.accentText)
-                .frame(width: 48, height: 48)
-                .background(Design.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            VStack(alignment: .leading, spacing: 3) {
-                Text("You have Orilio \(AboutPane.version)").font(.system(size: 16, weight: .semibold))
-                Text("Automatic updates arrive in a later version.").font(.system(size: 12.5)).foregroundStyle(Design.ink.opacity(0.55))
+        VStack(alignment: .leading, spacing: 22) {
+            if case .failed(let version, let reason) = updates.status {
+                FailureCard(version: version, reason: reason, updates: updates)
+            } else {
+                StatusCardView(updates: updates)
             }
-            Spacer(minLength: 0)
+            Card {
+                PaneRow(title: "Check for updates automatically") {
+                    DesignSwitch(isOn: updates.automaticChecks, label: "Check for updates automatically") { updates.automaticChecks.toggle() }
+                }
+                RowLine()
+                PaneRow(title: "Release channel", note: "Beta gets new modules first, and the occasional rough edge") {
+                    Segmented(options: [(UpdateModel.Channel.stable, "Stable"), (.beta, "Beta")], selection: updates.channel,
+                              pick: { updates.channel = $0 }, compact: true)
+                }
+            }
+            .disabled(updates.status == .notConfigured)
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark.shield").font(.system(size: 12, weight: .semibold))
+                Text("Every update is signed and verified before it installs.")
+            }
+            .font(.system(size: 12))
+            .foregroundStyle(Design.ink.opacity(0.5))
+        }
+    }
+}
+
+/// Up to date · Checking · Available (the M5 Settings design), in a 18 pt card.
+private struct StatusCardView: View {
+    let updates: UpdateModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            TimelineView(.everyMinute) { context in
+                HStack(spacing: 16) {
+                    Image(systemName: look.symbol)
+                        .font(.system(size: 22))
+                        .foregroundStyle(look.ink)
+                        .frame(width: 48, height: 48)
+                        .background(look.tile, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(title).font(.system(size: 16, weight: .semibold))
+                        Text(detail(now: context.date)).font(.system(size: 12.5)).foregroundStyle(Design.ink.opacity(0.55))
+                    }
+                    Spacer(minLength: 0)
+                    if let button { button }
+                }
+            }
+            if case .available(let update) = updates.status, !update.notes.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("WHAT’S IN \(update.version)").font(.system(size: 12, weight: .semibold)).tracking(0.72)
+                        .foregroundStyle(Design.ink.opacity(0.5))
+                    ForEach(update.notes, id: \.self) { Text("· \($0)") }
+                }
+                .font(.system(size: 13))
+                .lineSpacing(13 * 0.45 - 2)
+                .foregroundStyle(Design.ink.opacity(0.8))
+                .padding(.top, 14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .overlay(alignment: .top) { Rectangle().fill(Design.divider).frame(height: 1) }
+            }
         }
         .padding(20)
         .background(Design.card, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Design.cardStroke, lineWidth: 1))
+    }
+
+    private var look: (symbol: String, tile: Color, ink: Color) {
+        switch updates.status {
+        case .checking: ("arrow.clockwise", Design.ink.opacity(0.08), Design.ink)
+        case .available: ("arrow.down.circle", Design.accent.opacity(0.12), Design.accentText)
+        case .notConfigured: ("arrow.triangle.2.circlepath", Design.ink.opacity(0.08), Design.ink.opacity(0.7))
+        case .idle, .failed: ("checkmark.circle", Design.accent.opacity(0.12), Design.accentText)
+        }
+    }
+
+    private var title: String {
+        switch updates.status {
+        case .checking: "Checking for updates…"
+        case .available(let update): "Orilio \(update.version) is available"
+        case .notConfigured: "Updates aren’t set up in this build"
+        case .idle, .failed: "Orilio is up to date"
+        }
+    }
+
+    private func detail(now: Date) -> String {
+        switch updates.status {
+        case .checking: return "Contacting the update feed"
+        case .available(let update):
+            var parts: [String] = []
+            if let size = update.size { parts.append(ByteCountFormatter.string(fromByteCount: size, countStyle: .file)) }
+            if let date = update.date {
+                parts.append(Calendar.current.isDateInToday(date) ? "released today"
+                             : "released \(date.formatted(.dateTime.day().month(.abbreviated)))")
+            }
+            return parts.isEmpty ? "Ready to install" : parts.joined(separator: " · ")
+        case .notConfigured:
+            return "Version \(AboutPane.version) · this build has no update feed yet"
+        case .idle, .failed:
+            guard let checked = updates.lastChecked else { return "Version \(AboutPane.version) · not checked yet" }
+            let ago = now.timeIntervalSince(checked) < 60 ? "just now" : RelativeDateTimeFormatter().localizedString(for: checked, relativeTo: now)
+            return "Version \(AboutPane.version) · checked \(ago)"
+        }
+    }
+
+    private var button: UpdateButton? {
+        switch updates.status {
+        case .checking: UpdateButton(title: "Cancel", mint: false) { updates.cancelCheck() }
+        case .available: UpdateButton(title: "Install and relaunch", mint: true) { updates.install() }
+        case .notConfigured: nil
+        case .idle, .failed: UpdateButton(title: "Check now", mint: false) { updates.checkNow() }
+        }
+    }
+}
+
+private struct UpdateButton: View {
+    let title: String
+    let mint: Bool
+    var height: CGFloat = 36
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(title).font(.system(size: height == 36 ? 13 : 12.5, weight: mint ? .semibold : (height == 36 ? .semibold : .medium)))
+                .foregroundStyle(mint ? Design.hex(0x00140D) : Design.ink)
+                .padding(.horizontal, height == 36 ? 16 : 14)
+                .frame(height: height)
+                .background(mint ? Design.accent : Design.ink.opacity(height == 36 ? 0.12 : 0.1), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .fixedSize()
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+/// The M5 Errors design's failure: say what happened, that nothing changed, and one way out.
+private struct FailureCard: View {
+    let version: String?
+    let reason: String
+    let updates: UpdateModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 14) {
+                Image(systemName: "exclamationmark.triangle")
+                    .font(.system(size: 19, weight: .medium))
+                    .foregroundStyle(Design.warn)
+                    .frame(width: 44, height: 44)
+                    .background(Design.warn.opacity(0.14), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(version.map { "Orilio \($0) wasn’t installed" } ?? "The update wasn’t installed").font(.system(size: 15, weight: .semibold))
+                    Text("\(reason), so nothing on your Mac was changed. You’re still on \(AboutPane.version).")
+                        .font(.system(size: 12.5)).foregroundStyle(Design.ink.opacity(0.6)).fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            HStack(spacing: 8) {
+                Spacer()
+                UpdateButton(title: "Download from website", mint: false, height: 34) { updates.downloadFromWebsite() }
+                UpdateButton(title: "Try again", mint: true, height: 34) { updates.install() }
+            }
+        }
+        .padding(20)
+        .background(Design.card, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Design.cardStroke, lineWidth: 1))
     }
 }
 

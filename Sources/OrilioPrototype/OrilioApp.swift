@@ -19,9 +19,11 @@ struct OrilioApp: App {
         // Hidden from Settings › Startup; opening Orilio again (Finder, Spotlight) then opens Settings.
         // SwiftUI writes `isInserted` back on every scene update; writing an unchanged value to the
         // defaults would post a change, rebuild the scene and loop, so only real changes are stored.
-        MenuBarExtra("Orilio", systemImage: "rectangle.topthird.inset.filled",
-                     isInserted: Binding(get: { menuBarIcon }, set: { if $0 != menuBarIcon { menuBarIcon = $0 } })) {
+        MenuBarExtra(isInserted: Binding(get: { menuBarIcon }, set: { if $0 != menuBarIcon { menuBarIcon = $0 } })) {
             MenuContent()
+        } label: {
+            // A mint dot on the icon while an update waits (the M5 System design).
+            Image(nsImage: MenuBarIcon.image(dot: UpdateModel.shared.waiting != nil))
         }
     }
 }
@@ -36,6 +38,9 @@ private struct MenuContent: View {
         }
         Button("Settings…") { SettingsWindow.show() }
             .keyboardShortcut(",")
+        if let update = UpdateModel.shared.waiting {
+            Button("Restart to Update · \(update.version)") { UpdateModel.shared.install() }
+        }
         #if DEBUG
         DebugMenu()
         #endif
@@ -109,6 +114,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         focus: focus, modules: modules, live: island.live, sharing: island)
         }
         self.positioner = positioner
+        startUpdates(island: island)
         GlobalHotKeys.shared.perform = { [weak positioner] action in
             guard let positioner else { return }
             switch action {
@@ -149,6 +155,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func registerShortcuts() { Self.registerShortcuts() }
 
+    /// Sparkle, and what the island says about it. What's New waits for the first click on the island.
+    private func startUpdates(island: IslandModel) {
+        if WhatsNewGate.pending(current: AboutPane.version, defaults: .standard) { IslandModel.pendingWhatsNew = WhatsNew.bundled() }
+        let updates = UpdateModel.shared
+        updates.onReminder = { [weak island] update in
+            guard let island, UpdateReminderPolicy.shouldRemind(version: update.version, alreadyReminded: updates.remindedVersion,
+                                                                meetingShowing: island.meetingSoon != nil,
+                                                                focusActive: island.focus.showsInEar,
+                                                                transientShowing: island.live.transient != nil) else { return }
+            updates.markReminded(update.version)
+            island.live.flash(Transient(symbol: "arrow.down.circle.fill", title: "Update ready", module: island.modules.visible[0],
+                                        pill: "Restart", action: .restartToUpdate, duration: .seconds(8)))
+        }
+        updates.onFailure = { [weak island] in
+            island?.live.flash(Transient(symbol: "exclamationmark.triangle.fill", title: "Update couldn’t install",
+                                         module: island?.modules.visible[0] ?? .calendar, pill: "Details", action: .showUpdates,
+                                         warning: true, duration: .seconds(8)))
+        }
+        updates.start()
+    }
+
     /// Settings › Startup › "When Orilio starts".
     private func startUp(island: IslandModel, positioner: IslandPositioner) {
         switch StartupSettings.launch {
@@ -185,17 +212,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 }
 
 #if DEBUG
-/// Stand-ins for checking the collapsed island's priority rules by hand. Debug builds only.
+/// Shortcuts for checking things by hand (focus timing, hidden modules). Debug builds only.
 private struct DebugMenu: View {
     /// Looked up when the menu opens: the menu is built before the app has finished launching.
     private var island: IslandModel { AppModules.island! }
 
     var body: some View {
         Menu("Debug") {
-            Button("Meeting in 4 min") { island.live.mockMeeting = Self.meeting(startingIn: 4 * 60) }
-            Button("Meeting now") { island.live.mockMeeting = Self.meeting(startingIn: 0) }
-            Button("End meeting") { island.live.mockMeeting = nil }
-            Divider()
             Button(island.focus.isActive ? "Stop focus" : "Start focus") {
                 island.focus.isActive ? island.focus.reset() : island.focus.begin()
             }
@@ -204,13 +227,6 @@ private struct DebugMenu: View {
                 island.focus.setMinutes(1)
                 island.focus.begin()
             }
-            Button("Fire \u{201C}Copied\u{201D}") {
-                island.live.flash(Transient(title: "Copied", detail: "kubectl rollout restart deploy/api", monospaced: true, module: .clipboard))
-            }
-            Button("Fire \u{201C}Screenshot saved\u{201D}") {
-                island.live.flash(Transient(symbol: "photo", title: "Screenshot saved to Shelf", module: .shelf))
-            }
-            Button("Play or pause demo music") { Task { await Self.toggleDemo(island) } }
             Divider()
             Menu("Hide or show a module") {
                 ForEach(IslandTab.allCases) { tab in
@@ -221,35 +237,42 @@ private struct DebugMenu: View {
             }
         }
     }
-
-    static func meeting(startingIn seconds: TimeInterval) -> CalendarEvent {
-        let start = Date().addingTimeInterval(seconds)
-        return CalendarEvent(id: "debug.\(UUID().uuidString)", eventIdentifier: nil, title: "Design review", start: start,
-                             end: start.addingTimeInterval(30 * 60), isAllDay: false, calendarID: "debug", calendarTitle: "Debug",
-                             sourceTitle: "Debug", color: CalendarColor(red: 0.43, green: 0.66, blue: 1), attendeeNames: [],
-                             meeting: MeetingLinkResolver.validate(URL(string: "https://meet.google.com/abc-defg-hij")!))
-    }
-
-    /// The Demo source plays no audio and talks to no app (it turns on "Show the Demo media source").
-    @MainActor static func toggleDemo(_ island: IslandModel) async {
-        UserDefaults.standard.set(true, forKey: SettingsKeys.showDemoSource)
-        await island.demo.setEnabled(true)
-        // The source shows up asynchronously; a command sent before that would be dropped.
-        for _ in 0..<40 where !island.media.sessions.contains(where: { $0.sourceID == DemoMediaProvider.providerID }) {
-            try? await Task.sleep(for: .milliseconds(50))
-        }
-        island.media.select(DemoMediaProvider.providerID)
-        try? await island.media.send(.togglePlayPause, to: DemoMediaProvider.providerID)
-    }
 }
 #endif
+
+/// The menu bar icon, with a mint dot while an update waits. Drawn with the menu bar's own text
+/// color, so it reads in light and dark menu bars.
+enum MenuBarIcon {
+    static func image(dot: Bool) -> NSImage {
+        let symbol = NSImage(systemSymbolName: "rectangle.topthird.inset.filled", accessibilityDescription: "Orilio")?
+            .withSymbolConfiguration(.init(pointSize: 14, weight: .regular)) ?? NSImage()
+        guard dot else {
+            symbol.isTemplate = true
+            return symbol
+        }
+        let size = NSSize(width: symbol.size.width + 3, height: symbol.size.height)
+        let image = NSImage(size: size, flipped: false) { rect in
+            let glyph = NSRect(x: 0, y: 0, width: symbol.size.width, height: symbol.size.height)
+            symbol.draw(in: glyph)
+            NSColor.labelColor.set()
+            glyph.fill(using: .sourceAtop)
+            NSColor(srgbRed: 0x2B / 255, green: 1, blue: 0xB8 / 255, alpha: 1).setFill()
+            NSBezierPath(ovalIn: NSRect(x: rect.maxX - 6, y: rect.maxY - 6, width: 6, height: 6)).fill()
+            return true
+        }
+        image.accessibilityDescription = "Orilio, update ready"
+        return image
+    }
+}
 
 /// Orilio's own Settings window, so it can be opened from anywhere (launch, reopen, the menu).
 @MainActor
 enum SettingsWindow {
     private static var window: NSWindow?
 
-    static func show() {
+    /// Opens Settings, on `pane` when given (the island's "Details" opens Updates).
+    static func show(pane: SettingsView.Pane? = nil) {
+        if let pane { SettingsNavigation.shared.pane = pane }
         if window == nil {
             // The design's 1040 × 760 window: no title, the traffic lights over the sidebar; it follows
             // the system appearance.

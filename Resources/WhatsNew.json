@@ -1,0 +1,8 @@
+{
+  "version": "0.5",
+  "items": [
+    { "icon": "tray.full", "title": "Shelf remembers", "body": "Files and screenshots stay on the Shelf after a restart, until you remove them." },
+    { "icon": "keyboard", "title": "Keyboard all the way", "body": "Open the island with ⌃⌥Space and move through every module without the trackpad.", "tint": "mint" },
+    { "icon": "cup.and.saucer", "title": "Breaks that feel like breaks", "body": "Focus now runs a calm break timer between sessions, and a longer one after four.", "tint": "blue" }
+  ]
+}
