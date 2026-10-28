@@ -20,7 +20,9 @@ struct OrilioApp: App {
 
     var body: some Scene {
         // The menu bar extra is an `NSStatusItem` (see `StatusMenu`); Settings is Orilio's own window.
-        Settings { EmptyView() }
+        // An App needs a scene: this one never shows anything. (A `Settings` scene here would open an
+        // empty window of its own on reopen and on ⌘,.)
+        MenuBarExtra("Orilio", isInserted: .constant(false)) { EmptyView() }
     }
 }
 
