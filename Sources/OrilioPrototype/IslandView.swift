@@ -106,7 +106,10 @@ struct IslandView: View {
                         .padding(.horizontal, ear)
                         .transition(contentTransition)
                 case .collapsed:
-                    if let meeting = model.meetingSoon {
+                    if model.focus.isActive {
+                        FocusPill(module: model.focus)
+                            .transition(.opacity.animation(.easeOut(duration: 0.15)))
+                    } else if let meeting = model.meetingSoon {
                         TimelineView(.everyMinute) { context in MeetingPill(event: meeting, now: context.date) }
                             .transition(.opacity.animation(.easeOut(duration: 0.15)))
                     } else if !geometry.hasNotch {
@@ -255,6 +258,7 @@ private struct ExpandedContent: View {
                 case .calendar: CalendarPanel(module: model.calendar)
                 case .clipboard: ClipboardPanel(module: model.clipboard, library: model.library)
                 case .notes: NotesPanel(module: model.notes)
+                case .focus: FocusPanel(module: model.focus)
                 case .music: MusicCard(media: model.media)
                 case .shelf: ShelfView(shelf: model.shelf, library: model.library, section: $model.shelfSection,
                                        draggedOut: { model.dismiss() })
@@ -276,6 +280,7 @@ private struct ExpandedContent: View {
         switch tab {
         case .calendar: return model.meetingSoon != nil
         case .music: return model.media.current?.state == .playing
+        case .focus: return model.focus.isRunning
         case .clipboard, .notes, .shelf: return false
         }
     }

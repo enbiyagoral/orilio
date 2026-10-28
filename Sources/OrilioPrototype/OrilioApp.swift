@@ -70,10 +70,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let notes = NotesModule()
         self.notes = notes
         Task { await notes.load() }
+        let focus = FocusModule()
+        focus.start() // a session from before the restart resumes or completes; never prompts
         let library = ScreenshotLibrary()
         Task { await library.load() } // metadata only; thumbnails load as cells appear
         controller = IslandWindowController(model: IslandModel(providers: providers, shelf: shelf, library: library,
-                                                               calendar: calendar, clipboard: clipboard, notes: notes))
+                                                               calendar: calendar, clipboard: clipboard, notes: notes, focus: focus))
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
