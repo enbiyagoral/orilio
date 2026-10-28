@@ -5,6 +5,7 @@ enum IslandState: Equatable {
     case collapsed
     case expanded // hover: a one-row preview; closes when the pointer leaves
     case pinned   // click: the full controller; stays until Esc, close or unpin
+    case dropTarget // a drag is over the island: open just enough to take the drop
 
     var isOpen: Bool { self != .collapsed }
 }
@@ -37,17 +38,25 @@ final class IslandModel {
     var hoverOpens = true
     let demo: DemoMediaProvider
     let media: MediaCoordinator
+    let shelf: ShelfModel
+    /// Whether the drag over the island carries something the shelf can take.
+    private(set) var dropIsValid = true
 
-    init(providers: [any MediaProvider] = []) {
+    init(providers: [any MediaProvider] = [], shelf: ShelfModel = ShelfModel()) {
         let showDemo = UserDefaults.standard.bool(forKey: SettingsKeys.showDemoSource)
         demo = DemoMediaProvider(enabled: showDemo)
         media = MediaCoordinator(providers: providers + [demo])
+        self.shelf = shelf
     }
 
     @ObservationIgnored var onWillChangeState: ((IslandState) -> Void)?
     /// A held mouse button (dragging the progress bar past the edge) must not close the island.
     @ObservationIgnored var isPointerBusy: () -> Bool = { NSEvent.pressedMouseButtons != 0 }
     @ObservationIgnored private var pending: Task<Void, Never>?
+    /// False while the shelf opens after a drop: the user is still in their own app, so the
+    /// panel shows without taking keyboard focus.
+    @ObservationIgnored private(set) var pinTakesFocus = true
+    @ObservationIgnored private var stateBeforeDrag: IslandState?
 
     func hover(_ inside: Bool) {
         pending?.cancel()
@@ -63,6 +72,34 @@ final class IslandModel {
     func tap() { set(.pinned) }
     func togglePin() { set(state == .pinned ? .expanded : .pinned) }
     func dismiss() { set(.collapsed) }
+
+    // MARK: Dragging onto the island
+
+    func dragEntered(valid: Bool) {
+        dropIsValid = valid
+        guard state != .dropTarget else { return }
+        stateBeforeDrag = state
+        set(.dropTarget)
+    }
+
+    /// The drag left without dropping: go back to how the island was (a hover preview closes).
+    func dragExited() {
+        guard state == .dropTarget else { return }
+        set(stateBeforeDrag == .pinned ? .pinned : .collapsed)
+        stateBeforeDrag = nil
+    }
+
+    /// Hands the drop to the shelf and shows it there. Returns whether anything was accepted.
+    @discardableResult
+    func dropped(_ content: DropContent, sequence: Int) -> Bool {
+        let accepted = shelf.accept(content, sequence: sequence)
+        stateBeforeDrag = nil
+        tab = .shelf
+        pinTakesFocus = false
+        set(.pinned)
+        pinTakesFocus = true
+        return accepted
+    }
 
     func set(_ new: IslandState) {
         pending?.cancel()

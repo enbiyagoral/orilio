@@ -16,6 +16,7 @@ struct IslandGeometry: Equatable {
     static let fullHeight: CGFloat = 170    // 6 + 26pt header + 14 + 96pt cover + 18 + slack for the progress row
     static let previewWidth: CGFloat = 360
     static let previewHeight: CGFloat = 64  // one row: 40pt cover + 12pt padding above and below
+    static let dropTargetHeight: CGFloat = 92 // a 68pt drop zone + 12pt padding
 
     /// Concave "shoulders" that blend the open island into the top edge of the screen.
     static let earRadius: CGFloat = 10
@@ -41,11 +42,17 @@ struct IslandGeometry: Equatable {
         CGSize(width: Self.fullWidth, height: topInset + Self.fullHeight)
     }
 
+    /// A drag over the island: enough room for a clear drop zone, no more.
+    var dropTarget: CGSize {
+        CGSize(width: max(Self.previewWidth, collapsed.width), height: topInset + Self.dropTargetHeight)
+    }
+
     func size(for state: IslandState) -> CGSize {
         switch state {
         case .collapsed: collapsed
         case .expanded: preview
         case .pinned: full
+        case .dropTarget: dropTarget
         }
     }
 
@@ -96,10 +103,16 @@ final class IslandPanel: NSPanel {
 
 final class IslandHostingView: NSHostingView<IslandView> {
     var onHover: ((Bool) -> Void)?
+    /// Drag destination callbacks. Dragging never activates Orilio, so focus stays where it was.
+    var onDragEntered: ((_ valid: Bool) -> Void)?
+    var onDragExited: (() -> Void)?
+    var onDrop: ((_ content: DropContent, _ sequence: Int) -> Bool)?
     private var hoverArea: NSTrackingArea?
+    private var dragIsValid = false
 
     required init(rootView: IslandView) {
         super.init(rootView: rootView)
+        registerForDraggedTypes(DropContent.observedTypes)
         // .activeAlways: the panel is never the active app's window, so the default would get no events.
         let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
                                   owner: self, userInfo: nil)
@@ -120,6 +133,44 @@ final class IslandHostingView: NSHostingView<IslandView> {
     override func mouseExited(with event: NSEvent) {
         super.mouseExited(with: event)
         if event.trackingArea === hoverArea { onHover?(false) }
+    }
+
+    // MARK: NSDraggingDestination
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        dragIsValid = DropContent.isSupported(sender.draggingPasteboard.types ?? [])
+        onDragEntered?(dragIsValid)
+        return operation(for: sender)
+    }
+
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        operation(for: sender)
+    }
+
+    override func draggingExited(_ sender: NSDraggingInfo?) {
+        onDragExited?()
+    }
+
+    /// Also called when a drop over the island was refused; without this the drop zone would stay open.
+    override func draggingEnded(_ sender: NSDraggingInfo) {
+        onDragExited?()
+    }
+
+    override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool { dragIsValid }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        onDrop?(DropContent.read(sender.draggingPasteboard), sender.draggingSequenceNumber) ?? false
+    }
+
+    /// "Link" for the user's own files (the shelf only points at them); "copy" for promises and
+    /// image data, which Orilio receives into its own folder.
+    private func operation(for sender: NSDraggingInfo) -> NSDragOperation {
+        guard dragIsValid else { return [] } // shows the not-allowed cursor
+        let mask = sender.draggingSourceOperationMask
+        let isFile = sender.draggingPasteboard.types?.contains(.fileURL) == true
+        let order: [NSDragOperation] = isFile ? [.link, .copy, .generic] : [.copy, .generic]
+        for preferred in order where mask.contains(preferred) { return preferred }
+        return isFile ? .link : .copy
     }
 }
 
@@ -148,6 +199,9 @@ final class IslandWindowController {
         let host = IslandHostingView(rootView: IslandView(model: model))
         host.sizingOptions = [] // the controller owns the frame; don't let SwiftUI resize the panel
         host.onHover = { [weak model] in model?.hover($0) }
+        host.onDragEntered = { [weak model] in model?.dragEntered(valid: $0) }
+        host.onDragExited = { [weak model] in model?.dragExited() }
+        host.onDrop = { [weak model] in model?.dropped($0, sequence: $1) ?? false }
         panel.contentView = host
         panel.onEscape = { [weak model] in model?.dismiss() }
         model.onWillChangeState = { [weak self] in self?.apply($0) }
@@ -199,7 +253,7 @@ final class IslandWindowController {
         shrinkTask?.cancel()
         watchOutsideClicks(state == .pinned)
 
-        if state == .pinned {
+        if state == .pinned, model.pinTakesFocus {
             // Pinning is an explicit click, so taking the keyboard (for Esc) is intended.
             // The app has no other windows, so activating it raises nothing else.
             NSApp.activate(ignoringOtherApps: true)

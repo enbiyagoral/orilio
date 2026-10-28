@@ -2,13 +2,13 @@ import AppKit
 import SwiftUI
 
 /// Orilio's accent: a neon green that stays readable as text and controls on the black island.
-private let mint = Color(red: 0.22, green: 1.0, blue: 0.55)
+let mint = Color(red: 0.22, green: 1.0, blue: 0.55)
 private let coverGradient = LinearGradient(
     colors: [Color(red: 0.96, green: 0.78, blue: 0.68), Color(red: 0.96, green: 0.55, blue: 0.6), Color(red: 0.4, green: 0.27, blue: 0.56)],
     startPoint: .topLeading, endPoint: .bottomTrailing)
 
 // Radii are concentric: outer = inner + padding (14 + 18 = 32 for the panel, 10 + 12 = 22 for the preview).
-private enum Metrics {
+enum Metrics {
     static let padding: CGFloat = 18
     static let innerRadius: CGFloat = 14
     static let openRadius: CGFloat = padding + innerRadius
@@ -77,7 +77,7 @@ struct IslandView: View {
         let ear = open ? IslandGeometry.earRadius : 0
         let radius = switch state {
         case .collapsed: Metrics.collapsedRadius
-        case .expanded: Metrics.previewRadius
+        case .expanded, .dropTarget: Metrics.previewRadius
         case .pinned: Metrics.openRadius
         }
         let shape = IslandShape(ear: ear, bottom: radius)
@@ -96,6 +96,11 @@ struct IslandView: View {
                         .transition(contentTransition)
                 case .expanded:
                     PreviewContent(media: model.media)
+                        .padding(.top, geometry.topInset)
+                        .padding(.horizontal, ear)
+                        .transition(contentTransition)
+                case .dropTarget:
+                    DropTargetView(valid: model.dropIsValid)
                         .padding(.top, geometry.topInset)
                         .padding(.horizontal, ear)
                         .transition(contentTransition)
@@ -247,7 +252,7 @@ private struct ExpandedContent: View {
             ZStack {
                 switch model.tab {
                 case .music: MusicCard(media: model.media)
-                case .shelf: ShelfPlaceholder()
+                case .shelf: ShelfView(shelf: model.shelf)
                 }
             }
             .id(model.tab)
@@ -642,24 +647,7 @@ private struct PermissionLink: View {
     }
 }
 
-private struct ShelfPlaceholder: View {
-    var body: some View {
-        RoundedRectangle(cornerRadius: Metrics.innerRadius, style: .continuous)
-            .strokeBorder(.white.opacity(0.22), style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
-            .overlay {
-                VStack(spacing: 4) {
-                    Image(systemName: "tray.and.arrow.down").font(.system(size: 20))
-                    Text("Shelf arrives in M1").font(.system(size: 13, weight: .semibold))
-                    Text("Drag and drop isn't wired up in this prototype.").font(.system(size: 11))
-                        .foregroundStyle(.white.opacity(0.5))
-                }
-                .foregroundStyle(.white.opacity(0.85))
-            }
-            .frame(height: 96)
-    }
-}
-
-private struct IconButton: View {
+struct IconButton: View {
     let symbol: String
     let label: String
     let action: () -> Void
@@ -680,7 +668,7 @@ private struct IconButton: View {
 }
 
 /// Quick press-down feedback; releases with a small spring. Disabled controls are dimmed.
-private struct PressableStyle: ButtonStyle {
+struct PressableStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
 
     func makeBody(configuration: Configuration) -> some View {
@@ -692,7 +680,7 @@ private struct PressableStyle: ButtonStyle {
     }
 }
 
-private struct TabButtonStyle: ButtonStyle {
+struct TabButtonStyle: ButtonStyle {
     let selected: Bool
     let namespace: Namespace.ID
 
