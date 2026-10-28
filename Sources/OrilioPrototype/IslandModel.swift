@@ -84,9 +84,6 @@ final class IslandModel {
     private(set) var showsLivesHereHint = false
     @ObservationIgnored private var hintTask: Task<Void, Never>?
 
-    /// Without a notch the onboarding panel floats 6 pt below the menu bar (the M5 no-notch design).
-    var onboardingFloats: Bool { onboarding != nil && !geometry.hasNotch }
-    static let floatingGap: CGFloat = 6
     static let quickLookHeight: CGFloat = 560
 
     /// Shows the first-run flow in this island (first launch, or "Replay onboarding").
@@ -119,10 +116,7 @@ final class IslandModel {
             let room = geometry.usableHeight + geometry.topInset - IslandGeometry.shadowMargin * 2
             return CGSize(width: geometry.panelWidth, height: min(Self.quickLookHeight, max(geometry.full.height, room)))
         }
-        if onboarding != nil, state.isOpen {
-            let size = OnboardingModel.panelSize
-            return onboardingFloats ? CGSize(width: size.width, height: size.height + geometry.topInset + Self.floatingGap) : size
-        }
+        if onboarding != nil, state.isOpen { return OnboardingModel.panelSize }
         guard state.isOpen, state != .dropTarget, tab == .mirror else { return nil }
         if state == .expanded { return mirror.panelSize(scale: geometry.panelWidth / IslandGeometry.fullWidth, hoverCard: true) }
         return mirror.panelSize(scale: geometry.panelWidth / IslandGeometry.fullWidth)

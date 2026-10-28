@@ -83,6 +83,7 @@ private struct ToolbarButton: View {
 }
 
 private struct EmptyLibrary: View {
+    @Environment(\.islandLayout) private var layout
     let library: ScreenshotLibrary
 
     var body: some View {
@@ -94,7 +95,7 @@ private struct EmptyLibrary: View {
             Text("Your screenshot library")
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(.white)
-            Text("Drop images on the notch, paste with ⌘V, or capture one. Orilio keeps its own copies.")
+            Text("Drop images on \(layout.place), paste with ⌘V, or capture one. Orilio keeps its own copies.")
                 .font(.system(size: 11))
                 .foregroundStyle(.white.opacity(Metrics.secondaryText))
                 .multilineTextAlignment(.center)

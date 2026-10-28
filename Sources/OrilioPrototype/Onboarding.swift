@@ -125,6 +125,7 @@ extension OnboardingModel {
 }
 
 struct OnboardingView: View {
+    @Environment(\.islandLayout) private var layout
     let model: OnboardingModel
     /// No notch on this display: one line says why the island floats.
     let floating: Bool
@@ -202,7 +203,7 @@ struct OnboardingView: View {
 
     private var island: some View {
         VStack(alignment: .leading, spacing: 28) {
-            Heading(title: "This is the island.", detail: "It grows out of the notch only when you reach for it.")
+            Heading(title: "This is the island.", detail: "It grows out of \(layout.place) only when you reach for it.")
             // Three equal columns, as in the design's grid.
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 14, alignment: .top), count: 3), spacing: 14) {
                 GestureCard(title: "Hover to peek", detail: "A glance at what is playing or what is next.",
@@ -238,7 +239,7 @@ struct OnboardingView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Open at login").font(.system(size: 15, weight: .semibold))
                         Text(model.login == .requiresApproval ? "Waiting for your approval in System Settings › General › Login Items"
-                             : "Starts quietly in the notch. No window, no Dock icon.")
+                             : "Starts quietly in \(layout.place). No window, no Dock icon.")
                             .font(.system(size: 12.5)).foregroundStyle(.white.opacity(0.55))
                     }
                     Spacer(minLength: 0)
@@ -449,13 +450,15 @@ private extension View {
 /// After the flow: an up arrow and one line under the notch, once. It fades after 6 s or on the
 /// first hover.
 struct LivesHereHint: View {
+    var layout = IslandLayout.notch
+
     var body: some View {
         VStack(spacing: 18) {
             Image(systemName: "arrow.up")
                 .font(.system(size: 26, weight: .medium))
                 .foregroundStyle(Design.mint)
                 .shadow(color: Design.mint.opacity(0.6), radius: 4)
-            Text("Orilio lives here now. Hover the notch any time.")
+            Text("Orilio lives here now. Hover \(layout.place) any time.")
                 .font(.system(size: 15))
                 .foregroundStyle(.white.opacity(0.85))
                 .shadow(color: .black.opacity(0.6), radius: 6)

@@ -9,6 +9,7 @@ private enum Design {
 
 /// The Focus module in the island.
 struct FocusPanel: View {
+    @Environment(\.islandLayout) private var layout
     let module: FocusModule
     @State private var customOpen = false
 
@@ -39,7 +40,7 @@ struct FocusPanel: View {
             VStack(alignment: .leading, spacing: 16) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Deep work").font(.system(size: 20, weight: .semibold)).tracking(-0.4)
-                    Text("Keeps running when the island closes — the ring lives in the notch.")
+                    Text("Keeps running when the island closes — the ring lives in \(layout.place).")
                         .font(.system(size: 13))
                         .foregroundStyle(.white.opacity(0.6))
                         .fixedSize(horizontal: false, vertical: true)

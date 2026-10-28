@@ -2,6 +2,13 @@ import AppKit
 import Quartz
 import SwiftUI
 
+enum IslandLayout {
+    case notch, floating
+
+    /// Where the island is, in words: "the notch", or "the island" on a display without one.
+    var place: String { self == .notch ? "the notch" : "the island" }
+}
+
 /// Where the island sits on one screen, in AppKit screen coordinates (origin bottom-left).
 struct IslandGeometry: Equatable {
     /// Height of the hardware notch, or of the menu bar band on screens without one.
@@ -18,6 +25,8 @@ struct IslandGeometry: Equatable {
     /// Settings › Appearance › Panel size: the open panel's width (560, 700 or 820 pt). The content
     /// height scales with it; the collapsed island doesn't change.
     var panelWidth: CGFloat = IslandGeometry.fullWidth
+    /// The display's name ("Studio Display"), shown in the floating panel's tab row.
+    var displayName = ""
 
     static let pillWidth: CGFloat = 220     // fits a mini cover + a short title in the menu bar band
     // The M3 hub design: a 700 × 304 panel whose 38 pt header row shares the notch's row (tabs to
@@ -42,6 +51,20 @@ struct IslandGeometry: Equatable {
 
     var hasNotch: Bool { notchWidth > 0 }
 
+    /// How the island sits on this display (the M5 no-notch design): under the notch with ears, or
+    /// floating below the top with all four corners rounded and a hairline edge. Decided here once;
+    /// views read it from the environment.
+    var layout: IslandLayout { hasNotch ? .notch : .floating }
+    /// Floating: the open panel starts this far below the menu bar.
+    static let floatingGap: CGFloat = 6
+    /// Floating: the collapsed capsule sits this far inside the menu bar band, top and bottom.
+    static let pillInset: CGFloat = 3
+    static let floatingRadius: CGFloat = 28
+    /// Where the open panel's shape starts inside the window.
+    var openTop: CGFloat { layout == .floating ? topInset + Self.floatingGap : 0 }
+    /// The open panel's first row (tabs, pin, close): it shares the notch's row, or is the panel's own.
+    var headerRow: CGFloat { layout == .floating ? Self.headerHeight : max(topInset, Self.headerHeight) }
+
     /// On a notched screen the collapsed island is exactly the notch, so it never covers menu bar items.
     var collapsed: CGSize {
         CGSize(width: hasNotch ? notchWidth : Self.pillWidth, height: topInset)
@@ -49,12 +72,12 @@ struct IslandGeometry: Equatable {
 
     /// Click: the full controller.
     var full: CGSize {
-        CGSize(width: panelWidth, height: max(topInset, Self.headerHeight) + (Self.contentHeight * panelWidth / Self.fullWidth).rounded())
+        CGSize(width: panelWidth, height: headerRow + (Self.contentHeight * panelWidth / Self.fullWidth).rounded())
     }
 
     /// A drag over the island: the panel's width, enough height for a clear drop zone, no more.
     var dropTarget: CGSize {
-        CGSize(width: max(panelWidth, collapsed.width), height: topInset + Self.dropTargetHeight)
+        CGSize(width: max(panelWidth, collapsed.width), height: (layout == .floating ? 0 : topInset) + Self.dropTargetHeight)
     }
 
     /// The full panel grown for the screenshot grid, capped so it never runs off the screen.
@@ -64,8 +87,16 @@ struct IslandGeometry: Equatable {
     }
 
     /// `panel` replaces the open size for a module with its own (the camera mirror).
+    /// The island's size in its window; a floating open panel also counts the room above it.
     func size(for state: IslandState, tall wantsTall: Bool = false, collapsedWidth: CGFloat? = nil, panel: CGSize? = nil,
               dropHint: Bool = false) -> CGSize {
+        var size = panelSize(for: state, tall: wantsTall, collapsedWidth: collapsedWidth, panel: panel, dropHint: dropHint)
+        if state.isOpen { size.height += openTop }
+        return size
+    }
+
+    private func panelSize(for state: IslandState, tall wantsTall: Bool, collapsedWidth: CGFloat?, panel: CGSize?,
+                           dropHint: Bool) -> CGSize {
         switch state {
         case .collapsed where dropHint:
             CGSize(width: max(collapsed.width, collapsedWidth ?? 0, Self.dropHintWidth), height: collapsed.height + Self.dropHintGrowth)
@@ -478,7 +509,7 @@ final class IslandWindowController {
                 hint.hasShadow = false
                 hint.ignoresMouseEvents = true
                 IslandWindowPolicy.apply(to: hint, allSpaces: true)
-                hint.contentView = NSHostingView(rootView: LivesHereHint())
+                hint.contentView = NSHostingView(rootView: LivesHereHint(layout: model.geometry.layout))
                 self.hint = hint
             }
             guard let hint else { return }

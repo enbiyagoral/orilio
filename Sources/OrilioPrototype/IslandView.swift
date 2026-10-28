@@ -21,11 +21,18 @@ enum Metrics {
 
 /// Notch-like silhouette: concave ears at the top corners melt it into the screen edge,
 /// rounded bottom corners. Both radii animate, so the shape morphs instead of cross-fading.
+extension EnvironmentValues {
+    /// Under a notch, or floating (see `IslandGeometry.layout`).
+    @Entry var islandLayout = IslandLayout.notch
+}
+
 struct IslandShape: Shape {
     var ear: CGFloat
     var bottom: CGFloat
     /// Above 0, the shape floats this far below the top with all four corners rounded (no notch).
     var floatTop: CGFloat = 0
+    /// Floating and collapsed: the capsule also stays this far above the window's bottom.
+    var floatBottom: CGFloat = 0
 
     var animatableData: AnimatablePair<CGFloat, CGFloat> {
         get { AnimatablePair(ear, bottom) }
@@ -34,7 +41,7 @@ struct IslandShape: Shape {
 
     func path(in rect: CGRect) -> Path {
         if floatTop > 0 {
-            let panel = CGRect(x: rect.minX, y: rect.minY + floatTop, width: rect.width, height: rect.height - floatTop)
+            let panel = CGRect(x: rect.minX, y: rect.minY + floatTop, width: rect.width, height: rect.height - floatTop - floatBottom)
             return Path(roundedRect: panel, cornerRadius: min(bottom, panel.height / 2), style: .continuous)
         }
         let e = ear
@@ -81,14 +88,18 @@ struct IslandView: View {
         let hint = model.dropHint && state == .collapsed
         let size = geometry.size(for: state, tall: model.showsTallPanel, collapsedWidth: model.liveCollapsedWidth,
                                  panel: model.shownCustomPanel, dropHint: hint)
-        let floats = model.onboardingFloats && open
+        let floats = geometry.layout == .floating
         let ear = open && !floats ? IslandGeometry.earRadius : 0
         let radius = switch state {
-        case .collapsed: hint ? 18 : Metrics.collapsedRadius // the M5 Moments design's drop hint
-        case .dropTarget: CGFloat(30) // the M5 Moments design
-        case .expanded, .pinned: model.onboarding != nil ? OnboardingModel.radius : Metrics.openRadius
+        case .collapsed: floats ? size.height / 2 : hint ? 18 : Metrics.collapsedRadius // the M5 Moments design's drop hint
+        case .dropTarget: floats ? IslandGeometry.floatingRadius : CGFloat(30) // the M5 Moments design
+        case .expanded, .pinned:
+            model.onboarding != nil ? OnboardingModel.radius : floats ? IslandGeometry.floatingRadius : Metrics.openRadius
         }
-        let shape = IslandShape(ear: ear, bottom: radius, floatTop: floats ? geometry.topInset + IslandModel.floatingGap : 0)
+        // Floating (no notch): the capsule sits inside the menu bar band; the open panel starts below it.
+        let shape = IslandShape(ear: ear, bottom: radius,
+                                floatTop: floats ? (open ? geometry.openTop : IslandGeometry.pillInset) : 0,
+                                floatBottom: floats && !open ? IslandGeometry.pillInset : 0)
 
         ZStack(alignment: .top) {
             shape
@@ -103,14 +114,16 @@ struct IslandView: View {
             ZStack(alignment: .top) {
                 switch state {
                 case .pinned, .expanded:
-                    // The header shares the notch's row, so content starts at the very top.
+                    // With a notch the header shares the notch's row, so content starts at the very top;
+                    // floating, it starts inside the panel.
                     ExpandedContent(model: model)
+                        .padding(.top, geometry.openTop)
                         .padding(.horizontal, ear)
                         .transition(contentTransition)
                 case .dropTarget:
                     DropTargetView(valid: model.dropIsValid, count: model.dropCount,
                                    destination: model.dropGoesToScreenshots ? "Screenshots" : "Shelf")
-                        .padding(.top, geometry.topInset)
+                        .padding(.top, floats ? geometry.openTop + 12 : geometry.topInset)
                         .padding(.horizontal, ear)
                         .transition(contentTransition)
                 case .collapsed:
@@ -161,6 +174,7 @@ struct IslandView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .environment(\.colorScheme, .dark)
         .environment(\.reducesMotion, Theme.current.reducesMotion)
+        .environment(\.islandLayout, geometry.layout)
 
     }
 
@@ -222,12 +236,12 @@ private struct ActivityIndicator: View {
 
 private struct ExpandedContent: View {
     @Bindable var model: IslandModel
+    @Environment(\.islandLayout) private var layout
     @Environment(\.reducesMotion) private var reduceMotion
 
     var body: some View {
         if let onboarding = model.onboarding {
-            OnboardingView(model: onboarding, floating: model.onboardingFloats) { model.finishOnboarding() }
-                .padding(.top, model.onboardingFloats ? model.geometry.topInset + IslandModel.floatingGap : 0)
+            OnboardingView(model: onboarding, floating: layout == .floating) { model.finishOnboarding() }
                 .transition(.opacity)
         } else if model.tab == .mirror {
             // The M4.1 design: the mirror has its own header ("Mirror" and close), no tab bar.
@@ -251,12 +265,17 @@ private struct ExpandedContent: View {
                 .accessibilityElement(children: .contain)
                 .accessibilityLabel("Modules")
                 Spacer()
+                if layout == .floating, !model.geometry.displayName.isEmpty {
+                    // No notch to place the island by: the panel says which display it's on.
+                    Text(model.geometry.displayName).font(.system(size: 11)).foregroundStyle(.white.opacity(0.5))
+                        .lineLimit(1).padding(.trailing, 6)
+                }
                 HeaderButton(symbol: model.state == .pinned ? "pin.fill" : "pin", label: "Keep island open",
                              active: model.state == .pinned) { model.togglePin() }
                 HeaderButton(symbol: "xmark", label: "Close island (Esc)", active: false) { model.dismiss() }
             }
             .padding(.horizontal, 14)
-            .frame(height: max(IslandGeometry.headerHeight, model.geometry.topInset))
+            .frame(height: model.geometry.headerRow)
 
             ZStack {
                 switch model.tab {
@@ -407,6 +426,7 @@ private struct Artwork: View {
 }
 
 private struct MusicCard: View {
+    @Environment(\.islandLayout) private var layout
     let media: MediaCoordinator
     @Environment(\.reducesMotion) private var reduceMotion
 
@@ -427,7 +447,7 @@ private struct MusicCard: View {
                     let name = media.providerName(ask)
                     StatusCard(tone: .ask(tile: MusicEar.warm.opacity(0.16), ink: MusicEar.warm), symbol: "music.note",
                                title: "Let Orilio control \(name)?",
-                               detail: "Needed for play, pause and skip from the notch. macOS asks once for each music app.",
+                               detail: "Needed for play, pause and skip from \(layout.place). macOS asks once for each music app.",
                                primary: .init("Continue") { Task { await media.requestControl(session.providerID) } },
                                secondary: .init("Not now") { access.decline(session.providerID) }, layout: .ask)
                         .padding(EdgeInsets(top: 10, leading: 20, bottom: 20, trailing: 20))

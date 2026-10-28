@@ -63,6 +63,7 @@ struct ScreenInfo: Equatable {
     let auxRightWidth: CGFloat?
     let isBuiltIn: Bool
     let scale: CGFloat
+    var name = ""
 
     var geometry: IslandGeometry {
         let band = frame.maxY - visibleFrame.maxY
@@ -71,6 +72,7 @@ struct ScreenInfo: Equatable {
                                            // band is 0 when the menu bar auto-hides
                                            menuBarHeight: band > 0 ? band : 24, scale: scale)
         geometry.usableHeight = visibleFrame.height
+        geometry.displayName = name
         return geometry
     }
 }
@@ -81,7 +83,7 @@ extension ScreenInfo {
         let id = CGDirectDisplayID(number.uint32Value)
         self.init(id: id, frame: screen.frame, visibleFrame: screen.visibleFrame, safeAreaTop: screen.safeAreaInsets.top,
                   auxLeftWidth: screen.auxiliaryTopLeftArea?.width, auxRightWidth: screen.auxiliaryTopRightArea?.width,
-                  isBuiltIn: CGDisplayIsBuiltin(id) != 0, scale: screen.backingScaleFactor)
+                  isBuiltIn: CGDisplayIsBuiltin(id) != 0, scale: screen.backingScaleFactor, name: screen.localizedName)
     }
 }
 
