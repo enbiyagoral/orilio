@@ -12,6 +12,18 @@ struct SettingsView: View {
                 Toggle("Show on the built-in notched display when connected", isOn: $preferNotchedDisplay)
                 Toggle("Show the Demo media source", isOn: $showDemoSource)
             }
+            if let modules = AppModules.modules {
+                ModulesSettings(modules: modules)
+            }
+            if let library = AppModules.library {
+                Section("Screenshots") {
+                    Toggle("Add new macOS screenshots to the library", isOn: Binding(
+                        get: { library.addsSystemScreenshots }, set: { library.setAddsSystemScreenshots($0) }))
+                    Text("Screenshots taken with ⇧⌘3, ⇧⌘4 or ⇧⌘5 from now on are copied in; the originals stay in \(ScreenshotWatcher.folder.lastPathComponent). macOS asks once for access to that folder.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
             if let calendar = AppModules.calendar {
                 CalendarSettings(module: calendar)
             }
@@ -110,6 +122,49 @@ private struct ClipboardSettings: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
+        }
+    }
+}
+
+/// Which modules the island shows and in which order, the one it opens to, and what the
+/// collapsed island may show.
+private struct ModulesSettings: View {
+    let modules: ModuleSettings
+
+    var body: some View {
+        Section("Modules") {
+            ForEach(modules.order) { tab in
+                HStack {
+                    Toggle(isOn: Binding(get: { modules.isVisible(tab) }, set: { modules.setVisible(tab, $0) })) {
+                        Label(tab.rawValue, systemImage: tab.symbol)
+                    }
+                    .disabled(modules.isVisible(tab) && modules.visible.count == 1)
+                    Spacer()
+                    Button { modules.move(tab, by: -1) } label: { Image(systemName: "chevron.up") }
+                        .disabled(modules.order.first == tab)
+                        .accessibilityLabel("Move \(tab.rawValue) up")
+                    Button { modules.move(tab, by: 1) } label: { Image(systemName: "chevron.down") }
+                        .disabled(modules.order.last == tab)
+                        .accessibilityLabel("Move \(tab.rawValue) down")
+                }
+                .buttonStyle(.borderless)
+            }
+            Picker("Open to", selection: Binding(get: { modules.defaultTab }, set: { modules.setDefault($0) })) {
+                Text("Last used").tag(IslandTab?.none)
+                ForEach(modules.visible) { tab in Text(tab.rawValue).tag(IslandTab?.some(tab)) }
+            }
+            Text("Hiding a module turns it off: Calendar stops reading events, Clipboard pauses, a focus session ends. Nothing stored is deleted.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+        Section("Collapsed island") {
+            ForEach(CollapsedIndicator.allCases) { indicator in
+                Toggle(indicator.title, isOn: Binding(get: { modules.indicators.contains(indicator) },
+                                                      set: { modules.setIndicator(indicator, $0) }))
+            }
+            Text("Only one shows at a time: a meeting about to start first, then a focus session, then music.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
         }
     }
 }

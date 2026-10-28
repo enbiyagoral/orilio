@@ -23,8 +23,8 @@ struct IslandGeometry: Equatable {
     /// The collapsed island while a meeting is about to start.
     static let meetingWidth: CGFloat = 412
     static let focusWidth: CGFloat = 340
-    static let previewWidth: CGFloat = 360
-    static let previewHeight: CGFloat = 64  // one row: 40pt cover + 12pt padding above and below
+    static let musicWidth: CGFloat = 236
+    static let dropTargetWidth: CGFloat = 360
     static let dropTargetHeight: CGFloat = 92 // a 68pt drop zone + 12pt padding
     /// The Screenshots grid: about four rows of thumbnails, never taller than the usable screen.
     static let tallHeight: CGFloat = 412
@@ -43,11 +43,6 @@ struct IslandGeometry: Equatable {
         CGSize(width: hasNotch ? notchWidth : Self.pillWidth, height: topInset)
     }
 
-    /// Hover: a single glanceable row.
-    var preview: CGSize {
-        CGSize(width: max(Self.previewWidth, collapsed.width), height: topInset + Self.previewHeight)
-    }
-
     /// Click: the full controller.
     var full: CGSize {
         CGSize(width: Self.fullWidth, height: max(topInset, Self.headerHeight) + Self.contentHeight)
@@ -55,7 +50,7 @@ struct IslandGeometry: Equatable {
 
     /// A drag over the island: enough room for a clear drop zone, no more.
     var dropTarget: CGSize {
-        CGSize(width: max(Self.previewWidth, collapsed.width), height: topInset + Self.dropTargetHeight)
+        CGSize(width: max(Self.dropTargetWidth, collapsed.width), height: topInset + Self.dropTargetHeight)
     }
 
     /// The full panel grown for the screenshot grid, capped so it never runs off the screen.
@@ -67,8 +62,7 @@ struct IslandGeometry: Equatable {
     func size(for state: IslandState, tall wantsTall: Bool = false, collapsedWidth: CGFloat? = nil) -> CGSize {
         switch state {
         case .collapsed: CGSize(width: max(collapsed.width, collapsedWidth ?? 0), height: collapsed.height)
-        case .expanded: preview
-        case .pinned: wantsTall ? tall : full
+        case .expanded, .pinned: wantsTall ? tall : full
         case .dropTarget: dropTarget
         }
     }
@@ -126,7 +120,7 @@ final class IslandPanel: NSPanel {
     }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        if event.modifierFlags.contains(.command), onKey?(event) == true { return true }
+        if !event.modifierFlags.isDisjoint(with: [.command, .control]), onKey?(event) == true { return true }
         return super.performKeyEquivalent(with: event)
     }
 
@@ -230,6 +224,7 @@ final class IslandWindowController {
     /// Watches for clicks outside the island while the full controller is open. Mouse monitors
     /// need no permission; it exists only while pinned.
     private var outsideClickMonitor: Any?
+    private var insideClickMonitor: Any?
     /// Where the last outside press started, to tell a click from the start of a drag.
     private var outsidePress: NSPoint?
 
@@ -257,6 +252,11 @@ final class IslandWindowController {
         panel.onKey = { [weak model] event in
             guard let model, model.state == .pinned else { return false }
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            // ⌃⇥ and ⌃⇧⇥ move between modules, as between tabs anywhere on the Mac.
+            if event.keyCode == 48, flags.contains(.control) {
+                model.selectAdjacentTab(flags.contains(.shift) ? -1 : 1)
+                return true
+            }
             if model.tab == .clipboard { return model.clipboard.handleKey(keyCode: event.keyCode, command: flags == .command) }
             guard model.tab == .shelf else { return false }
             switch model.shelfSection {
@@ -265,6 +265,14 @@ final class IslandWindowController {
             }
         }
         model.onWillChangeState = { [weak self] in self?.apply($0) }
+        // A click anywhere in the hover panel keeps it: the user is now working in it (typing in a
+        // note must not end when the pointer drifts off). The click itself still goes through.
+        insideClickMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
+            MainActor.assumeIsolated {
+                if let self, event.window === self.panel, self.model.state == .expanded { self.model.keepOpen() }
+            }
+            return event
+        }
 
         let center = NotificationCenter.default
         let onChange: @Sendable (Notification) -> Void = { [weak self] _ in

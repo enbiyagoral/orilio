@@ -52,7 +52,7 @@ struct IslandTests {
         #expect(frame.minX == 662 && frame.maxY == 982)
         #expect(g.windowFrame(for: .pinned).midX == 755)
         #expect(g.windowFrame(for: .expanded).midX == 755)
-        #expect(g.size(for: .expanded).height < g.size(for: .pinned).height) // hover never opens the full panel
+        #expect(g.size(for: .expanded) == g.size(for: .pinned)) // hover opens the full panel (M3 hub design)
     }
 
     @Test func noNotchFallsBackToPillOnSecondaryScreen() {

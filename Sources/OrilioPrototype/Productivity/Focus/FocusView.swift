@@ -92,6 +92,7 @@ struct FocusPanel: View {
 private struct FocusRing: View {
     let module: FocusModule
     let now: Date
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let remaining = module.remaining(at: now)
@@ -102,7 +103,7 @@ private struct FocusRing: View {
                 .stroke(mint, style: StrokeStyle(lineWidth: 10, lineCap: .round))
                 .rotationEffect(.degrees(-90))
                 .shadow(color: mint.opacity(module.isRunning ? 0.45 : 0), radius: 10)
-                .animation(.linear(duration: 1), value: remaining)
+                .animation(reduceMotion ? nil : .linear(duration: 1), value: remaining)
             VStack(spacing: 2) {
                 Text(FocusSession.text(remaining))
                     .font(.system(size: 38, weight: .semibold).monospacedDigit())

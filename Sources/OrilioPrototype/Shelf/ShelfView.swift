@@ -1,4 +1,5 @@
 import AppKit
+import QuickLookThumbnailing
 import SwiftUI
 
 /// Shown while a drag is over the island.
@@ -78,17 +79,22 @@ private struct FilesStrip: View {
         if shelf.items.isEmpty && shelf.pending.isEmpty {
             EmptyShelf()
         } else {
-            ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(spacing: 8) {
-                    ForEach(shelf.pending) { PendingTile(pending: $0) }
-                    ForEach(shelf.items) { item in
-                        ShelfTile(item: item, shelf: shelf, draggedOut: draggedOut)
-                            .transition(.scale(scale: 0.9).combined(with: .opacity))
+            // The M3 hub design: five tiles a row (radius 16, padding 10, gap 10) over a drop hint.
+            VStack(spacing: 12) {
+                ScrollView {
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 5), spacing: 10) {
+                        ForEach(shelf.pending) { PendingTile(pending: $0) }
+                        ForEach(shelf.items) { item in
+                            ShelfTile(item: item, shelf: shelf, draggedOut: draggedOut)
+                                .transition(.scale(scale: 0.9).combined(with: .opacity))
+                        }
                     }
+                    .animation(.spring(duration: 0.3, bounce: 0), value: shelf.items)
                 }
-                .animation(.spring(duration: 0.3, bounce: 0), value: shelf.items)
+                .scrollIndicators(.never)
+                .scrollDisabled(shelf.items.count + shelf.pending.count <= 5)
+                DropHint()
             }
-            .frame(height: 84)
         }
     }
 }
@@ -101,27 +107,22 @@ private struct ShelfTile: View {
 
     var body: some View {
         let selected = shelf.selection.contains(item.id)
-        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
         ZStack(alignment: .topTrailing) {
-            VStack(spacing: 3) {
-                Image(nsImage: NSWorkspace.shared.icon(forFile: item.url.path))
-                    .resizable()
-                    .frame(width: 40, height: 40)
+            VStack(alignment: .leading, spacing: 8) {
+                TileThumbnail(item: item)
                     .saturation(item.isAvailable ? 1 : 0)
                     .opacity(item.isAvailable ? 1 : 0.4)
-                Text(item.name)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.white.opacity(item.isAvailable ? 1 : 0.5))
+                Text(item.isAvailable ? item.name : "Missing: \(item.name)")
+                    .font(.system(size: 12))
+                    .foregroundStyle(item.isAvailable ? .white : .orange)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                Text(detail)
-                    .font(.system(size: 9, weight: item.isAvailable ? .regular : .semibold))
-                    .foregroundStyle(item.isAvailable ? .white.opacity(Metrics.secondaryText) : .orange)
-                    .lineLimit(1)
             }
-            .frame(width: 78, height: 80)
-            .background(selected ? mint.opacity(0.16) : .white.opacity(hovering ? 0.08 : 0), in: shape)
-            .overlay(shape.strokeBorder(selected ? mint.opacity(0.7) : .clear, lineWidth: 1))
+            .padding(10)
+            .frame(height: 146)
+            .background(selected ? mint.opacity(0.16) : .white.opacity(hovering ? 0.08 : 0.05), in: shape)
+            .overlay(shape.strokeBorder(selected ? mint.opacity(0.7) : .white.opacity(0.08), lineWidth: 1))
             // Clicks, double-clicks, the context menu and dragging out are handled in AppKit underneath.
             .overlay { TileInteraction(actions: .shelf(item, in: shelf, draggedOut: draggedOut)) }
 
@@ -173,7 +174,9 @@ private struct PendingTile: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
         }
-        .frame(width: 78, height: 80)
+        .frame(maxWidth: .infinity)
+        .frame(height: 146)
+        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Receiving \(pending.name)")
     }
@@ -198,5 +201,71 @@ private struct EmptyShelf: View {
         .frame(maxWidth: .infinity, minHeight: 84)
         .overlay(shape.strokeBorder(.white.opacity(0.2), style: StrokeStyle(lineWidth: 1, dash: [5, 4])))
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// The tile's picture: a real thumbnail for images, the file's icon for everything else, with
+/// its kind (PNG, PDF, ZIP…) in the corner.
+private struct TileThumbnail: View {
+    let item: ShelfItem
+    @State private var thumbnail: CGImage?
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+        ZStack(alignment: .bottomLeading) {
+            // In an overlay, so a filling thumbnail can't widen the tile.
+            shape.fill(.white.opacity(0.06)).overlay { picture }
+            if let kind {
+                Text(kind)
+                    .font(.system(size: 10, weight: .bold))
+                    .tracking(0.6)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                    .padding(6)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipShape(shape)
+        .task(id: item.url) { await loadThumbnail() }
+    }
+
+    @ViewBuilder private var picture: some View {
+        if let thumbnail {
+            Image(decorative: thumbnail, scale: 2).resizable().aspectRatio(contentMode: .fill)
+        } else {
+            Image(nsImage: NSWorkspace.shared.icon(forFile: item.url.path))
+                .resizable()
+                .frame(width: 44, height: 44)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    private var kind: String? {
+        if item.isFolder { return "FOLDER" }
+        let ext = item.url.pathExtension.uppercased()
+        return ext.isEmpty || ext.count > 5 ? nil : ext
+    }
+
+    /// Images only: everything else reads fine as its icon, and thumbnails cost a render each.
+    private func loadThumbnail() async {
+        guard item.isAvailable, item.contentType?.conforms(to: .image) == true else { return }
+        let request = QLThumbnailGenerator.Request(fileAt: item.url, size: CGSize(width: 120, height: 100),
+                                                   scale: 2, representationTypes: .thumbnail)
+        thumbnail = try? await QLThumbnailGenerator.shared.generateBestRepresentation(for: request).cgImage
+    }
+}
+
+/// The design's hint under the tiles.
+private struct DropHint: View {
+    var body: some View {
+        Label("Drop files here · they stay where they are; the Shelf keeps a link", systemImage: "square.and.arrow.down")
+            .font(.system(size: 12.5))
+            .foregroundStyle(.white.opacity(0.6))
+            .lineLimit(1)
+            .frame(maxWidth: .infinity)
+            .frame(height: 40)
+            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(.white.opacity(0.1), lineWidth: 1.5))
+            .accessibilityElement(children: .combine)
     }
 }

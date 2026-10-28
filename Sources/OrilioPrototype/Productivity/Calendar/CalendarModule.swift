@@ -319,4 +319,6 @@ struct NoReminders: ReminderScheduler {
 enum AppModules {
     static var calendar: CalendarModule?
     static var clipboard: ClipboardModule?
+    static var modules: ModuleSettings?
+    static var library: ScreenshotLibrary?
 }
