@@ -11,6 +11,9 @@ BUILD="${ORILIO_BUILD:-1}"
 # placeholders the updater doesn't start and nothing goes on the network.
 FEED_URL="${ORILIO_FEED_URL:-https://PLACEHOLDER.invalid/appcast.xml}"
 PUBLIC_KEY="${ORILIO_PUBLIC_ED_KEY:-PLACEHOLDER_SPARKLE_PUBLIC_ED_KEY}"
+# Send Feedback: the address Mail fills in, and the GitHub "new issue" page (empty: the button is hidden).
+FEEDBACK_EMAIL="${ORILIO_FEEDBACK_EMAIL:-}"
+ISSUES_URL="${ORILIO_ISSUES_URL:-}"
 swift build -c "$CONFIG"
 APP="build/Orilio.app"
 rm -rf "$APP"
@@ -33,6 +36,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>SUPublicEDKey</key><string>$PUBLIC_KEY</string>
   <key>SUEnableSystemProfiling</key><false/>
   <key>SUEnableAutomaticChecks</key><true/>
+  <key>OrilioFeedbackEmail</key><string>$FEEDBACK_EMAIL</string>
+  <key>OrilioIssuesURL</key><string>$ISSUES_URL</string>
   <key>LSMinimumSystemVersion</key><string>14.6</string>
   <key>LSUIElement</key><true/>
   <key>NSHighResolutionCapable</key><true/>

@@ -788,7 +788,6 @@ private struct FailureCard: View {
 
 struct AboutPane: View {
     @State private var acknowledgements = false
-    @State private var feedbackSoon = false
 
     static var version: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "–" }
     static var build: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "–" }
@@ -800,7 +799,7 @@ struct AboutPane: View {
             Text("Version \(Self.version) (\(Self.build))").font(.system(size: 13)).foregroundStyle(Design.ink.opacity(0.55))
             Text("Free, for everyone. No account, no ads, no tracking.").font(.system(size: 15)).foregroundStyle(Design.ink.opacity(0.85))
             HStack(spacing: 8) {
-                PaneButton(title: "Send feedback") { feedbackSoon = true }
+                PaneButton(title: "Send feedback") { FeedbackWindow.show() }
                 PaneButton(title: "Acknowledgements") { acknowledgements = true }
             }
             .padding(.top, 6)
@@ -809,9 +808,6 @@ struct AboutPane: View {
         .multilineTextAlignment(.center)
         .frame(maxWidth: .infinity, minHeight: 760 - 53 - 48)
         .sheet(isPresented: $acknowledgements) { Acknowledgements() }
-        .alert("Feedback comes with the next version", isPresented: $feedbackSoon) {
-            Button("OK", role: .cancel) {}
-        }
     }
 }
 

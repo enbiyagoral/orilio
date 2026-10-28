@@ -71,6 +71,13 @@ struct StatusCard: View {
                 }
                 .padding(.top, ask ? 6 : 4)
             }
+            if tone == .warn {
+                // Something went wrong: one quiet way to tell about it (the M5 Feedback design).
+                Button("Report this") { FeedbackWindow.show(kind: .bug, context: title) }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 11.5, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.5))
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .accessibilityElement(children: .contain)

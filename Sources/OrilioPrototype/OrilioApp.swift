@@ -13,40 +13,10 @@ enum Entry {
 
 struct OrilioApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @AppStorage(StartupSettings.Keys.menuBarIcon) private var menuBarIcon = true
 
     var body: some Scene {
-        // Hidden from Settings › Startup; opening Orilio again (Finder, Spotlight) then opens Settings.
-        // SwiftUI writes `isInserted` back on every scene update; writing an unchanged value to the
-        // defaults would post a change, rebuild the scene and loop, so only real changes are stored.
-        MenuBarExtra(isInserted: Binding(get: { menuBarIcon }, set: { if $0 != menuBarIcon { menuBarIcon = $0 } })) {
-            MenuContent()
-        } label: {
-            // A mint dot on the icon while an update waits (the M5 System design).
-            Image(nsImage: MenuBarIcon.image(dot: UpdateModel.shared.waiting != nil))
-        }
-    }
-}
-
-private struct MenuContent: View {
-    var body: some View {
-        // The quick way to the camera mirror; gone with the module when it is hidden.
-        // Read from the preferences store, which exists before the menu is built (the island doesn't yet).
-        if ModuleSettings(store: .shared).isVisible(.mirror) {
-            Button("Mirror") { AppModules.island?.openMirror() }
-            Divider()
-        }
-        Button("Settings…") { SettingsWindow.show() }
-            .keyboardShortcut(",")
-        if let update = UpdateModel.shared.waiting {
-            Button("Restart to Update · \(update.version)") { UpdateModel.shared.install() }
-        }
-        #if DEBUG
-        DebugMenu()
-        #endif
-        Divider()
-        Button("Quit Orilio") { NSApp.terminate(nil) }
-            .keyboardShortcut("q")
+        // The menu bar extra is an `NSStatusItem` (see `StatusMenu`); Settings is Orilio's own window.
+        Settings { EmptyView() }
     }
 }
 
@@ -57,6 +27,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var shelf: ShelfModel?
     private var clipboard: ClipboardModule?
     private var notes: NotesModule?
+    private var statusMenu: StatusMenu?
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         // No Dock icon, no app switcher entry. Works without an Info.plist (LSUIElement).
@@ -114,6 +85,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         focus: focus, modules: modules, live: island.live, sharing: island)
         }
         self.positioner = positioner
+        statusMenu = StatusMenu(toggleIsland: { [weak positioner] in positioner?.toggle() },
+                                open: { [weak positioner] in positioner?.open($0) })
         startUpdates(island: island)
         GlobalHotKeys.shared.perform = { [weak positioner] action in
             guard let positioner else { return }
@@ -211,34 +184,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
-#if DEBUG
-/// Shortcuts for checking things by hand (focus timing, hidden modules). Debug builds only.
-private struct DebugMenu: View {
-    /// Looked up when the menu opens: the menu is built before the app has finished launching.
-    private var island: IslandModel { AppModules.island! }
-
-    var body: some View {
-        Menu("Debug") {
-            Button(island.focus.isActive ? "Stop focus" : "Start focus") {
-                island.focus.isActive ? island.focus.reset() : island.focus.begin()
-            }
-            Button("Start a 1-minute focus session") {
-                island.focus.reset()
-                island.focus.setMinutes(1)
-                island.focus.begin()
-            }
-            Divider()
-            Menu("Hide or show a module") {
-                ForEach(IslandTab.allCases) { tab in
-                    Button("\(island.modules.isVisible(tab) ? "Hide" : "Show") \(tab.rawValue)") {
-                        island.modules.setVisible(tab, !island.modules.isVisible(tab))
-                    }
-                }
-            }
-        }
-    }
-}
-#endif
 
 /// The menu bar icon, with a mint dot while an update waits. Drawn with the menu bar's own text
 /// color, so it reads in light and dark menu bars.
