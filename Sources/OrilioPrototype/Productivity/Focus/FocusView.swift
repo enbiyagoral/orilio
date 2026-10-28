@@ -153,34 +153,3 @@ private struct SessionDots: View {
         .accessibilityLabel("\(count) focus \(count == 1 ? "session" : "sessions") completed today")
     }
 }
-
-/// The collapsed island during a session: a small ring and the time left of the notch.
-struct FocusPill: View {
-    let module: FocusModule
-
-    var body: some View {
-        TimelineView(.animation(minimumInterval: 1, paused: !module.isRunning)) { context in
-            let now = module.isRunning ? context.date : module.now()
-            let remaining = module.remaining(at: now)
-            HStack(spacing: 6) {
-                ZStack {
-                    Circle().stroke(.white.opacity(0.2), lineWidth: 2.4)
-                    Circle()
-                        .trim(from: 0, to: module.fraction(at: now))
-                        .stroke(mint, style: StrokeStyle(lineWidth: 2.4, lineCap: .round))
-                        .rotationEffect(.degrees(-90))
-                }
-                .frame(width: 12, height: 12)
-                Text(FocusSession.text(remaining)).monospacedDigit()
-                Spacer(minLength: 0)
-            }
-            .font(.system(size: 12, weight: .semibold))
-            .foregroundStyle(mint.opacity(module.isRunning ? 1 : 0.55))
-            .shadow(color: mint.opacity(module.isRunning ? 0.5 : 0), radius: 5)
-            .padding(.horizontal, 14)
-            .frame(maxHeight: .infinity)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Focus timer \(FocusSession.text(remaining))\(module.isRunning ? "" : ", paused"). Open island")
-        }
-    }
-}

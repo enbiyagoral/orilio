@@ -28,7 +28,7 @@ struct CalendarPanel: View {
         case .ready:
             // Countdowns move once a minute, and only while the panel is on screen.
             TimelineView(.everyMinute) { context in
-                CalendarToday(module: module, day: CalendarDay(events: module.day.events, now: fixedNow ?? context.date))
+                CalendarToday(module: module, day: CalendarDay(events: module.day.events, now: fixedNow ?? max(context.date, Date()))) // the schedule's date is the minute's start
             }
         case .off, .needsAccess:
             ModuleMessage(symbol: "calendar", title: "See your next meeting here",
@@ -320,30 +320,5 @@ struct ModuleMessage: View {
         .padding(.horizontal, 12)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .accessibilityElement(children: .contain)
-    }
-}
-
-/// The collapsed island while a meeting is about to start: dot and title left of the notch,
-/// countdown right of it.
-struct MeetingPill: View {
-    let event: CalendarEvent
-    let now: Date
-
-    var body: some View {
-        HStack {
-            HStack(spacing: 7) {
-                Circle().fill(event.color.color).frame(width: 7, height: 7)
-                Text(event.title).lineLimit(1)
-            }
-            Spacer(minLength: 12)
-            Text(CalendarDay.countdown(to: event.start, from: now))
-                .foregroundStyle(mint)
-                .shadow(color: mint.opacity(0.55), radius: 5)
-        }
-        .font(.system(size: 12, weight: .semibold))
-        .padding(.horizontal, 14)
-        .frame(maxHeight: .infinity)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(event.title) \(CalendarDay.countdown(to: event.start, from: now)). Open island")
     }
 }

@@ -15,35 +15,6 @@ enum CollapsedIndicator: String, CaseIterable, Identifiable {
     }
 }
 
-/// The one live thing the collapsed island shows. Pure; the order is the M3.5 spec's (#14):
-/// a meeting within 10 minutes, then a focus session, then music, then nothing.
-/// Open states (a drag, the panel, editing) come before all of these: the collapsed island isn't
-/// drawn then, and nothing here ever switches an open module.
-enum CollapsedLive: Equatable {
-    case focus
-    case meeting(CalendarEvent)
-    case music
-    case none
-
-    static func resolve(focusActive: Bool, meeting: CalendarEvent?, musicPlaying: Bool,
-                        visible: Set<IslandTab>, indicators: Set<CollapsedIndicator>) -> CollapsedLive {
-        if let meeting, visible.contains(.calendar), indicators.contains(.meeting) { return .meeting(meeting) }
-        if focusActive, visible.contains(.focus), indicators.contains(.focus) { return .focus }
-        if musicPlaying, visible.contains(.music), indicators.contains(.music) { return .music }
-        return .none
-    }
-
-    /// The module a click on the collapsed island opens.
-    var tab: IslandTab? {
-        switch self {
-        case .focus: .focus
-        case .meeting: .calendar
-        case .music: .music
-        case .none: nil
-        }
-    }
-}
-
 enum ModuleKeys {
     static let order = "modules.order"
     static let hidden = "modules.hidden"

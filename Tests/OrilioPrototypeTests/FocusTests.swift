@@ -212,11 +212,12 @@ struct FocusModuleTests {
         #expect(focus.minutes == 240)
     }
 
-    @Test func collapsedIslandShowsFocusBeforeAMeeting() async {
+    @Test func collapsedIslandShowsARunningSession() async {
         let (focus, _, _, _) = makeFocus()
         let island = IslandModel(focus: focus)
         #expect(island.liveCollapsedWidth == nil)
         focus.begin()
-        #expect(island.liveCollapsedWidth == IslandGeometry.focusWidth)
+        #expect(island.earLayout.leading?.kind == .focus)
+        #expect(island.liveCollapsedWidth != nil)
     }
 }

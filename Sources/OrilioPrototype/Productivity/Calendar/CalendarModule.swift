@@ -321,4 +321,5 @@ enum AppModules {
     static var clipboard: ClipboardModule?
     static var modules: ModuleSettings?
     static var library: ScreenshotLibrary?
+    static var island: IslandModel?
 }

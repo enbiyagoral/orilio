@@ -33,6 +33,9 @@ private struct MenuContent: View {
             openSettings()
         }
         .keyboardShortcut(",")
+        #if DEBUG
+        DebugMenu()
+        #endif
         Divider()
         Button("Quit Orilio") { NSApp.terminate(nil) }
             .keyboardShortcut("q")
@@ -78,8 +81,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task { await library.load() } // metadata only; thumbnails load as cells appear
         library.startWatchingIfEnabled()
         AppModules.library = library
-        controller = IslandWindowController(model: IslandModel(providers: providers, shelf: shelf, library: library,
-                                                               calendar: calendar, clipboard: clipboard, notes: notes, focus: focus, modules: modules))
+        let island = IslandModel(providers: providers, shelf: shelf, library: library,
+                                                               calendar: calendar, clipboard: clipboard, notes: notes, focus: focus, modules: modules)
+        AppModules.island = island
+        controller = IslandWindowController(model: island)
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
@@ -98,3 +103,58 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bridge?.stop()
     }
 }
+
+#if DEBUG
+/// Stand-ins for checking the collapsed island's priority rules by hand. Debug builds only.
+private struct DebugMenu: View {
+    /// Looked up when the menu opens: the menu is built before the app has finished launching.
+    private var island: IslandModel { AppModules.island! }
+
+    var body: some View {
+        Menu("Debug") {
+            Button("Meeting in 4 min") { island.live.mockMeeting = Self.meeting(startingIn: 4 * 60) }
+            Button("Meeting now") { island.live.mockMeeting = Self.meeting(startingIn: 0) }
+            Button("End meeting") { island.live.mockMeeting = nil }
+            Divider()
+            Button(island.focus.isActive ? "Stop focus" : "Start focus") {
+                island.focus.isActive ? island.focus.reset() : island.focus.begin()
+            }
+            Button("Fire \u{201C}Copied\u{201D}") {
+                island.live.flash(Transient(title: "Copied", detail: "kubectl rollout restart deploy/api", monospaced: true, module: .clipboard))
+            }
+            Button("Fire \u{201C}Screenshot saved\u{201D}") {
+                island.live.flash(Transient(symbol: "photo", title: "Screenshot saved to Shelf", module: .shelf))
+            }
+            Button("Play or pause demo music") { Task { await Self.toggleDemo(island) } }
+            Divider()
+            Menu("Hide or show a module") {
+                ForEach(IslandTab.allCases) { tab in
+                    Button("\(island.modules.isVisible(tab) ? "Hide" : "Show") \(tab.rawValue)") {
+                        island.modules.setVisible(tab, !island.modules.isVisible(tab))
+                    }
+                }
+            }
+        }
+    }
+
+    static func meeting(startingIn seconds: TimeInterval) -> CalendarEvent {
+        let start = Date().addingTimeInterval(seconds)
+        return CalendarEvent(id: "debug.\(UUID().uuidString)", eventIdentifier: nil, title: "Design review", start: start,
+                             end: start.addingTimeInterval(30 * 60), isAllDay: false, calendarID: "debug", calendarTitle: "Debug",
+                             sourceTitle: "Debug", color: CalendarColor(red: 0.43, green: 0.66, blue: 1), attendeeNames: [],
+                             meeting: MeetingLinkResolver.validate(URL(string: "https://meet.google.com/abc-defg-hij")!))
+    }
+
+    /// The Demo source plays no audio and talks to no app (it turns on "Show the Demo media source").
+    @MainActor static func toggleDemo(_ island: IslandModel) async {
+        UserDefaults.standard.set(true, forKey: SettingsKeys.showDemoSource)
+        await island.demo.setEnabled(true)
+        // The source shows up asynchronously; a command sent before that would be dropped.
+        for _ in 0..<40 where !island.media.sessions.contains(where: { $0.sourceID == DemoMediaProvider.providerID }) {
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        island.media.select(DemoMediaProvider.providerID)
+        try? await island.media.send(.togglePlayPause, to: DemoMediaProvider.providerID)
+    }
+}
+#endif
