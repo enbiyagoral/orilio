@@ -109,6 +109,7 @@ struct SettingsView: View {
         .background(Design.window)
         .environment(\.colorScheme, .dark)
         .frame(width: 1040, height: 760)
+        .ignoresSafeArea() // the content runs under the transparent title bar, as in the design
     }
 
     private var content: some View {
@@ -150,6 +151,7 @@ struct SettingsView: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .focusEffectDisabled() // the design has no focus ring; the selection shows the pane
                 .accessibilityAddTraits(pane == item ? .isSelected : [])
             }
             Spacer()
@@ -174,10 +176,11 @@ private struct AppearanceGlyph: Shape {
         let k = rect.width / 24
         func p(_ x: Double, _ y: Double) -> CGPoint { CGPoint(x: rect.minX + x * k, y: rect.minY + y * k) }
         var path = Path()
-        // M12 2 a10 10 0 1 0 0 20 a4 4 0 0 1 0 -8 a4 4 0 0 0 0 -8
+        // M12 2 a10 10 0 1 0 0 20 a4 4 0 0 1 0 -8 a4 4 0 0 0 0 -8: the left half of the circle, then an
+        // S back up the middle (SwiftUI's `clockwise` is mirrored on screen, y pointing down).
         path.addArc(center: p(12, 12), radius: 10 * k, startAngle: .degrees(-90), endAngle: .degrees(90), clockwise: true)
-        path.addArc(center: p(12, 18), radius: 4 * k, startAngle: .degrees(90), endAngle: .degrees(-90), clockwise: true)
-        path.addArc(center: p(12, 6), radius: 4 * k, startAngle: .degrees(90), endAngle: .degrees(-90), clockwise: false)
+        path.addArc(center: p(12, 18), radius: 4 * k, startAngle: .degrees(90), endAngle: .degrees(270), clockwise: false)
+        path.addArc(center: p(12, 10), radius: 4 * k, startAngle: .degrees(90), endAngle: .degrees(-90), clockwise: true)
         // M12 2 a10 10 0 0 1 0 20
         path.move(to: p(12, 2))
         path.addArc(center: p(12, 12), radius: 10 * k, startAngle: .degrees(-90), endAngle: .degrees(90), clockwise: false)

@@ -210,7 +210,9 @@ enum SettingsWindow {
     static func show() {
         if window == nil {
             // The design's 1040 × 760 window: dark, no title, the traffic lights over the sidebar.
-            let window = NSWindow(contentViewController: NSHostingController(rootView: SettingsView()))
+            let host = NSHostingController(rootView: SettingsView())
+            host.sizingOptions = [] // the window is the design's size; SwiftUI mustn't add the title bar to it
+            let window = NSWindow(contentViewController: host)
             window.title = "Orilio Settings"
             window.styleMask = [.titled, .closable, .miniaturizable, .fullSizeContentView]
             window.titlebarAppearsTransparent = true
@@ -218,7 +220,8 @@ enum SettingsWindow {
             window.isMovableByWindowBackground = true
             window.appearance = NSAppearance(named: .darkAqua)
             window.backgroundColor = NSColor(red: 0x1C / 255, green: 0x1C / 255, blue: 0x1F / 255, alpha: 1)
-            window.setContentSize(NSSize(width: 1040, height: 760))
+            // With a full-size content view the frame is the content: exactly the design's 1040 × 760.
+            window.setFrame(NSRect(x: 0, y: 0, width: 1040, height: 760), display: false)
             window.isReleasedWhenClosed = false
             window.center()
             self.window = window
