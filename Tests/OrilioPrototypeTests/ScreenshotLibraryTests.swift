@@ -105,6 +105,35 @@ struct ScreenshotStoreTests {
         }
     }
 
+    @Test func forgedFileNamesAreRejected() {
+        let id = UUID()
+        #expect(ScreenshotStore.isManagedFileName("\(id.uuidString).png", id: id))
+        #expect(!ScreenshotStore.isManagedFileName("../../Documents/thesis.pdf", id: id))
+        #expect(!ScreenshotStore.isManagedFileName("\(UUID().uuidString).png", id: id)) // another item's file
+        #expect(!ScreenshotStore.isManagedFileName("\(id.uuidString).png/../../x", id: id))
+        #expect(!ScreenshotStore.isManagedFileName("\(id.uuidString)", id: id))
+    }
+
+    @Test func aForgedRowCantTrashAFileOutsideTheLibrary() async throws {
+        let ws = Workspace()
+        let store = ws.store()
+        _ = try await store.importFile(ws.image("real.png", seed: 31)) // creates the database
+        let victim = ws.image("victim.png", seed: 32)
+        // Tamper with the database: a row whose file name walks out of the library to the victim.
+        let db = ws.root.appending(path: "Library/library.sqlite").path
+        let sql = "INSERT INTO screenshots VALUES ('\(UUID().uuidString)', '../../victim.png', NULL, 'forged', 0, 0, 1, 1, 1, 'file');"
+        let tool = Process()
+        tool.executableURL = URL(fileURLWithPath: "/usr/bin/sqlite3")
+        tool.arguments = [db, sql]
+        try tool.run()
+        tool.waitUntilExit()
+
+        let loaded = try await ws.store().all()
+        #expect(loaded.count == 1) // the forged row is ignored, so nothing can act on it
+        try await ws.store().remove(loaded)
+        #expect(FileManager.default.fileExists(atPath: victim.path))
+    }
+
     @Test func aMissingThumbnailIsRecreated() async throws {
         let ws = Workspace()
         let store = ws.store()
@@ -272,6 +301,9 @@ struct ScreenshotPopulate {
         for index in 0..<count {
             _ = try await store.importFile(ws.image("Screenshot \(index).png", seed: index + 5_000, width: 1_440, height: 900))
         }
-        print("POPULATED \(try await store.all().count)")
+        let clock = ContinuousClock()
+        var loaded = 0
+        let reload = try await clock.measure { loaded = try await ScreenshotStore().all().count }
+        print("POPULATED \(loaded) reload \(reload)")
     }
 }
