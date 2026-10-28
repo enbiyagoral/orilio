@@ -81,9 +81,11 @@ final class IslandPositioner {
     private func settingsChanged() {
         let new = DisplaySettings(.standard)
         let defaults = UserDefaults.standard
-        let hoverOpens = defaults.object(forKey: SettingsKeys.openOnHover) as? Bool ?? true
-        islands.values.forEach { $0.model.hoverOpens = hoverOpens }
-        primary.hoverOpens = hoverOpens
+        let prefs = PreferencesStore.shared.value
+        for model in islands.values.map(\.model) + [primary] {
+            model.hoverOpens = prefs.openOnHover
+            model.hoverDelay = .milliseconds(prefs.hoverDelay)
+        }
         let showDemo = defaults.bool(forKey: SettingsKeys.showDemoSource)
         Task { [demo = primary.demo] in await demo.setEnabled(showDemo) }
         guard new != settings else { return islands.values.forEach { $0.reposition() } }
@@ -99,6 +101,15 @@ final class IslandPositioner {
         guard open.isEmpty else { return open.forEach { $0.model.dismiss() } }
         let display = ScreenResolver.display(at: NSEvent.mouseLocation, in: screens)
         (islands.values.first { $0.screen.id == display } ?? islands.values.first)?.model.tap()
+    }
+
+    /// A shortcut that opens a module: the island on the pointer's display opens to it.
+    func open(_ tab: IslandTab) {
+        let display = ScreenResolver.display(at: NSEvent.mouseLocation, in: screens)
+        guard let model = (islands.values.first { $0.screen.id == display } ?? islands.values.first)?.model,
+              model.modules.isVisible(tab) else { return }
+        model.tab = tab
+        model.set(.pinned)
     }
 
     /// Whether the display under the pointer shows a fullscreen app (the startup hello stays away then).

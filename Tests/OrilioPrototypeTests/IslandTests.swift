@@ -21,11 +21,11 @@ struct IslandTests {
         model.isPointerBusy = { false } // independent of the real mouse during the run
         model.hover(true)
         model.hover(false) // pointer just passed over
-        try await Task.sleep(for: IslandModel.openDelay * 2)
+        try await Task.sleep(for: model.hoverDelay * 2)
         #expect(model.state == .collapsed)
 
         model.hover(true)
-        try await Task.sleep(for: IslandModel.openDelay * 2)
+        try await Task.sleep(for: model.hoverDelay * 2)
         #expect(model.state == .expanded)
         model.hover(false)
         try await Task.sleep(for: IslandModel.closeDelay * 2)
@@ -37,7 +37,7 @@ struct IslandTests {
         model.isPointerBusy = { false } // independent of the real mouse during the run
         model.hoverOpens = false
         model.hover(true)
-        try await Task.sleep(for: IslandModel.openDelay * 2)
+        try await Task.sleep(for: model.hoverDelay * 2)
         #expect(model.state == .collapsed)
     }
 

@@ -87,8 +87,21 @@ struct Preferences: Codable, Equatable {
     var followReduceMotion = true
     /// Camera Mirror is the one module that starts hidden; this turns it on.
     var mirrorEnabled = false
+    // Settings › General
+    var openOnHover = true
+    var haptics = true
+    var sounds = true
+    /// Milliseconds the pointer rests on the notch before the island peeks (0–500).
+    var hoverDelay = 90
+    /// Settings › Shortcuts, by `ShortcutAction` raw value; a missing one keeps its default.
+    var shortcuts: [String: HotKeyCombo] = [:]
 
     init() {}
+
+    func shortcut(_ action: ShortcutAction) -> HotKeyCombo { shortcuts[action.rawValue] ?? action.defaultCombo }
+    var shortcutMap: [ShortcutAction: HotKeyCombo] {
+        Dictionary(uniqueKeysWithValues: ShortcutAction.allCases.map { ($0, shortcut($0)) })
+    }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -105,20 +118,63 @@ struct Preferences: Codable, Equatable {
         motion = value(.motion, d.motion)
         followReduceMotion = value(.followReduceMotion, d.followReduceMotion)
         mirrorEnabled = value(.mirrorEnabled, d.mirrorEnabled)
+        openOnHover = value(.openOnHover, d.openOnHover)
+        haptics = value(.haptics, d.haptics)
+        sounds = value(.sounds, d.sounds)
+        hoverDelay = min(500, max(0, value(.hoverDelay, d.hoverDelay)))
+        shortcuts = value(.shortcuts, d.shortcuts).filter { ShortcutAction(rawValue: $0.key) != nil }
+    }
+
+    enum ImportError: LocalizedError {
+        case notSettings, newerVersion(Int)
+        var errorDescription: String? {
+            switch self {
+            case .notSettings: "This file doesn't contain Orilio settings."
+            case .newerVersion(let v): "These settings come from a newer Orilio (format \(v)). Update Orilio to import them."
+            }
+        }
+    }
+
+    /// Settings › General › Export settings…: the stored value, readable.
+    func exported() throws -> Data {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        return try encoder.encode(self)
+    }
+
+    /// Import settings…: only a JSON object carrying Orilio's format version is accepted; each field
+    /// then decodes on its own, so a bad value keeps its default instead of failing the file.
+    static func imported(from data: Data) throws -> Preferences {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let version = object["version"] as? Int, version >= 1,
+              object.keys.contains(where: { CodingKeys(stringValue: $0) != nil && $0 != "version" }) else { throw ImportError.notSettings }
+        guard version <= Preferences().version else { throw ImportError.newerVersion(version) }
+        return try JSONDecoder().decode(Preferences.self, from: data)
     }
 
     /// The stored value; on first run after M3.5, the module keys it replaces are carried over.
     static func load(_ defaults: UserDefaults) -> Preferences {
         if let data = defaults.data(forKey: key), let stored = try? JSONDecoder().decode(Preferences.self, from: data) {
-            return stored
+            return stored.carryingOver(defaults)
         }
-        var migrated = Preferences()
+        var migrated = Preferences().carryingOver(defaults)
         if let order = defaults.stringArray(forKey: "modules.order") { migrated.moduleOrder = order }
         if let hidden = defaults.stringArray(forKey: "modules.hidden") { migrated.hiddenModules = hidden }
         if let indicators = defaults.stringArray(forKey: "modules.hiddenIndicators") { migrated.hiddenIndicators = indicators }
         // "Open to <module>" (M3.5) has no exact match; a fixed module is closest to "First in list".
         if defaults.string(forKey: "modules.default") != nil { migrated.openWith = .first }
         return migrated
+    }
+
+    /// "Open on hover" was its own key before M5.3.
+    private func carryingOver(_ defaults: UserDefaults) -> Preferences {
+        var p = self
+        if let hover = defaults.object(forKey: SettingsKeys.openOnHover) as? Bool {
+            p.openOnHover = hover
+            defaults.removeObject(forKey: SettingsKeys.openOnHover)
+            p.save(to: defaults)
+        }
+        return p
     }
 
     func save(to defaults: UserDefaults) {

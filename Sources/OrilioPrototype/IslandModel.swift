@@ -42,6 +42,7 @@ enum IslandTab: String, CaseIterable, Identifiable {
 }
 
 enum SettingsKeys {
+    /// Before M5.3; now `Preferences.openOnHover`.
     static let openOnHover = "openOnHover"
     static let preferNotchedDisplay = "preferNotchedDisplay"
     static let showDemoSource = "showDemoSource"
@@ -51,7 +52,6 @@ enum SettingsKeys {
 @MainActor @Observable
 final class IslandModel {
     // Debounce: a pointer passing over the island shouldn't open it; a brief slip outside shouldn't close it.
-    static let openDelay: Duration = .milliseconds(120)
     static let closeDelay: Duration = .milliseconds(350)
     // Open is soft with a touch of overshoot; close is quicker and settles without bounce.
     static let openDuration = 0.5
@@ -133,6 +133,8 @@ final class IslandModel {
     }
     var geometry = IslandGeometry.fallback
     var hoverOpens = true
+    /// Settings › General › Hover delay.
+    @ObservationIgnored var hoverDelay: Duration = .milliseconds(90)
     let demo: DemoMediaProvider
     let media: MediaCoordinator
     let shelf: ShelfModel
@@ -216,7 +218,7 @@ final class IslandModel {
     var meetingSoon: CalendarEvent? {
         if let mock = live.mockMeeting, let soon = CalendarDay(events: [mock], now: Date()).soon() { return soon }
         guard calendar.status == .ready else { return nil }
-        return calendar.dayNow().soon()
+        return calendar.dayNow().soon(within: calendar.meetingLead)
     }
 
     /// The notch plus two ears sized for their content, or nil when idle (the notch alone).
@@ -275,7 +277,7 @@ final class IslandModel {
             showsLivesHereHint = false // the hint goes on the first hover
         }
         if inside, state == .collapsed, hoverOpens {
-            schedule(.expanded, after: Self.openDelay, choosingTab: true)
+            schedule(.expanded, after: hoverDelay, choosingTab: true)
         } else if !inside, state == .expanded {
             schedule(.collapsed, after: Self.closeDelay)
         }
@@ -378,7 +380,10 @@ final class IslandModel {
         // Window first, state second: the panel must already be its new size when SwiftUI
         // starts animating, or one frame renders the island offset from the top edge.
         onWillChangeState?(new)
-        if !state.isOpen, new.isOpen { media.refreshAll() }
+        if !state.isOpen, new.isOpen {
+            media.refreshAll()
+            if modules.store.value.haptics { NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now) }
+        }
         state = new
         showsTallPanel = isTall(new)
         shownMirrorPanel = mirrorPanel(for: new)

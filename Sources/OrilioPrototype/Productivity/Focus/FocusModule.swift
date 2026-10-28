@@ -49,6 +49,12 @@ protocol FocusNotifier: Sendable {
     /// Replaces any pending focus notification.
     func schedule(at date: Date, minutes: Int) async
     func cancel() async
+    /// Settings › General › Sounds: a soft chime as the session ends, while Orilio is running.
+    @MainActor func chime()
+}
+
+extension FocusNotifier {
+    @MainActor func chime() {}
 }
 
 struct LocalFocusNotifier: FocusNotifier {
@@ -67,10 +73,14 @@ struct LocalFocusNotifier: FocusNotifier {
         let content = UNMutableNotificationContent()
         content.title = "Focus session complete"
         content.body = "\(minutes) minutes of focus. Time for a break."
-        content.sound = .default
+        content.sound = nil // Orilio chimes itself (Settings › General › Sounds)
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: max(1, date.timeIntervalSinceNow), repeats: false)
         // Same identifier every time: adding it again replaces the pending one.
         try? await UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: Self.id, content: content, trigger: trigger))
+    }
+
+    @MainActor func chime() {
+        if PreferencesStore.shared.value.sounds { NSSound(named: "Glass")?.play() }
     }
 
     func cancel() async {
@@ -214,6 +224,7 @@ final class FocusModule {
         timer?.invalidate()
         timer = nil
         recordCompletion()
+        if endedWhileAsleep == nil { notifier.chime() }
         // The system delivers the pending notification at the deadline; nothing more to post.
     }
 

@@ -255,6 +255,32 @@ struct ClipboardModuleTests {
         #expect(h.module.visibleItems.map(\.text) == ["item 2", "new"])
     }
 
+    @Test func expiredItemsArePurgedWithinTheHourWithoutANewCopy() async {
+        let h = Harness()
+        await h.module.enable()
+        h.module.setRetention(days: 1)
+        h.board.copy("old"); h.module.check()
+        h.board.copy("pinned"); h.module.check()
+        h.module.togglePin(h.module.items.first { $0.text == "pinned" }!)
+        h.clock.now.addTimeInterval(86_400 + 3_600) // a day and an hour later, nothing copied since
+        h.module.check()
+        #expect(h.module.items.map(\.text) == ["pinned"])
+    }
+
+    @Test func userExcludedAppsAddToTheBuiltInOnes() async {
+        let h = Harness(front: "com.example.bank")
+        await h.module.enable()
+        h.module.addExcludedApp("com.example.bank")
+        h.module.addExcludedApp("com.apple.keychainaccess") // already built in: not added twice
+        #expect(h.module.userExcludedApps == ["com.example.bank"])
+        #expect(h.module.excludedApps.contains("com.1password.1password"))
+        h.board.copy("account 123"); h.module.check()
+        #expect(h.module.items.isEmpty)
+        h.module.removeExcludedApp("com.example.bank")
+        h.board.copy("account 456"); h.module.check()
+        #expect(h.module.items.count == 1)
+    }
+
     @Test func clearKeepsPinnedAndDisableDeletesEverything() async {
         let h = Harness()
         await h.module.enable()

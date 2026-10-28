@@ -105,6 +105,7 @@ enum CalendarKeys {
     static let hiddenCalendars = "calendar.hiddenCalendars"
     static let reminderLead = "calendar.reminderLeadMinutes" // -1 off, 0 at start, 5, 10
     static let declined = "calendar.askDeclined"
+    static let meetingLead = "calendar.meetingLeadMinutes" // 10, 5 or 0 (at start)
 }
 
 /// The Calendar module's state for the views. Nothing happens, and nothing is requested, until the
@@ -151,6 +152,15 @@ final class CalendarModule {
 
     var hiddenCalendarIDs: Set<String> {
         Set(defaults.stringArray(forKey: CalendarKeys.hiddenCalendars) ?? [])
+    }
+
+    /// Settings › Calendar › "Show an upcoming meeting in the notch", in minutes.
+    var meetingLeadMinutes: Int { defaults.object(forKey: CalendarKeys.meetingLead) as? Int ?? 10 }
+    var meetingLead: TimeInterval { TimeInterval(meetingLeadMinutes * 60) }
+
+    func setMeetingLead(_ minutes: Int) {
+        defaults.set(minutes, forKey: CalendarKeys.meetingLead)
+        refresh() // the island re-reads the day; the next wake-up uses the new window
     }
 
     /// -1 means reminders are off.
@@ -265,7 +275,7 @@ final class CalendarModule {
         boundary?.cancel()
         let time = now()
         let midnight = Calendar.current.startOfDay(for: time.addingTimeInterval(86_400))
-        let target = min(day.nextBoundary() ?? midnight, midnight)
+        let target = min(day.nextBoundary(window: meetingLead) ?? midnight, midnight)
         boundary = Task { [weak self] in
             try? await Task.sleep(for: .seconds(max(1, target.timeIntervalSince(time)) + 1))
             guard !Task.isCancelled else { return }

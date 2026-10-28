@@ -57,6 +57,12 @@ actor ClipboardStore {
         for name in names where !name.contains("/") { try? FileManager.default.removeItem(at: imageURL(name)) }
     }
 
+    /// What the history takes on disk (the JSON and the images), for Settings › Clipboard.
+    func diskBytes() -> Int {
+        let files = FileManager.default.enumerator(at: directory, includingPropertiesForKeys: [.fileSizeKey])
+        return (files?.allObjects as? [URL] ?? []).reduce(0) { $0 + ((try? $1.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0) }
+    }
+
     /// Removes everything Orilio stored for the clipboard.
     func deleteAll() {
         try? FileManager.default.removeItem(at: directory)
@@ -68,6 +74,7 @@ enum ClipboardKeys {
     static let paused = "clipboard.paused"
     static let maxItems = "clipboard.maxItems"
     static let retentionDays = "clipboard.retentionDays" // 0 = keep until removed
+    /// Apps the user added in Settings › Clipboard (the built-in ones always apply).
     static let excludedApps = "clipboard.excludedApps"
     static let declined = "clipboard.askDeclined"
 }
@@ -101,6 +108,7 @@ final class ClipboardModule {
     @ObservationIgnored private var ownWrite: Int?
     @ObservationIgnored private var timer: Timer?
     @ObservationIgnored private var pendingSave: Task<Void, Never>?
+    @ObservationIgnored private var lastPurge = Date.distantPast
     static let checkInterval: TimeInterval = 1
 
     init(store: ClipboardStore = ClipboardStore(), pasteboard: (any PasteboardAccess)? = nil, defaults: UserDefaults = .standard,
@@ -115,6 +123,8 @@ final class ClipboardModule {
         self.frontmostApp = frontmostApp
         self.now = now
         lastChange = self.pasteboard.changeCount
+        userExcludedApps = (defaults.stringArray(forKey: ClipboardKeys.excludedApps) ?? [])
+            .filter { !ClipboardPolicy.defaultExcludedApps.contains($0) } // the list before M5.3 held the built-in ones too
         // Event-driven: the app in front changes, and "Paused for privacy" follows it.
         frontmostObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] note in
@@ -144,7 +154,22 @@ final class ClipboardModule {
     var isEnabled: Bool { defaults.bool(forKey: ClipboardKeys.enabled) }
     var maxItems: Int { (defaults.object(forKey: ClipboardKeys.maxItems) as? Int).map { max(10, $0) } ?? 200 }
     var retentionDays: Int { defaults.object(forKey: ClipboardKeys.retentionDays) as? Int ?? 7 }
-    var excludedApps: [String] { defaults.stringArray(forKey: ClipboardKeys.excludedApps) ?? ClipboardPolicy.defaultExcludedApps }
+    var excludedApps: [String] { ClipboardPolicy.defaultExcludedApps + userExcludedApps }
+    /// Never record from these apps, added by the user (bundle identifiers).
+    private(set) var userExcludedApps: [String] = []
+
+    func addExcludedApp(_ bundleID: String) {
+        guard !excludedApps.contains(bundleID) else { return }
+        userExcludedApps.append(bundleID)
+        defaults.set(userExcludedApps, forKey: ClipboardKeys.excludedApps)
+    }
+
+    func removeExcludedApp(_ bundleID: String) {
+        userExcludedApps.removeAll { $0 == bundleID }
+        defaults.set(userExcludedApps, forKey: ClipboardKeys.excludedApps)
+    }
+
+    func diskBytes() async -> Int { await store.diskBytes() }
 
     /// Shown in the panel: pinned first, then newest, filtered by the search text.
     var visibleItems: [ClipItem] {
@@ -159,6 +184,7 @@ final class ClipboardModule {
         guard isEnabled else { status = .off; return }
         items = await store.load()
         prune()
+        lastPurge = now()
         // A pause outlives a restart; only the user resumes.
         if defaults.bool(forKey: ClipboardKeys.paused) { status = .paused } else { resume() }
     }
@@ -225,6 +251,13 @@ final class ClipboardModule {
 
     /// One check: compare the counter, and only if it moved, read and classify the content.
     func check() {
+        // Items past "Keep items for" go within the hour even when nothing new is copied.
+        // ponytail: rides the 1 s check, so a paused history is purged on resume, not hourly.
+        if now().timeIntervalSince(lastPurge) >= 3_600 {
+            lastPurge = now()
+            prune()
+            scheduleSave()
+        }
         let change = pasteboard.changeCount
         guard change != lastChange else { return }
         lastChange = change

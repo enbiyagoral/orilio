@@ -9,17 +9,40 @@ enum SettingsDesign {
               blue: Double(value & 0xFF) / 255, opacity: alpha)
     }
 
-    static let window = hex(0x1C1C1F)
-    static let sidebar = Color(red: 40 / 255, green: 40 / 255, blue: 45 / 255, opacity: 0.92)
-    static let divider = Color.white.opacity(0.06)
+    /// A color for each appearance: Settings follows the system (light values from the M5 Light design).
+    static func adaptive(dark: NSColor, light: NSColor) -> Color {
+        Color(nsColor: NSColor(name: nil) { $0.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light })
+    }
+
+    static func ns(_ value: UInt32, _ alpha: CGFloat = 1) -> NSColor {
+        NSColor(srgbRed: CGFloat(value >> 16 & 0xFF) / 255, green: CGFloat(value >> 8 & 0xFF) / 255,
+                blue: CGFloat(value & 0xFF) / 255, alpha: alpha)
+    }
+
+    /// The island's mint and amber; it is always dark.
     static let mint = hex(0x2BFFB8)
-    static let loginOn = hex(0x7DFFD6)
     static let amber = hex(0xFFB86B)
-    static let card = Color.white.opacity(0.04)
-    static let cardStroke = Color.white.opacity(0.07)
-    static let rowLine = Color.white.opacity(0.05)
-    static let label = Color.white.opacity(0.85)
-    static let secondary = Color.white.opacity(0.5)
+
+    /// Text and the tints made from it: white on dark, #1D1D1F on light.
+    static let ink = adaptive(dark: .white, light: ns(0x1D1D1F))
+    static let window = adaptive(dark: ns(0x1C1C1F), light: .white)
+    static let sidebar = adaptive(dark: NSColor(srgbRed: 40 / 255, green: 40 / 255, blue: 45 / 255, alpha: 0.92),
+                                  light: NSColor(srgbRed: 240 / 255, green: 240 / 255, blue: 244 / 255, alpha: 0.92))
+    static let divider = adaptive(dark: .white.withAlphaComponent(0.06), light: .black.withAlphaComponent(0.06))
+    /// Switches, checkboxes and selection rings: mint is too light on white, so #13B887 there.
+    static let accent = adaptive(dark: ns(0x2BFFB8), light: ns(0x13B887))
+    /// Mint text: #0A7F5E on white.
+    static let accentText = adaptive(dark: ns(0x2BFFB8), light: ns(0x0A7F5E))
+    static let loginOn = adaptive(dark: ns(0x7DFFD6), light: ns(0x0A7F5E))
+    static let warn = adaptive(dark: ns(0xFFB86B), light: ns(0xB25E00))
+    static let card = adaptive(dark: .white.withAlphaComponent(0.04), light: ns(0xF5F5F7))
+    static let cardStroke = adaptive(dark: .white.withAlphaComponent(0.07), light: .black.withAlphaComponent(0.05))
+    static let rowLine = adaptive(dark: .white.withAlphaComponent(0.05), light: .black.withAlphaComponent(0.06))
+    static let label = adaptive(dark: .white.withAlphaComponent(0.85), light: ns(0x1D1D1F))
+    static let secondary = adaptive(dark: .white.withAlphaComponent(0.5), light: ns(0x6E6E73))
+    static let segmentOn = adaptive(dark: .white.withAlphaComponent(0.9), light: .white)
+    static let segmentShadow = adaptive(dark: .clear, light: .black.withAlphaComponent(0.15))
+    static let selected = adaptive(dark: .white.withAlphaComponent(0.1), light: .black.withAlphaComponent(0.08))
     static let artTint = hex(0xF7B56E)
 }
 
@@ -43,46 +66,56 @@ struct DesignArtwork: View {
 
 private typealias Design = SettingsDesign
 
-/// The Settings window: a sidebar of panes.
+/// The Settings window: a sidebar of panes in three groups (the M5 Settings design).
 struct SettingsView: View {
     enum Pane: String, CaseIterable, Identifiable {
-        case modules, appearance, displays, startup
+        case general, modules, appearance, displays, startup, calendar, clipboard, shortcuts, updates, about
         var id: Self { self }
-        var label: String {
-            switch self {
-            case .modules: "Modules"
-            case .appearance: "Appearance"
-            case .displays: "Displays"
-            case .startup: "Startup"
-            }
-        }
+
+        static let groups: [(String, [Pane])] = [
+            ("General", [.general, .modules, .appearance, .displays, .startup]),
+            ("Modules", [.calendar, .clipboard, .shortcuts]),
+            ("Orilio", [.updates, .about]),
+        ]
+
+        var label: String { rawValue.capitalized }
         var title: String { self == .displays ? "Displays & Fullscreen" : label }
         var code: String {
             switch self {
-            case .modules, .appearance: "M4.2"
-            case .displays: "M4.3"
-            case .startup: "M4.4"
+            case .modules, .appearance, .displays, .startup: "M4"
+            default: ""
             }
         }
         var symbol: String {
             switch self {
+            case .general: "gearshape"
             case .modules: "square.grid.2x2"
             case .appearance: "circle.lefthalf.filled"
             case .displays: "display"
             case .startup: "power"
+            case .calendar: "calendar"
+            case .clipboard: "doc.on.clipboard"
+            case .shortcuts: "keyboard"
+            case .updates: "arrow.triangle.2.circlepath"
+            case .about: "info.circle"
             }
         }
         var tile: Color {
             switch self {
+            case .general: Design.hex(0x8E8E93)
             case .modules: Design.hex(0x5E5CE6)
             case .appearance: Design.hex(0xFF375F)
-            case .displays: Design.hex(0x0A84FF)
+            case .displays, .updates: Design.hex(0x0A84FF)
             case .startup: Design.hex(0x30B566)
+            case .calendar: Design.hex(0xFF453A)
+            case .clipboard: Design.hex(0x13A57A)
+            case .shortcuts: Design.hex(0x636366)
+            case .about: Design.hex(0x1C1C1E)
             }
         }
     }
 
-    @State var pane: Pane = .modules
+    @State var pane: Pane = .general
     /// False only for drawing a pane to an image (`ImageRenderer` doesn't draw scroll views).
     var scrolls = true
 
@@ -105,9 +138,8 @@ struct SettingsView: View {
             }
             .frame(maxWidth: .infinity)
         }
-        .foregroundStyle(.white)
+        .foregroundStyle(Design.ink)
         .background(Design.window)
-        .environment(\.colorScheme, .dark)
         .frame(width: 1040, height: 760)
         .ignoresSafeArea() // the content runs under the transparent title bar, as in the design
     }
@@ -115,52 +147,58 @@ struct SettingsView: View {
     private var content: some View {
         Group {
             switch pane {
+            case .general: GeneralPane(store: .shared)
             case .modules: ModulesPane()
             case .appearance: AppearancePane(store: .shared)
             case .displays: DisplaysPane()
             case .startup: StartupPane()
+            case .calendar: CalendarPane()
+            case .clipboard: ClipboardPane()
+            case .shortcuts: ShortcutsPane(store: .shared)
+            case .updates: UpdatesPane()
+            case .about: AboutPane()
             }
         }
         .padding(EdgeInsets(top: 24, leading: 28, bottom: 24, trailing: 28))
     }
 
     private var sidebar: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            // The window's own traffic lights sit here (the design's 12 pt dots, 22 pt below them).
-            Color.clear.frame(height: 36)
-            ForEach(Pane.allCases) { item in
-                Button { pane = item } label: {
-                    HStack(spacing: 10) {
-                        Group {
-                            if item == .appearance {
-                                AppearanceGlyph().stroke(.white, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
-                                    .frame(width: 14, height: 14)
-                            } else {
-                                Image(systemName: item.symbol).font(.system(size: 12, weight: .semibold)).foregroundStyle(.white)
+        VStack(alignment: .leading, spacing: 2) {
+            // The window's own traffic lights sit here (the design's 12 pt dots, 18 pt below them).
+            Color.clear.frame(height: 32)
+            ForEach(Pane.groups, id: \.0) { group, panes in
+                Text(group)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Design.ink.opacity(0.4))
+                    .padding(EdgeInsets(top: 12, leading: 8, bottom: 4, trailing: 8))
+                ForEach(panes) { item in
+                    Button { pane = item } label: {
+                        HStack(spacing: 10) {
+                            Group {
+                                if item == .appearance {
+                                    AppearanceGlyph().stroke(.white, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+                                        .frame(width: 13, height: 13)
+                                } else {
+                                    Image(systemName: item.symbol).font(.system(size: 11.5, weight: .semibold)).foregroundStyle(.white)
+                                }
                             }
+                            .frame(width: 22, height: 22)
+                            .background(item.tile, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                            Text(item.label).font(.system(size: 13.5, weight: .medium))
+                            Spacer(minLength: 0)
+                            Text(item.code).font(.system(size: 10.5)).foregroundStyle(Design.ink.opacity(0.35))
                         }
-                        .frame(width: 24, height: 24)
-                            .background(item.tile, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-                        Text(item.label).font(.system(size: 13.5, weight: .medium))
-                        Spacer(minLength: 0)
-                        Text(item.code).font(.system(size: 10.5)).foregroundStyle(.white.opacity(0.4))
+                        .padding(.horizontal, 8)
+                        .frame(height: 34)
+                        .background(pane == item ? Design.selected : .clear, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                        .contentShape(Rectangle())
                     }
-                    .padding(.horizontal, 8)
-                    .frame(height: 36)
-                    .background(pane == item ? Color.white.opacity(0.1) : .clear, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-                    .contentShape(Rectangle())
+                    .buttonStyle(.plain)
+                    .focusEffectDisabled() // the design has no focus ring; the selection shows the pane
+                    .accessibilityAddTraits(pane == item ? .isSelected : [])
                 }
-                .buttonStyle(.plain)
-                .focusEffectDisabled() // the design has no focus ring; the selection shows the pane
-                .accessibilityAddTraits(pane == item ? .isSelected : [])
             }
             Spacer()
-            Text("Orilio \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "") · settings stay on this Mac")
-                .font(.system(size: 11.5))
-                .lineSpacing(11.5 * 0.45)
-                .foregroundStyle(.white.opacity(0.45))
-                .padding(.horizontal, 8)
-                .padding(.vertical, 10)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 16)
@@ -209,9 +247,9 @@ struct SettingsCard<Content: View>: View {
     }
 }
 
-private typealias Card = SettingsCard
+typealias Card = SettingsCard
 
-private struct RowLine: View {
+struct RowLine: View {
     var body: some View { Rectangle().fill(Design.rowLine).frame(height: 1) }
 }
 
@@ -226,7 +264,7 @@ struct DesignSwitch: View {
         let width: CGFloat = large ? 44 : 40, height: CGFloat = large ? 26 : 24, knob: CGFloat = large ? 22 : 20
         Button(action: action) {
             Capsule()
-                .fill(isOn ? Design.mint : Color.white.opacity(0.2))
+                .fill(isOn ? Design.accent : Design.ink.opacity(0.2))
                 .frame(width: width, height: height)
                 .overlay(alignment: .leading) {
                     Circle().fill(.white).frame(width: knob, height: knob)
@@ -243,10 +281,12 @@ struct DesignSwitch: View {
 }
 
 /// The design's segmented control: a 7% plate, the chosen segment white with black text.
-private struct Segmented<Value: Hashable>: View {
+struct Segmented<Value: Hashable>: View {
     let options: [(Value, String)]
     let selection: Value
     let pick: (Value) -> Void
+    /// The M5 Clipboard design's smaller one: 28 pt, 12.5 pt text.
+    var compact = false
 
     var body: some View {
         HStack(spacing: 0) {
@@ -254,11 +294,12 @@ private struct Segmented<Value: Hashable>: View {
                 let active = value == selection
                 Button { pick(value) } label: {
                     Text(label)
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(active ? .black : .white.opacity(0.8))
-                        .padding(.horizontal, 14)
-                        .frame(height: 30)
-                        .background(active ? Color.white.opacity(0.9) : .clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .font(.system(size: compact ? 12.5 : 13, weight: .medium))
+                        .foregroundStyle(active ? .black : Design.ink.opacity(0.8))
+                        .padding(.horizontal, compact ? 12 : 14)
+                        .frame(height: compact ? 28 : 30)
+                        .background(active ? Design.segmentOn : .clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .shadow(color: active ? Design.segmentShadow : .clear, radius: 1, y: 1)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -266,24 +307,24 @@ private struct Segmented<Value: Hashable>: View {
             }
         }
         .padding(3)
-        .background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .background(Design.ink.opacity(0.07), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 }
 
 /// The design's checkbox: 15 pt, mint when on.
-private struct DesignCheckbox: View {
+struct DesignCheckbox: View {
     let title: String
     let isOn: Bool
     var size: CGFloat = 13
-    var color: Color = .white.opacity(0.8)
+    var color: Color = Design.ink.opacity(0.8)
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 8) {
                 RoundedRectangle(cornerRadius: 3.5, style: .continuous)
-                    .fill(isOn ? Design.mint : Color.white.opacity(0.1))
-                    .overlay(RoundedRectangle(cornerRadius: 3.5, style: .continuous).strokeBorder(.white.opacity(isOn ? 0 : 0.3), lineWidth: 1))
+                    .fill(isOn ? Design.accent : Design.ink.opacity(0.1))
+                    .overlay(RoundedRectangle(cornerRadius: 3.5, style: .continuous).strokeBorder(Design.ink.opacity(isOn ? 0 : 0.3), lineWidth: 1))
                     .overlay {
                         if isOn { Image(systemName: "checkmark").font(.system(size: 9, weight: .heavy)).foregroundStyle(.black) }
                     }
@@ -300,16 +341,16 @@ private struct DesignCheckbox: View {
 }
 
 /// The selection ring of the design's cards: 1.5 pt mint with a soft glow, else a 1 pt hairline.
-private extension View {
+extension View {
     func selectionRing(_ selected: Bool, radius: CGFloat) -> some View {
         overlay(RoundedRectangle(cornerRadius: radius, style: .continuous)
-            .strokeBorder(selected ? Design.mint : Color.white.opacity(0.08), lineWidth: selected ? 1.5 : 1))
-            .shadow(color: selected ? Design.mint.opacity(0.18) : .clear, radius: 9)
+            .strokeBorder(selected ? Design.accent : Design.ink.opacity(0.08), lineWidth: selected ? 1.5 : 1))
+            .shadow(color: selected ? Design.accent.opacity(0.18) : .clear, radius: 9)
     }
 }
 
 /// A plain text button in the design's style (for actions the design doesn't draw).
-private struct DesignButton: View {
+struct DesignButton: View {
     let title: String
     let action: () -> Void
 
@@ -319,15 +360,15 @@ private struct DesignButton: View {
                 .font(.system(size: 13, weight: .medium))
                 .padding(.horizontal, 12)
                 .frame(height: 30)
-                .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(.white.opacity(0.1), lineWidth: 1))
+                .background(Design.ink.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Design.ink.opacity(0.1), lineWidth: 1))
         }
         .buttonStyle(.plain)
     }
 }
 
 /// A row of a settings card: title and note on the left, a control on the right.
-private struct SettingRow<Control: View>: View {
+struct SettingRow<Control: View>: View {
     let title: String
     var note: String? = nil
     var noteColor: Color = Design.secondary
@@ -431,9 +472,9 @@ private struct ModuleRow: View {
             Grip()
             Image(systemName: tab.symbol)
                 .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(.white)
+                .foregroundStyle(Design.ink)
                 .frame(width: 32, height: 32)
-                .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .background(Design.ink.opacity(0.08), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
             VStack(alignment: .leading, spacing: 1) {
                 Text(tab.settingsTitle).font(.system(size: 14, weight: .medium))
                 Text(tab.settingsDetail).font(.system(size: 12)).foregroundStyle(Design.secondary)
@@ -459,7 +500,7 @@ private struct Grip: View {
     var body: some View {
         Canvas { context, _ in
             for x in [3.0, 9.0] { for y in [2.0, 6.0, 10.0] {
-                context.fill(Path(ellipseIn: CGRect(x: x - 1.2, y: y - 1.2, width: 2.4, height: 2.4)), with: .color(.white.opacity(0.35)))
+                context.fill(Path(ellipseIn: CGRect(x: x - 1.2, y: y - 1.2, width: 2.4, height: 2.4)), with: .color(Design.ink.opacity(0.35)))
             } }
         }
         .frame(width: 12, height: 12)
@@ -477,7 +518,7 @@ private struct ArrowButton: View {
         Button(action: action) {
             Image(systemName: symbol)
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.75))
+                .foregroundStyle(Design.ink.opacity(0.75))
                 .frame(width: 30, height: 30)
                 .contentShape(Rectangle())
         }
@@ -515,20 +556,10 @@ private struct CollapsedIndicators: View {
 /// Each module's own settings (beyond the design, in its style).
 private struct ModuleDetails: View {
     @AppStorage(SettingsKeys.showDemoSource) private var showDemoSource = false
-    @AppStorage(SettingsKeys.openOnHover) private var openOnHover = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
-            VStack(alignment: .leading, spacing: 10) {
-                SectionLabel("Island")
-                Card {
-                    SettingRow(title: "Open the island on hover", note: "Otherwise it opens when you click it.") {
-                        DesignSwitch(isOn: openOnHover, label: "Open the island on hover") { openOnHover.toggle() }
-                    }
-                }
-            }
             if let calendar = AppModules.calendar { CalendarSettings(module: calendar) }
-            if let clipboard = AppModules.clipboard { ClipboardSettings(module: clipboard) }
             if let library = AppModules.library {
                 VStack(alignment: .leading, spacing: 10) {
                     SectionLabel("Screenshots")
@@ -561,9 +592,9 @@ private struct ModuleDetails: View {
     }
 }
 
-/// Calendar on/off, which calendars to show, and meeting reminders. Turning Calendar on is the
-/// only thing that asks for calendar access; choosing a reminder is the only thing that asks to
-/// send notifications.
+/// Calendar on/off and meeting reminders (which calendars show is in Settings › Calendar). Turning
+/// Calendar on is the only thing that asks for calendar access; choosing a reminder is the only
+/// thing that asks to send notifications.
 private struct CalendarSettings: View {
     let module: CalendarModule
 
@@ -580,75 +611,17 @@ private struct CalendarSettings: View {
                 if on {
                     if module.status == .denied {
                         RowLine()
-                        SettingRow(title: "Access", note: "Allow Orilio in Privacy & Security › Calendars.", noteColor: Design.amber) {
+                        SettingRow(title: "Access", note: "Allow Orilio in Privacy & Security › Calendars.", noteColor: Design.warn) {
                             DesignButton(title: "Open System Settings…") { NSWorkspace.shared.open(CalendarModule.privacySettingsURL) }
                         }
                     } else if module.status == .restricted {
                         RowLine()
-                        SettingRow(title: "Access", note: "Calendar access is restricted on this Mac.", noteColor: Design.amber) { EmptyView() }
+                        SettingRow(title: "Access", note: "Calendar access is restricted on this Mac.", noteColor: Design.warn) { EmptyView() }
                     }
                     RowLine()
                     SettingRow(title: "Meeting reminders") {
                         Segmented(options: [(-1, "Off"), (0, "At start"), (5, "5 min"), (10, "10 min")],
                                   selection: module.reminderLeadMinutes) { lead in Task { await module.setReminderLead(lead) } }
-                    }
-                    ForEach(module.calendars) { calendar in
-                        RowLine()
-                        let visible = !module.hiddenCalendarIDs.contains(calendar.id)
-                        HStack(spacing: 8) {
-                            Circle().fill(calendar.color.color).frame(width: 9, height: 9)
-                            Text(calendar.title).font(.system(size: 13.5, weight: .medium))
-                            Text(calendar.sourceTitle).font(.system(size: 12)).foregroundStyle(Design.secondary)
-                            Spacer()
-                            DesignSwitch(isOn: visible, label: calendar.title) { module.setCalendar(calendar.id, visible: !visible) }
-                        }
-                        .padding(.horizontal, 16)
-                        .frame(height: 48)
-                    }
-                }
-            }
-        }
-    }
-}
-
-/// Clipboard history on/off, pause, limits. Turning it off deletes the stored history.
-private struct ClipboardSettings: View {
-    let module: ClipboardModule
-
-    var body: some View {
-        let on = module.status != .off
-        VStack(alignment: .leading, spacing: 10) {
-            SectionLabel("Clipboard")
-            Card {
-                SettingRow(title: "Keep a clipboard history", note: "Turning it off deletes the history. Items apps mark private, and copies made while a password manager is in front, are never recorded.") {
-                    DesignSwitch(isOn: on, label: "Keep a clipboard history") {
-                        Task { on ? await module.disable() : await module.enable() }
-                    }
-                }
-                if module.status == .blocked {
-                    RowLine()
-                    SettingRow(title: "Access", note: "macOS denies Orilio reading other apps' copies.", noteColor: Design.amber) {
-                        DesignButton(title: "Open System Settings…") { NSWorkspace.shared.open(ClipboardModule.pasteSettingsURL) }
-                    }
-                } else if on {
-                    RowLine()
-                    SettingRow(title: "Pause recording") {
-                        DesignSwitch(isOn: module.status == .paused, label: "Pause recording") {
-                            module.status == .paused ? module.resume() : module.pause()
-                        }
-                    }
-                    RowLine()
-                    SettingRow(title: "Keep items for") {
-                        Segmented(options: [(1, "1 day"), (7, "7 days"), (30, "30 days"), (0, "Until removed")],
-                                  selection: module.retentionDays) { module.setRetention(days: $0) }
-                    }
-                    RowLine()
-                    SettingRow(title: "Keep at most") {
-                        Segmented(options: [(50, "50"), (200, "200"), (500, "500")], selection: module.maxItems) { module.setMaxItems($0) }
-                    }
-                    RowLine()
-                    SettingRow(title: "History") {
-                        DesignButton(title: "Clear Unpinned Items") { module.clear() }
                     }
                 }
             }
@@ -711,7 +684,7 @@ private struct AppearancePane: View {
                     }
                 }
                 HStack {
-                    Text("Neon accent").font(.system(size: 13)).foregroundStyle(.white.opacity(0.75))
+                    Text("Neon accent").font(.system(size: 13)).foregroundStyle(Design.ink.opacity(0.75))
                     Spacer()
                     HStack(spacing: 10) {
                         ForEach(Preferences.Accent.allCases) { option in
@@ -735,7 +708,7 @@ private struct AppearancePane: View {
                 VStack(alignment: .leading, spacing: 2) {
                     SectionLabel("Animation")
                     DesignCheckbox(title: "Follow system Reduce Motion", isOn: p.followReduceMotion, size: 12.5,
-                                   color: .white.opacity(0.6)) { store.value.followReduceMotion.toggle() }
+                                   color: Design.ink.opacity(0.6)) { store.value.followReduceMotion.toggle() }
                         .padding(.top, 4)
                     if p.followReduceMotion && systemReduce {
                         Text("Reduce Motion is on in System Settings, so the island doesn't animate.")
@@ -846,7 +819,7 @@ private struct ThemeCard: View {
                 .background(.black, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(style.title).font(.system(size: 13.5, weight: .semibold))
-                    Text(style.detail).font(.system(size: 12)).foregroundStyle(.white.opacity(0.55))
+                    Text(style.detail).font(.system(size: 12)).foregroundStyle(Design.ink.opacity(0.55))
                 }
             }
             .padding(12)
@@ -889,7 +862,7 @@ private struct DisplaysPane: View {
                         Button { fullscreen = mode.rawValue } label: {
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(label).font(.system(size: 13.5, weight: .semibold))
-                                Text(detail).font(.system(size: 12)).lineSpacing(12 * 0.4).foregroundStyle(.white.opacity(0.55))
+                                Text(detail).font(.system(size: 12)).lineSpacing(12 * 0.4).foregroundStyle(Design.ink.opacity(0.55))
                                     .fixedSize(horizontal: false, vertical: true)
                             }
                             .padding(.horizontal, 14)
@@ -936,7 +909,7 @@ private struct DisplaysIllustration: View {
                 UnevenRoundedRectangle(bottomLeadingRadius: 6, bottomTrailingRadius: 6).fill(Design.hex(0x3A3A3F))
                     .frame(width: 250, height: 7)
                     .padding(.top, -3)
-                Text("Built-in · notch").font(.system(size: 12)).foregroundStyle(.white.opacity(0.6))
+                Text("Built-in · notch").font(.system(size: 12)).foregroundStyle(Design.ink.opacity(0.6))
             }
             .opacity(showOn == .pointer ? 0.55 : 1)
 
@@ -961,13 +934,13 @@ private struct DisplaysIllustration: View {
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .background(RoundedRectangle(cornerRadius: 13, style: .continuous).fill(Design.hex(0x2A2A2E)).padding(-5))
                 Rectangle().fill(Design.hex(0x2A2A2E)).frame(width: 60, height: 16).padding(.top, -3)
-                Text("External · no notch → pill").font(.system(size: 12)).foregroundStyle(.white.opacity(0.6))
+                Text("External · no notch → pill").font(.system(size: 12)).foregroundStyle(Design.ink.opacity(0.6))
             }
             .opacity(showOn == .builtIn ? 0.55 : 1)
         }
         .frame(maxWidth: .infinity)
         .frame(height: 200)
-        .background(Color.white.opacity(0.03), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(Design.ink.opacity(0.03), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Design.cardStroke, lineWidth: 1))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("The island is shown on: \(showOn.title)")
@@ -988,9 +961,9 @@ private struct StartupPane: View {
                 HStack(spacing: 16) {
                     Image(systemName: "power")
                         .font(.system(size: 20, weight: .medium))
-                        .foregroundStyle(Design.mint)
+                        .foregroundStyle(Design.accentText)
                         .frame(width: 44, height: 44)
-                        .background(Design.mint.opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .background(Design.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                     VStack(alignment: .leading, spacing: 3) {
                         Text("Open Orilio at login").font(.system(size: 15, weight: .semibold))
                         Text(loginNote).font(.system(size: 12.5)).foregroundStyle(loginNoteColor)
@@ -1006,7 +979,7 @@ private struct StartupPane: View {
                     DesignButton(title: "Approve in System Settings…") { LoginItem.openSystemSettings() }
                 }
                 if let loginError {
-                    Label(loginError, systemImage: "exclamationmark.triangle.fill").font(.system(size: 12)).foregroundStyle(Design.amber)
+                    Label(loginError, systemImage: "exclamationmark.triangle.fill").font(.system(size: 12)).foregroundStyle(Design.warn)
                 }
             }
 
@@ -1018,8 +991,8 @@ private struct StartupPane: View {
                         Button { launch = mode.rawValue } label: {
                             HStack(spacing: 12) {
                                 Circle()
-                                    .strokeBorder(active ? Design.mint : Color.white.opacity(0.35), lineWidth: 1.5)
-                                    .overlay(Circle().fill(active ? Design.mint : .clear).frame(width: 8, height: 8))
+                                    .strokeBorder(active ? Design.accent : Design.ink.opacity(0.35), lineWidth: 1.5)
+                                    .overlay(Circle().fill(active ? Design.accent : .clear).frame(width: 8, height: 8))
                                     .frame(width: 18, height: 18)
                                 VStack(alignment: .leading, spacing: 1) {
                                     Text(mode.title).font(.system(size: 13.5, weight: .medium))
@@ -1043,49 +1016,10 @@ private struct StartupPane: View {
                     Text("Menu bar icon").font(.system(size: 13.5, weight: .medium))
                     Text(menuBarIcon ? "Quick access to Settings, pin and Quit" : "Hidden. Open Orilio again from Applications to get back here.")
                         .font(.system(size: 12))
-                        .foregroundStyle(menuBarIcon ? Design.secondary : Design.amber)
+                        .foregroundStyle(menuBarIcon ? Design.secondary : Design.warn)
                 }
                 Spacer(minLength: 0)
                 DesignSwitch(isOn: menuBarIcon, label: "Show menu bar icon") { menuBarIcon.toggle() }
-            }
-
-            HStack(spacing: 20) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Onboarding").font(.system(size: 13.5, weight: .medium))
-                    Text("The first-run tour in the island").font(.system(size: 12)).foregroundStyle(Design.secondary)
-                }
-                Spacer(minLength: 0)
-                DesignButton(title: "Replay onboarding") {
-                    OnboardingModel.reset()
-                    AppModules.island?.startOnboarding()
-                }
-            }
-
-            HStack(spacing: 20) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Toggle the island").font(.system(size: 13.5, weight: .medium))
-                    Text("Global shortcut, works in any app").font(.system(size: 12)).foregroundStyle(Design.secondary)
-                }
-                Spacer(minLength: 0)
-                if GlobalHotKey.isRegistered {
-                    HStack(spacing: 4) {
-                        ForEach(GlobalHotKey.display, id: \.self) { key in
-                            Text(key)
-                                .font(.system(size: 13, weight: .medium))
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 1)
-                                .background(Color.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
-                        }
-                    }
-                    .padding(.horizontal, 12)
-                    .frame(height: 32)
-                    .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(.white.opacity(0.1), lineWidth: 1))
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("Control Option Space")
-                } else {
-                    Text("Shortcut unavailable").font(.system(size: 13, weight: .medium)).foregroundStyle(Design.amber)
-                }
             }
         }
         // The user can remove Orilio in System Settings at any time: read the real status each time.
@@ -1106,8 +1040,8 @@ private struct StartupPane: View {
     private var loginNoteColor: Color {
         switch login {
         case .enabled: Design.loginOn
-        case .requiresApproval: Design.amber
-        case .off: .white.opacity(0.55)
+        case .requiresApproval: Design.warn
+        case .off: Design.ink.opacity(0.55)
         }
     }
 

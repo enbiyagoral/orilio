@@ -238,6 +238,29 @@ struct CalendarModuleTests {
         #expect(island.meetingSoon == nil)
         #expect(island.liveCollapsedWidth == nil)
     }
+
+    @Test func uncheckedCalendarsNeverShow() async {
+        let source = FakeCalendar(access: .authorized, events: [event("Standup", startsIn: 5, calendar: "work"),
+                                                                event("Dentist", startsIn: 8, calendar: "family")])
+        let (module, _, _) = makeModule(source)
+        await module.enable()
+        module.setCalendar("family", visible: false)
+        await module.reload()
+        #expect(module.day.events.map(\.title) == ["Standup"])
+        #expect(module.calendars.map(\.id).contains("family")) // still listed in Settings, to check again
+        #expect(CalendarGroups.group(module.calendars).map(\.account) == ["Google"])
+    }
+
+    @Test func meetingLeadSetsTheNotchWindow() async {
+        let source = FakeCalendar(access: .authorized, events: [event("Review", startsIn: 7)])
+        let (module, _, _) = makeModule(source)
+        await module.enable()
+        #expect(module.dayNow().soon(within: module.meetingLead)?.title == "Review") // 10 min by default
+        module.setMeetingLead(5)
+        #expect(module.dayNow().soon(within: module.meetingLead) == nil)
+        module.setMeetingLead(0)
+        #expect(module.meetingLead == 0)
+    }
 }
 
 import AppKit

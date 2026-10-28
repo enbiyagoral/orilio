@@ -6,6 +6,7 @@ enum Entry {
     static func main() {
         // Chrome starts this same executable as Orilio's native messaging host.
         NativeMessagingHost.runIfLaunchedByChrome()
+        LegacyDefaults.migrate() // before anything reads a preference
         OrilioApp.main()
     }
 }
@@ -108,7 +109,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         focus: focus, modules: modules, live: island.live, sharing: island)
         }
         self.positioner = positioner
-        GlobalHotKey.register { [weak positioner] in positioner?.toggle() }
+        GlobalHotKeys.shared.perform = { [weak positioner] action in
+            guard let positioner else { return }
+            switch action {
+            case .toggleIsland: positioner.toggle()
+            case .openClipboard: positioner.open(.clipboard)
+            case .toggleFocus: focus.toggle()
+            case .newNote:
+                notes.newNote()
+                positioner.open(.notes)
+            case .joinMeeting:
+                let day = calendar.dayNow()
+                if let event = island.meetingSoon ?? day.timed.first(where: { $0.meeting != nil && $0.end > day.now }) { island.join(event) }
+            case .openMirror: positioner.open(.mirror)
+            }
+        }
+        registerShortcuts()
+        // Settings › Shortcuts and hiding a module both end up in the defaults.
+        shortcutObserver = NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated { AppDelegate.registerShortcuts() }
+        }
         if OnboardingModel.shouldShow() {
             // The first launch happens in the island; once the displays are placed.
             Task { @MainActor in
@@ -119,6 +139,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             startUp(island: island, positioner: positioner)
         }
     }
+
+    private var shortcutObserver: NSObjectProtocol?
+
+    private static func registerShortcuts() {
+        guard let modules = AppModules.modules else { return }
+        GlobalHotKeys.shared.register(PreferencesStore.shared.value.shortcutMap, hidden: modules.hidden)
+    }
+
+    private func registerShortcuts() { Self.registerShortcuts() }
 
     /// Settings › Startup › "When Orilio starts".
     private func startUp(island: IslandModel, positioner: IslandPositioner) {
@@ -217,7 +246,8 @@ enum SettingsWindow {
 
     static func show() {
         if window == nil {
-            // The design's 1040 × 760 window: dark, no title, the traffic lights over the sidebar.
+            // The design's 1040 × 760 window: no title, the traffic lights over the sidebar; it follows
+            // the system appearance.
             let host = NSHostingController(rootView: SettingsView())
             host.sizingOptions = [] // the window is the design's size; SwiftUI mustn't add the title bar to it
             let window = NSWindow(contentViewController: host)
@@ -226,8 +256,7 @@ enum SettingsWindow {
             window.titlebarAppearsTransparent = true
             window.titleVisibility = .hidden
             window.isMovableByWindowBackground = true
-            window.appearance = NSAppearance(named: .darkAqua)
-            window.backgroundColor = NSColor(red: 0x1C / 255, green: 0x1C / 255, blue: 0x1F / 255, alpha: 1)
+            window.backgroundColor = NSColor(name: nil) { $0.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? SettingsDesign.ns(0x1C1C1F) : .white }
             // With a full-size content view the frame is the content: exactly the design's 1040 × 760.
             window.setFrame(NSRect(x: 0, y: 0, width: 1040, height: 760), display: false)
             window.isReleasedWhenClosed = false
@@ -240,5 +269,21 @@ enum SettingsWindow {
         NSApp.activate()
         window?.makeKeyAndOrderFront(nil)
         window?.orderFrontRegardless()
+    }
+}
+
+/// Orilio's settings moved with its bundle identifier (now `com.enbiyagoral.orilio`). On the first
+/// launch under the new one, everything saved under the old identifier is copied over once;
+/// nothing already set is overwritten.
+enum LegacyDefaults {
+    static let oldDomain = "com.deaconcornsoft.orilio.prototype"
+    static let doneKey = "migratedFromOldBundleIdentifier"
+
+    static func migrate(from domain: String = oldDomain, into defaults: UserDefaults = .standard) {
+        guard !defaults.bool(forKey: doneKey) else { return }
+        for (key, value) in defaults.persistentDomain(forName: domain) ?? [:] where defaults.object(forKey: key) == nil {
+            defaults.set(value, forKey: key)
+        }
+        defaults.set(true, forKey: doneKey)
     }
 }

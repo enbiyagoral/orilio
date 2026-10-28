@@ -261,7 +261,7 @@ struct OnboardingView: View {
                     }
                     Spacer(minLength: 0)
                     HStack(spacing: 4) {
-                        ForEach(GlobalHotKey.display, id: \.self) { key in
+                        ForEach(PreferencesStore.shared.value.shortcut(.toggleIsland).keycaps, id: \.self) { key in
                             Text(key)
                                 .font(.system(size: 13, weight: .medium))
                                 .padding(.horizontal, key == "Space" ? 11 : 9)
@@ -270,7 +270,7 @@ struct OnboardingView: View {
                         }
                     }
                     .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("Control Option Space")
+                    .accessibilityLabel(PreferencesStore.shared.value.shortcut(.toggleIsland).spoken)
                 }
                 .padding(.horizontal, 18)
                 .frame(minHeight: 72)

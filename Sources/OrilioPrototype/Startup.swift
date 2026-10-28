@@ -1,5 +1,4 @@
 import AppKit
-import Carbon.HIToolbox
 import ServiceManagement
 
 /// What Orilio does when it starts, and how it stays reachable. `UserDefaults`, `startup.*`.
@@ -55,46 +54,4 @@ enum LoginItem {
     }
 
     static func openSystemSettings() { SMAppService.openSystemSettingsLoginItems() }
-}
-
-/// A system-wide shortcut through Carbon's `RegisterEventHotKey`: public, needs no Accessibility
-/// permission, and works over fullscreen apps.
-@MainActor
-final class GlobalHotKey {
-    /// ⌃⌥Space. Recording a custom shortcut comes later.
-    static let display = ["⌃", "⌥", "Space"]
-    private static let keyCode = UInt32(kVK_Space)
-    private static let modifiers = UInt32(controlKey | optionKey)
-
-    /// The one registered shortcut; the C callback can't carry Swift context.
-    private static var shared: GlobalHotKey?
-    private(set) static var isRegistered = false
-
-    private var hotKey: EventHotKeyRef?
-    private var handler: EventHandlerRef?
-    private let action: () -> Void
-
-    private init(action: @escaping () -> Void) { self.action = action }
-
-    /// Registers ⌃⌥Space. False when another app already holds it.
-    @discardableResult
-    static func register(action: @escaping () -> Void) -> Bool {
-        let key = GlobalHotKey(action: action)
-        var spec = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
-        InstallEventHandler(GetApplicationEventTarget(), { _, _, _ in
-            // Carbon delivers hot keys on the main thread.
-            MainActor.assumeIsolated { GlobalHotKey.shared?.action() }
-            return noErr
-        }, 1, &spec, nil, &key.handler)
-        let id = EventHotKeyID(signature: OSType(0x4F52_494C), id: 1) // "ORIL"
-        let status = RegisterEventHotKey(keyCode, modifiers, id, GetApplicationEventTarget(), 0, &key.hotKey)
-        guard status == noErr else {
-            if let handler = key.handler { RemoveEventHandler(handler) }
-            isRegistered = false
-            return false
-        }
-        shared = key
-        isRegistered = true
-        return true
-    }
 }

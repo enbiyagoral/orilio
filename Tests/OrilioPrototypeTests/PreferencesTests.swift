@@ -53,6 +53,52 @@ struct PreferencesTests {
         #expect(p.accent == .mint)
     }
 
+    @Test func generalAndShortcutsRoundTrip() throws {
+        let defaults = freshDefaults()
+        let store = PreferencesStore(defaults: defaults)
+        store.value.openOnHover = false
+        store.value.haptics = false
+        store.value.hoverDelay = 240
+        store.value.shortcuts[ShortcutAction.openClipboard.rawValue] = .controlOption(9, "V") // still ⌃⌥V
+        store.value.shortcuts[ShortcutAction.openMirror.rawValue] = HotKeyCombo.none
+        let again = PreferencesStore(defaults: defaults).value
+        #expect(again == store.value)
+        #expect(again.shortcut(.openMirror).isNone)
+        #expect(again.shortcut(.toggleFocus) == ShortcutAction.toggleFocus.defaultCombo)
+        #expect(again.shortcut(.toggleIsland).keycaps == ["⌃", "⌥", "Space"])
+    }
+
+    @Test func exportThenImportGivesTheSameSettings() throws {
+        var p = Preferences()
+        p.theme = .neon
+        p.sounds = false
+        p.shortcuts[ShortcutAction.newNote.rawValue] = HotKeyCombo(keyCode: 45, modifiers: 256 | 2048, key: "N") // ⌘⌥N
+        #expect(try Preferences.imported(from: p.exported()) == p)
+    }
+
+    @Test func importRejectsWhatIsNotOrilioSettings() {
+        for text in ["not json", "[1, 2]", #"{"theme": "neon"}"#, #"{"version": "1", "theme": "neon"}"#, #"{"version": 1, "name": "x"}"#] {
+            #expect(throws: Preferences.ImportError.self) { try Preferences.imported(from: Data(text.utf8)) }
+        }
+        #expect(throws: Preferences.ImportError.self) { try Preferences.imported(from: Data(#"{"version": 9, "theme": "neon"}"#.utf8)) }
+    }
+
+    @Test func importKeepsDefaultsForBadValues() throws {
+        let p = try Preferences.imported(from: Data(#"{"version": 1, "hoverDelay": 9000, "accent": "plaid", "shortcuts": {"launchRockets": {"keyCode": 1, "modifiers": 4096, "key": "S"}}}"#.utf8))
+        #expect(p.hoverDelay == 500) // clamped to the slider
+        #expect(p.accent == .mint)
+        #expect(p.shortcuts.isEmpty) // unknown actions are dropped
+    }
+
+    @Test func openOnHoverCarriesOverFromItsOldKey() {
+        let defaults = freshDefaults()
+        PreferencesStore(defaults: defaults).value.theme = .calm
+        defaults.set(false, forKey: SettingsKeys.openOnHover)
+        #expect(!Preferences.load(defaults).openOnHover)
+        #expect(defaults.object(forKey: SettingsKeys.openOnHover) == nil)
+        #expect(!Preferences.load(defaults).openOnHover) // saved, not just read once
+    }
+
     @Test func panelSizeSetsTheOpenWidthAndScalesTheHeight() {
         var g = IslandGeometry(topInset: 32, notchWidth: 179, centerX: 0, screenTop: 0)
         g.panelWidth = Preferences.PanelSize.compact.width
