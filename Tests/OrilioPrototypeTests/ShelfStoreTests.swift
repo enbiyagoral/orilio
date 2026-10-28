@@ -148,6 +148,15 @@ struct ShelfPersistenceTests {
         #expect(FileManager.default.fileExists(atPath: user.path))
     }
 
+    @Test func pathTraversalCantEscapeOriliosFolder() {
+        let root = URL(fileURLWithPath: "/tmp/orilio-root/Received")
+        #expect(ShelfModel.isInside(root.appending(path: "ABC"), root))
+        #expect(!ShelfModel.isInside(root.appending(path: "../../Documents"), root))
+        #expect(!ShelfModel.isInside(root.appending(path: "ABC/../.."), root))
+        #expect(!ShelfModel.isInside(root, root)) // never the whole folder
+        #expect(!ShelfModel.isInside(URL(fileURLWithPath: "/tmp/orilio-root/ReceivedX/a"), root)) // a sibling with the same prefix
+    }
+
     @Test func availabilityIsRecheckedWhenTheShelfIsShown() async throws {
         let box = Sandbox()
         let shelf = box.shelf()

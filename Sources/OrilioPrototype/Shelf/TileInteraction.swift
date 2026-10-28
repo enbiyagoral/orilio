@@ -69,9 +69,11 @@ final class TileInteractionView: NSView, NSDraggingSource {
         guard pressed != nil, let actions else { return }
         pressed = nil
         actions.select(event.modifierFlags.contains(.command) || event.modifierFlags.contains(.shift))
-        // Choosing a tile is deliberate, so ask for the keyboard (Space, Delete, ⌘C). macOS may
-        // decline under cooperative activation; every action is also in the context menu.
-        if !NSApp.isActive { NSApp.activate(ignoringOtherApps: true) }
+        // Choosing a tile is deliberate, so ask for the keyboard (Space, Delete, ⌘C). Asked every
+        // time: AppKit can report Orilio as active while the system still routes keys to the
+        // previous app (seen after the non-activating panel became key), so neither `isActive` nor
+        // `frontmostApplication` is a reliable reason to skip it. Never done on hover or drag.
+        NSApp.activate()
         window?.makeKey()
     }
 

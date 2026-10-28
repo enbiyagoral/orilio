@@ -68,6 +68,14 @@ actor ScreenshotStore {
         directory.appending(path: "Library/\(item.fileName)")
     }
 
+    /// Managed copies are always named `<id>.<ext>`. Anything else (`../`, another id, a path) is
+    /// rejected, so a forged database row can't make "Delete" reach outside the library.
+    static func isManagedFileName(_ name: String, id: UUID) -> Bool {
+        let parts = name.split(separator: ".", omittingEmptySubsequences: false)
+        guard parts.count == 2, parts[0] == id.uuidString else { return false }
+        return (1...5).contains(parts[1].count) && parts[1].allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber) }
+    }
+
     nonisolated func thumbnailURL(for item: ScreenshotItem) -> URL {
         directory.appending(path: "Thumbnails/\(item.id.uuidString).jpg")
     }
@@ -83,7 +91,8 @@ actor ScreenshotStore {
         var items: [ScreenshotItem] = []
         while sqlite3_step(statement) == SQLITE_ROW {
             func text(_ i: Int32) -> String? { sqlite3_column_text(statement, i).map { String(cString: $0) } }
-            guard let id = text(0).flatMap(UUID.init), let fileName = text(1), let hash = text(3) else { continue }
+            guard let id = text(0).flatMap(UUID.init), let fileName = text(1), Self.isManagedFileName(fileName, id: id),
+                  let hash = text(3) else { continue } // a row that doesn't name its own managed file is ignored
             items.append(ScreenshotItem(
                 id: id, fileName: fileName, originalPath: text(2), contentHash: hash,
                 capturedAt: Date(timeIntervalSinceReferenceDate: sqlite3_column_double(statement, 4)),

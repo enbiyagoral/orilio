@@ -244,7 +244,7 @@ final class ShelfModel {
         items.removeAll { ids.contains($0.id) }
         selection.subtract(ids)
         let ownFolders = removed.filter { $0.origin == .received }.map { $0.url.deletingLastPathComponent() }
-            .filter { $0.path.hasPrefix(receivedDirectory.path + "/") } // only inside Orilio's own folder
+            .filter { Self.isInside($0, receivedDirectory) } // only Orilio's own folders, never anything else
         if !ownFolders.isEmpty {
             Task.detached(priority: .utility) {
                 for folder in ownFolders { try? FileManager.default.removeItem(at: folder) }
@@ -254,6 +254,14 @@ final class ShelfModel {
     }
 
     func remove(_ item: ShelfItem) { remove([item]) }
+
+    /// True only for a folder strictly inside `root`, after resolving `..` and symbolic links, so a
+    /// forged or corrupted record like `Received/../../Documents` can never point the delete elsewhere.
+    nonisolated static func isInside(_ folder: URL, _ root: URL) -> Bool {
+        let folder = folder.standardizedFileURL.resolvingSymlinksInPath().path
+        let root = root.standardizedFileURL.resolvingSymlinksInPath().path
+        return folder.hasPrefix(root + "/") && folder != root
+    }
 
     private func scheduleSave() {
         guard let store else { return }
