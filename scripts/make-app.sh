@@ -26,6 +26,9 @@ BIN="$(swift build -c "$CONFIG" --show-bin-path)"
 cp "$BIN/OrilioPrototype" "$APP/Contents/MacOS/"
 ditto "$BIN/Sparkle.framework" "$APP/Contents/Frameworks/Sparkle.framework" # keeps its symlinks and helpers
 cp Resources/WhatsNew.json LICENSE "$APP/Contents/Resources/" # LICENSE: the GPL's text, shown in Settings › About
+# The app icon (Default, Dark and Tinted; drawn by scripts/make-icons.swift) → Assets.car + AppIcon.icns.
+xcrun actool Resources/Assets.xcassets --compile "$APP/Contents/Resources" --platform macosx \
+  --minimum-deployment-target 14.6 --app-icon AppIcon --output-partial-info-plist "build/icon-info.plist" >/dev/null
 cp .build/artifacts/sparkle/Sparkle/LICENSE "$APP/Contents/Resources/Sparkle-LICENSE.txt" # MIT, plus what Sparkle includes
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -45,6 +48,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>OrilioIssuesURL</key><string>$ISSUES_URL</string>
   <key>LSMinimumSystemVersion</key><string>14.6</string>
   <key>LSUIElement</key><true/>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
+  <key>CFBundleIconName</key><string>AppIcon</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSCalendarsFullAccessUsageDescription</key><string>Orilio shows today's events and your next meeting in the notch. Calendar data stays on this Mac.</string>
   <key>NSCalendarsUsageDescription</key><string>Orilio shows today's events and your next meeting in the notch. Calendar data stays on this Mac.</string>

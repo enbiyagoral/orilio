@@ -1,0 +1,17 @@
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- Orilio — a calm control surface for the Mac notch. Copyright (C) 2026 Enbiya Goral and Orilio contributors -->
+<!-- The Orilio name and icon are not covered by the license: see TRADEMARK.md. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs><linearGradient id="tile" x1="0.3415" y1="-0.0915" x2="0.6585" y2="1.0915"><stop offset="0" stop-color="#2A3244"/><stop offset="0.55" stop-color="#12151E"/><stop offset="1" stop-color="#08090D"/></linearGradient>
+    <radialGradient id="mint" cx="0.5" cy="0.22" r="0.7" gradientTransform="translate(0.5 0.22) scale(1 0.7857) translate(-0.5 -0.22)"><stop offset="0" stop-color="#2BFFB8" stop-opacity="0.22"/><stop offset="0.7" stop-color="#2BFFB8" stop-opacity="0"/></radialGradient>
+    <filter id="islandGlow" x="-50%" y="-50%" width="200%" height="300%"><feDropShadow dx="0" dy="41" stdDeviation="82.0" flood-color="#2BFFB8" flood-opacity="0.28"/></filter>
+    <filter id="lineGlow" x="-50%" y="-300%" width="200%" height="700%"><feGaussianBlur stdDeviation="41.0" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <clipPath id="clip"><rect width="1024" height="1024" rx="230"/></clipPath></defs>
+  <g clip-path="url(#clip)">
+    <rect width="1024" height="1024" fill="url(#tile)"/>
+    <rect width="1024" height="1024" fill="url(#mint)"/>
+    <path d="M276.5 0H747.5V72Q747.5 154 665.5 154H358.5Q276.5 154 276.5 72Z" fill="#000" filter="url(#islandGlow)"/>
+    <rect x="409.5" y="56" width="205" height="36" rx="18.0" fill="#2BFFB8" filter="url(#lineGlow)"/>
+  </g>
+  <rect x="2.0" y="2.0" width="1020" height="1020" rx="228.0" fill="none" stroke="rgba(255,255,255,0.10)" stroke-width="4"/>
+</svg>

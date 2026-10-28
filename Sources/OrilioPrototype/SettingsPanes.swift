@@ -821,19 +821,32 @@ struct AboutPane: View {
     }
 }
 
-/// The design's app icon: a dark tile with the notch and its mint light.
+/// The app icon, "the oriel" (the M5 Icon design), drawn from its proportions of the tile size.
 private struct AppIcon: View {
+    let size: CGFloat = 112
+
     var body: some View {
-        RoundedRectangle(cornerRadius: 26, style: .continuous)
-            .fill(LinearGradient(colors: [Design.hex(0x1B2233), Design.hex(0x07080C)], startPoint: UnitPoint(x: 0.33, y: 0.03), endPoint: UnitPoint(x: 0.67, y: 0.97)))
-            .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous).strokeBorder(.white.opacity(0.12), lineWidth: 1))
+        let s = size
+        RoundedRectangle(cornerRadius: (s * 0.225).rounded(), style: .continuous)
+            .fill(LinearGradient(stops: [.init(color: Design.hex(0x2A3244), location: 0), .init(color: Design.hex(0x12151E), location: 0.55),
+                                         .init(color: Design.hex(0x08090D), location: 1)],
+                                 startPoint: UnitPoint(x: 0.37, y: -0.09), endPoint: UnitPoint(x: 0.63, y: 1.09))) // 165°
+            .overlay {
+                EllipticalGradient(colors: [Design.mint.opacity(0.22), Design.mint.opacity(0)], center: UnitPoint(x: 0.5, y: 0.22),
+                                   startRadiusFraction: 0, endRadiusFraction: 0.7)
+                    .clipShape(RoundedRectangle(cornerRadius: (s * 0.225).rounded(), style: .continuous))
+            }
+            .overlay(RoundedRectangle(cornerRadius: (s * 0.225).rounded(), style: .continuous).strokeBorder(.white.opacity(0.1), lineWidth: 1))
             .overlay(alignment: .top) {
                 ZStack(alignment: .top) {
-                    UnevenRoundedRectangle(bottomLeadingRadius: 10, bottomTrailingRadius: 10).fill(.black).frame(width: 50, height: 16)
-                    Capsule().fill(Design.mint).frame(width: 22, height: 5).shadow(color: Design.mint, radius: 6).padding(.top, 5)
+                    UnevenRoundedRectangle(bottomLeadingRadius: (s * 0.08).rounded(), bottomTrailingRadius: (s * 0.08).rounded())
+                        .fill(.black).frame(width: (s * 0.46).rounded(), height: (s * 0.15).rounded())
+                        .shadow(color: Design.mint.opacity(0.28), radius: s * 0.08, y: s * 0.04)
+                    Capsule().fill(Design.mint).frame(width: (s * 0.2).rounded(), height: max(1, (s * 0.035).rounded()))
+                        .shadow(color: Design.mint, radius: s * 0.04).padding(.top, (s * 0.055).rounded())
                 }
             }
-            .frame(width: 112, height: 112)
+            .frame(width: s, height: s)
             .shadow(color: .black.opacity(0.5), radius: 25, y: 22)
             .accessibilityHidden(true)
     }

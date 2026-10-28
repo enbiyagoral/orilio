@@ -1,0 +1,29 @@
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- Orilio — a calm control surface for the Mac notch. Copyright (C) 2026 Enbiya Goral and Orilio contributors -->
+<!-- The Orilio name and icon are not covered by the license: see TRADEMARK.md. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <style>.light{display:none}@media (prefers-color-scheme: light){.dark{display:none}.light{display:inline}}</style>
+  <defs><linearGradient id="tile" x1="0.3415" y1="-0.0915" x2="0.6585" y2="1.0915"><stop offset="0" stop-color="#2A3244"/><stop offset="0.55" stop-color="#12151E"/><stop offset="1" stop-color="#08090D"/></linearGradient>
+    <radialGradient id="mint" cx="0.5" cy="0.22" r="0.7" gradientTransform="translate(0.5 0.22) scale(1 0.7857) translate(-0.5 -0.22)"><stop offset="0" stop-color="#2BFFB8" stop-opacity="0.22"/><stop offset="0.7" stop-color="#2BFFB8" stop-opacity="0"/></radialGradient>
+    <filter id="islandGlow" x="-50%" y="-50%" width="200%" height="300%"><feDropShadow dx="0" dy="3" stdDeviation="5.0" flood-color="#2BFFB8" flood-opacity="0.28"/></filter>
+    <filter id="lineGlow" x="-50%" y="-300%" width="200%" height="700%"><feGaussianBlur stdDeviation="2.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <clipPath id="clip"><rect width="64" height="64" rx="14"/></clipPath><linearGradient id="tileL" x1="0.3415" y1="-0.0915" x2="0.6585" y2="1.0915"><stop offset="0" stop-color="#F2F5F8"/><stop offset="1" stop-color="#D3DAE2"/></linearGradient>
+    <radialGradient id="mintL" cx="0.5" cy="0.22" r="0.7" gradientTransform="translate(0.5 0.22) scale(1 0.7857) translate(-0.5 -0.22)"><stop offset="0" stop-color="#2BFFB8" stop-opacity="0.14"/><stop offset="0.7" stop-color="#2BFFB8" stop-opacity="0"/></radialGradient>
+    <filter id="islandGlowL" x="-50%" y="-50%" width="200%" height="300%"><feDropShadow dx="0" dy="3" stdDeviation="5.0" flood-color="#2BFFB8" flood-opacity="0.28"/></filter>
+    <filter id="lineGlowL" x="-50%" y="-300%" width="200%" height="700%"><feGaussianBlur stdDeviation="2.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <clipPath id="clipL"><rect width="64" height="64" rx="14"/></clipPath></defs>
+  <g class="dark"><g clip-path="url(#clip)">
+    <rect width="64" height="64" fill="url(#tile)"/>
+    <rect width="64" height="64" fill="url(#mint)"/>
+    <path d="M17.5 0H46.5V5Q46.5 10 41.5 10H22.5Q17.5 10 17.5 5Z" fill="#000" filter="url(#islandGlow)"/>
+    <rect x="25.5" y="4" width="13" height="2" rx="1.0" fill="#2BFFB8" filter="url(#lineGlow)"/>
+  </g>
+  <rect x="0.5" y="0.5" width="63" height="63" rx="13.5" fill="none" stroke="rgba(255,255,255,0.10)" stroke-width="1"/></g>
+  <g class="light"><g clip-path="url(#clipL)">
+    <rect width="64" height="64" fill="url(#tileL)"/>
+    
+    <path d="M17.5 0H46.5V5Q46.5 10 41.5 10H22.5Q17.5 10 17.5 5Z" fill="#000"/>
+    <rect x="25.5" y="4" width="13" height="2" rx="1.0" fill="#13B887"/>
+  </g>
+  <rect x="0.5" y="0.5" width="63" height="63" rx="13.5" fill="none" stroke="rgba(0,0,0,0.08)" stroke-width="1"/></g>
+</svg>
