@@ -7,6 +7,9 @@ import Foundation
 actor BrowserMediaProvider: MediaProvider {
     static let providerID = "chrome"
     static let commandTimeout: Duration = .seconds(3)
+    /// A dropped bridge (host or Orilio restart, sleep) usually comes back within a second or two.
+    /// Its sessions stay visible this long, but accept no commands until a connection owns them again.
+    static let disconnectGrace: TimeInterval = 5
 
     nonisolated let id = BrowserMediaProvider.providerID
     nonisolated let displayName = "Chrome"
@@ -20,7 +23,9 @@ actor BrowserMediaProvider: MediaProvider {
     private let broadcast: @Sendable (BridgeMessage) -> Void
 
     private var connections = Set<Int>()
-    private var sessions: [String: (snapshot: MediaSessionSnapshot, connection: Int, tabId: Int)] = [:]
+    private var browserNames: [Int: String] = [:]
+    /// `connection` is nil while a session waits out `disconnectGrace`.
+    private var sessions: [String: (snapshot: MediaSessionSnapshot, connection: Int?, tabId: Int, browser: String)] = [:]
     private var pending: [String: (connection: Int, resume: CheckedContinuation<Result<Void, MediaError>, Never>)] = [:]
 
     init(transport: @escaping @Sendable (BridgeMessage, Int) -> Void,
@@ -62,7 +67,13 @@ actor BrowserMediaProvider: MediaProvider {
             connections.insert(connection)
         case .disconnected(let connection):
             connections.remove(connection)
-            sessions = sessions.filter { $0.value.connection != connection }
+            browserNames[connection] = nil
+            let deadline = Date().addingTimeInterval(Self.disconnectGrace)
+            for (key, entry) in sessions where entry.connection == connection {
+                var snapshot = entry.snapshot
+                snapshot.expiresAt = min(snapshot.expiresAt ?? deadline, deadline)
+                sessions[key] = (snapshot, nil, entry.tabId, entry.browser)
+            }
             for (id, entry) in pending where entry.connection == connection {
                 resolve(id, .failure(.notRunning))
             }
@@ -75,11 +86,15 @@ actor BrowserMediaProvider: MediaProvider {
     func perform(_ command: MediaCommand, on sourceID: String) async throws(MediaError) {
         pruneExpired()
         guard let entry = sessions[sourceID] else { throw .sessionGone }
+        // Never send to a connection that is gone; the session is only being kept on screen.
+        guard let connection = entry.connection else { throw .notRunning }
         let id = UUID().uuidString
         let (name, position) = BridgeProtocol.command(command)
         let result = await withCheckedContinuation { continuation in
-            pending[id] = (entry.connection, continuation)
-            transport(BridgeMessage(type: "command", tabId: entry.tabId, id: id, command: name, position: position), entry.connection)
+            pending[id] = (connection, continuation)
+            var message = BridgeMessage(type: "command", tabId: entry.tabId, id: id, command: name, position: position)
+            message.browser = entry.browser
+            transport(message, connection)
             Task { [weak self] in
                 try? await Task.sleep(for: Self.commandTimeout)
                 await self?.resolve(id, .failure(.failed("The browser tab did not respond")))
@@ -93,16 +108,18 @@ actor BrowserMediaProvider: MediaProvider {
         case "hello":
             // A (re)started extension: whatever this connection reported before is no longer known.
             sessions = sessions.filter { $0.value.connection != connection }
+            browserNames[connection] = BridgeMessage.clean(message.browserName)
         case "session":
             guard let tabId = message.tabId, tabId > 0 else { return }
-            let key = BridgeProtocol.sourceID(tabId: tabId)
-            if let snapshot = message.snapshot(providerID: id, receivedAt: Date()) {
-                sessions[key] = (snapshot, connection, tabId)
+            let key = BridgeProtocol.sourceID(browser: message.browser, tabId: tabId)
+            if let snapshot = message.snapshot(providerID: id, receivedAt: Date(), browserName: browserNames[connection]) {
+                // A reconnected bridge re-reports the same key and takes the session over: no duplicates.
+                sessions[key] = (snapshot, connection, tabId, BridgeProtocol.validBrowserID(message.browser))
             } else {
                 sessions[key] = nil // stopped, or nothing honest to show
             }
         case "removed":
-            if let tabId = message.tabId { sessions[BridgeProtocol.sourceID(tabId: tabId)] = nil }
+            if let tabId = message.tabId { sessions[BridgeProtocol.sourceID(browser: message.browser, tabId: tabId)] = nil }
         case "result":
             guard let id = message.id, pending[id]?.connection == connection else { return }
             switch (message.ok, message.error) {

@@ -47,7 +47,7 @@ struct BridgeValidationTests {
 
     @Test func validSessionBecomesSnapshot() throws {
         let snapshot = try #require(sessionMessage().snapshot(providerID: "chrome", receivedAt: now))
-        #expect(snapshot.sourceID == "chrome:tab:7")
+        #expect(snapshot.sourceID == "chrome:default:tab:7")
         #expect(snapshot.sourceName == "YouTube Music · Chrome")
         #expect(snapshot.state == .playing)
         #expect(snapshot.capabilities == [.playPause, .next, .previous, .seek, .focus])
@@ -152,12 +152,12 @@ struct BrowserProviderTests {
         await provider.handle(.message(1, sessionMessage(tab: 9)))
         var update = await latest(provider)
         #expect(update?.status == .ready)
-        #expect(update?.sessions.map(\.sourceID).sorted() == ["chrome:tab:7", "chrome:tab:9"])
-        #expect(update?.sessions.first { $0.sourceID == "chrome:tab:7" }?.state == .paused)
+        #expect(update?.sessions.map(\.sourceID).sorted() == ["chrome:default:tab:7", "chrome:default:tab:9"])
+        #expect(update?.sessions.first { $0.sourceID == "chrome:default:tab:7" }?.state == .paused)
 
         await provider.handle(.message(1, BridgeMessage(type: "removed", tabId: 9))) // tab closed
         update = await latest(provider)
-        #expect(update?.sessions.map(\.sourceID) == ["chrome:tab:7"])
+        #expect(update?.sessions.map(\.sourceID) == ["chrome:default:tab:7"])
     }
 
     @Test func helloAndDisconnectClearStaleSessions() async {
@@ -168,10 +168,18 @@ struct BrowserProviderTests {
         #expect(await latest(provider)?.sessions.isEmpty == true)
 
         await provider.handle(.message(1, sessionMessage(tab: 7)))
-        await provider.handle(.disconnected(1)) // Chrome quit
+        await provider.handle(.disconnected(1)) // the bridge dropped
         let update = await latest(provider)
-        #expect(update?.sessions.isEmpty == true)
+        // Kept briefly so a quick reconnect doesn't flicker, but expiring within the grace period…
+        let kept = try? #require(update?.sessions.first)
         #expect(update?.status == .notRunning)
+        #expect(kept?.expiresAt.map { $0.timeIntervalSinceNow <= BrowserMediaProvider.disconnectGrace } == true)
+        // …and never commanded through the dead connection.
+        await #expect(throws: MediaError.notRunning) { try await provider.perform(.play, on: "chrome:default:tab:7") }
+
+        await provider.handle(.connected(2)) // reconnected: the same tab is taken over, not duplicated
+        await provider.handle(.message(2, sessionMessage(tab: 7)))
+        #expect(await latest(provider)?.sessions.count == 1)
     }
 
     @Test func commandsGoToTheTabsOwnConnectionAndResolve() async throws {
@@ -181,7 +189,7 @@ struct BrowserProviderTests {
         await provider.handle(.message(1, sessionMessage(tab: 7)))
         await provider.handle(.message(2, sessionMessage(tab: 9)))
 
-        let command = Task { try await provider.perform(.next, on: "chrome:tab:9") }
+        let command = Task { try await provider.perform(.next, on: "chrome:default:tab:9") }
         for _ in 0..<200 where sent.all.isEmpty { await Task.yield() }
         let (message, connection) = try #require(sent.all.first)
         #expect(connection == 2)
@@ -199,7 +207,7 @@ struct BrowserProviderTests {
         await provider.handle(.connected(1))
         await provider.handle(.message(1, sessionMessage(tab: 7)))
 
-        let refused = Task { try await provider.perform(.play, on: "chrome:tab:7") }
+        let refused = Task { try await provider.perform(.play, on: "chrome:default:tab:7") }
         for _ in 0..<200 where sent.all.isEmpty { await Task.yield() }
         var result = BridgeMessage(type: "result", id: sent.all.first?.0.id)
         result.ok = false
@@ -207,12 +215,14 @@ struct BrowserProviderTests {
         await provider.handle(.message(1, result))
         await #expect(throws: MediaError.sessionGone) { try await refused.value }
 
-        let dropped = Task { try await provider.perform(.pause, on: "chrome:tab:7") }
+        let dropped = Task { try await provider.perform(.pause, on: "chrome:default:tab:7") }
         for _ in 0..<200 where sent.all.count < 2 { await Task.yield() }
         await provider.handle(.disconnected(1)) // bridge lost mid-command
         await #expect(throws: MediaError.notRunning) { try await dropped.value }
 
-        await #expect(throws: MediaError.sessionGone) { try await provider.perform(.play, on: "chrome:tab:7") }
+        // Still on screen for the grace period, but the dead connection is never used.
+        await #expect(throws: MediaError.notRunning) { try await provider.perform(.play, on: "chrome:default:tab:7") }
+        await #expect(throws: MediaError.sessionGone) { try await provider.perform(.play, on: "chrome:default:tab:99") }
     }
 
     @Test func silentTabTimesOut() async {
@@ -220,7 +230,7 @@ struct BrowserProviderTests {
         await provider.handle(.connected(1))
         await provider.handle(.message(1, sessionMessage(tab: 7)))
         await #expect(throws: MediaError.failed("The browser tab did not respond")) {
-            try await provider.perform(.play, on: "chrome:tab:7")
+            try await provider.perform(.play, on: "chrome:default:tab:7")
         }
     }
 

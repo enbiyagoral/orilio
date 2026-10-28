@@ -12,8 +12,10 @@ struct IslandGeometry: Equatable {
     var screenTop: CGFloat
 
     static let pillWidth: CGFloat = 220     // fits a mini cover + a short title in the menu bar band
-    static let expandedWidth: CGFloat = 540
-    static let panelHeight: CGFloat = 170   // 6 + 26pt header + 14 + 96pt cover + 18 + slack for the progress row
+    static let fullWidth: CGFloat = 540
+    static let fullHeight: CGFloat = 170    // 6 + 26pt header + 14 + 96pt cover + 18 + slack for the progress row
+    static let previewWidth: CGFloat = 360
+    static let previewHeight: CGFloat = 64  // one row: 40pt cover + 12pt padding above and below
 
     /// Concave "shoulders" that blend the open island into the top edge of the screen.
     static let earRadius: CGFloat = 10
@@ -29,14 +31,28 @@ struct IslandGeometry: Equatable {
         CGSize(width: hasNotch ? notchWidth : Self.pillWidth, height: topInset)
     }
 
-    var expanded: CGSize {
-        CGSize(width: Self.expandedWidth, height: topInset + Self.panelHeight)
+    /// Hover: a single glanceable row.
+    var preview: CGSize {
+        CGSize(width: max(Self.previewWidth, collapsed.width), height: topInset + Self.previewHeight)
+    }
+
+    /// Click: the full controller.
+    var full: CGSize {
+        CGSize(width: Self.fullWidth, height: topInset + Self.fullHeight)
+    }
+
+    func size(for state: IslandState) -> CGSize {
+        switch state {
+        case .collapsed: collapsed
+        case .expanded: preview
+        case .pinned: full
+        }
     }
 
     /// Collapsed: exactly the island. Open: the island plus ears and shadow room.
-    func windowFrame(open: Bool) -> CGRect {
-        var size = open ? expanded : collapsed
-        if open {
+    func windowFrame(for state: IslandState) -> CGRect {
+        var size = size(for: state)
+        if state.isOpen {
             size.width += 2 * (Self.earRadius + Self.shadowMargin)
             size.height += Self.shadowMargin
         }
@@ -112,6 +128,9 @@ final class IslandWindowController {
     private let model: IslandModel
     private let panel: IslandPanel
     private var shrinkTask: Task<Void, Never>?
+    /// Watches for clicks outside the island while the full controller is open. Mouse monitors
+    /// need no permission; it exists only while pinned.
+    private var outsideClickMonitor: Any?
 
     init(model: IslandModel) {
         self.model = model
@@ -139,9 +158,17 @@ final class IslandWindowController {
         }
         center.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main, using: onChange)
         center.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main, using: onChange)
-        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak model] _ in
-            MainActor.assumeIsolated { model?.media.refreshAll() }
+        // Another app came forward (including the source the user just jumped to): put the controller away.
+        center.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { [weak model] _ in
+            MainActor.assumeIsolated { if model?.state == .pinned { model?.dismiss() } }
         }
+        // Wake and unlock: sessions missed their heartbeats while the Mac was away.
+        let recover: @Sendable (Notification) -> Void = { [weak model] _ in
+            MainActor.assumeIsolated { model?.media.systemDidWake() }
+        }
+        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main, using: recover)
+        DistributedNotificationCenter.default().addObserver(forName: Notification.Name("com.apple.screenIsUnlocked"),
+                                                            object: nil, queue: .main, using: recover)
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main, using: onChange)
 
         reposition()
@@ -165,11 +192,12 @@ final class IslandWindowController {
         guard let screen = targetScreen else { return }
         let geometry = IslandGeometry.make(for: screen)
         if geometry != model.geometry { model.geometry = geometry }
-        panel.setFrame(geometry.windowFrame(open: model.state.isOpen), display: true)
+        panel.setFrame(geometry.windowFrame(for: model.state), display: true)
     }
 
     private func apply(_ state: IslandState) {
         shrinkTask?.cancel()
+        watchOutsideClicks(state == .pinned)
 
         if state == .pinned {
             // Pinning is an explicit click, so taking the keyboard (for Esc) is intended.
@@ -181,18 +209,31 @@ final class IslandWindowController {
             NSApp.deactivate()
         }
 
-        if state.isOpen {
-            panel.setFrame(model.geometry.windowFrame(open: true), display: true)
-            panel.contentView?.layoutSubtreeIfNeeded() // settle the collapsed island in the bigger window
+        let target = model.geometry.windowFrame(for: state)
+        if target.width >= panel.frame.width, target.height >= panel.frame.height {
+            panel.setFrame(target, display: true)
+            panel.contentView?.layoutSubtreeIfNeeded() // settle the current island in the bigger window
         } else {
-            // Keep the window large until the SwiftUI collapse animation has finished, then shrink it
+            // Keep the window large until the SwiftUI shrink animation has finished, then shrink it
             // so the empty area stops catching clicks.
             let delay = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : IslandModel.closeDuration
             shrinkTask = Task { [weak self] in
                 try? await Task.sleep(for: .seconds(delay))
-                guard let self, !Task.isCancelled, !self.model.state.isOpen else { return }
-                self.panel.setFrame(self.model.geometry.windowFrame(open: false), display: true)
+                guard let self, !Task.isCancelled, self.model.state == state else { return }
+                self.panel.setFrame(target, display: true)
             }
+        }
+    }
+
+    private func watchOutsideClicks(_ on: Bool) {
+        if on, outsideClickMonitor == nil {
+            // Global monitors see only clicks in other apps, so anything they report is outside the island.
+            outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+                MainActor.assumeIsolated { self?.model.dismiss() }
+            }
+        } else if !on, let monitor = outsideClickMonitor {
+            NSEvent.removeMonitor(monitor)
+            outsideClickMonitor = nil
         }
     }
 }

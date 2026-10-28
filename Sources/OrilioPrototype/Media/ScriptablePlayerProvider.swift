@@ -239,7 +239,9 @@ actor ScriptablePlayerProvider: MediaProvider {
             }
             switch permission {
             case .granted: status = .ready; await fetchState() // already allowed, so no prompt
-            case .denied: status = .permissionDenied; publish()
+            // Re-check a denial too: the user may have allowed Orilio in System Settings since.
+            // A script never prompts once a decision exists, so this stays silent either way.
+            case .denied: status = .permissionDenied; await fetchState()
             case .undetermined: status = .ready; publish() // wait for a notification; never prompt unasked
             }
         }
@@ -276,6 +278,7 @@ actor ScriptablePlayerProvider: MediaProvider {
     private func setPermission(_ new: AutomationPermission) {
         permission = new
         UserDefaults.standard.set(new == .granted, forKey: grantedKey)
+        if new == .granted, status == .permissionDenied { status = .ready } // access was given back
     }
 
     private func apply(_ new: PlayerInfo, publishing: Bool = true) {

@@ -14,6 +14,10 @@ enum PlaybackState: Sendable, Equatable {
     case playing, paused, stopped
 }
 
+enum MediaKind: Sendable, Equatable {
+    case music, video
+}
+
 enum MediaCommand: Sendable, Equatable {
     case play, pause, togglePlayPause, next, previous
     case seek(to: TimeInterval)
@@ -53,6 +57,12 @@ struct MediaSessionSnapshot: Sendable, Equatable, Identifiable {
     var updatedAt: Date
     /// Sources that can vanish silently (browser tabs) set this; it is extended on every heartbeat.
     var expiresAt: Date?
+    /// Playing was requested but the player is still loading. Only sources that can tell set it.
+    var isBuffering = false
+    var kind = MediaKind.music
+    /// False for a browser tab the user can't currently see. A background video never takes the
+    /// island from music that is playing.
+    var isForeground = true
 
     var id: String { sourceID }
 

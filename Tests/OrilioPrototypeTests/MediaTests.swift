@@ -70,19 +70,29 @@ struct SourceResolutionTests {
     }
 
     @Test func briefPauseDoesNotHandOverToAnotherSource() {
+        // "a" was playing (activated earlier) and paused at t0, between two tracks.
         let sessions = [session("a", .paused), session("b", .playing)]
+        let activated = ["a": t0.addingTimeInterval(-60), "b": t0.addingTimeInterval(-30)]
         let changed = ["a": t0]
-        #expect(resolve(sessions, previous: "a", changed: changed, now: t0.addingTimeInterval(0.5)) == "a")
-        #expect(resolve(sessions, previous: "a", changed: changed,
+        #expect(resolve(sessions, previous: "a", activated: activated, changed: changed,
+                        now: t0.addingTimeInterval(0.5)) == "a")
+        #expect(resolve(sessions, previous: "a", activated: activated, changed: changed,
                         now: t0.addingTimeInterval(MediaSourceResolver.switchGrace + 0.1)) == "b")
     }
 
-    @Test func nothingPlayingKeepsPreviousOrNewestPaused() {
-        let older = session("a", .paused, updated: t0)
-        let newer = session("b", .paused, updated: t0.addingTimeInterval(10))
-        #expect(resolve([older, newer], previous: "a") == "a")
-        #expect(resolve([older, newer]) == "b")
-        #expect(resolve([older, newer], showPaused: false) == nil)
+    @Test func nothingPlayingKeepsPreviousOrMostRecentlyPaused() {
+        let a = session("a", .paused), b = session("b", .paused)
+        let changed = ["a": t0, "b": t0.addingTimeInterval(10)]
+        #expect(resolve([a, b], previous: "a", changed: changed) == "a")
+        #expect(resolve([a, b], changed: changed) == "b")
+        #expect(resolve([a, b], changed: changed, showPaused: false) == nil)
+    }
+
+    @Test func refreshedMetadataDoesNotWinOverARecentPause() {
+        // The tab re-reported a moment ago (heartbeat), but the app was the one paused last.
+        let tab = session("tab", .paused, updated: t0.addingTimeInterval(60))
+        let app = session("app", .paused, updated: t0)
+        #expect(resolve([tab, app], changed: ["tab": t0, "app": t0.addingTimeInterval(30)]) == "app")
     }
 
     @Test func expiredSessionsAreIgnored() {

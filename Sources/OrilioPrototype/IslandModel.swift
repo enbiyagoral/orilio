@@ -3,8 +3,8 @@ import Observation
 
 enum IslandState: Equatable {
     case collapsed
-    case expanded // opened by hover; closes when the pointer leaves
-    case pinned   // opened by click; stays until Esc, close or unpin
+    case expanded // hover: a one-row preview; closes when the pointer leaves
+    case pinned   // click: the full controller; stays until Esc, close or unpin
 
     var isOpen: Bool { self != .collapsed }
 }
@@ -59,7 +59,8 @@ final class IslandModel {
         }
     }
 
-    func tapCollapsed() { set(.pinned) }
+    /// A click anywhere on the island (outside its buttons) opens the full controller.
+    func tap() { set(.pinned) }
     func togglePin() { set(state == .pinned ? .expanded : .pinned) }
     func dismiss() { set(.collapsed) }
 

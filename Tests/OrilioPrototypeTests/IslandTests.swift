@@ -6,7 +6,8 @@ import Testing
 struct IslandTests {
     @Test func clickPinsAndHoverExitKeepsItOpen() async throws {
         let model = IslandModel()
-        model.tapCollapsed()
+        model.isPointerBusy = { false } // independent of the real mouse during the run
+        model.tap()
         #expect(model.state == .pinned)
         model.hover(false)
         try await Task.sleep(for: IslandModel.closeDelay * 2)
@@ -17,6 +18,7 @@ struct IslandTests {
 
     @Test func hoverOpensAfterDelayAndQuickExitCancels() async throws {
         let model = IslandModel()
+        model.isPointerBusy = { false } // independent of the real mouse during the run
         model.hover(true)
         model.hover(false) // pointer just passed over
         try await Task.sleep(for: IslandModel.openDelay * 2)
@@ -32,6 +34,7 @@ struct IslandTests {
 
     @Test func hoverDisabledNeverOpens() async throws {
         let model = IslandModel()
+        model.isPointerBusy = { false } // independent of the real mouse during the run
         model.hoverOpens = false
         model.hover(true)
         try await Task.sleep(for: IslandModel.openDelay * 2)
@@ -45,9 +48,11 @@ struct IslandTests {
         #expect(g.hasNotch)
         #expect(g.notchWidth == 186)
         #expect(g.collapsed == CGSize(width: 186, height: 32))
-        let frame = g.windowFrame(open: false)
+        let frame = g.windowFrame(for: .collapsed)
         #expect(frame.minX == 662 && frame.maxY == 982)
-        #expect(g.windowFrame(open: true).midX == 755)
+        #expect(g.windowFrame(for: .pinned).midX == 755)
+        #expect(g.windowFrame(for: .expanded).midX == 755)
+        #expect(g.size(for: .expanded).height < g.size(for: .pinned).height) // hover never opens the full panel
     }
 
     @Test func noNotchFallsBackToPillOnSecondaryScreen() {
@@ -55,6 +60,6 @@ struct IslandTests {
                                     auxLeftWidth: nil, auxRightWidth: nil, menuBarHeight: 25)
         #expect(!g.hasNotch)
         #expect(g.collapsed == CGSize(width: IslandGeometry.pillWidth, height: 25))
-        #expect(g.windowFrame(open: false).midX == CGFloat(1512 + 1280))
+        #expect(g.windowFrame(for: .collapsed).midX == CGFloat(1512 + 1280))
     }
 }

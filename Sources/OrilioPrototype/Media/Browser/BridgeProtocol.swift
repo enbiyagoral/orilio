@@ -7,6 +7,14 @@ struct BridgeMessage: Codable, Equatable, Sendable {
     var type: String
     /// Which site adapter reported the session; see `BridgeProtocol.sites`.
     var site: String?
+    /// Random id of one running browser (kept for its session), so two Chromium browsers never share tab ids.
+    var browser: String?
+    /// "Google Chrome", "Brave", … sent with `hello`.
+    var browserName: String?
+    /// "music" or "video".
+    var kind: String?
+    /// Whether the tab is visible to the user.
+    var visible: Bool?
     var tabId: Int?
     var windowId: Int?
     var state: String?
@@ -18,6 +26,7 @@ struct BridgeMessage: Codable, Equatable, Sendable {
     var position: Double?
     var capabilities: [String]?
     var pwa: Bool?
+    var buffering: Bool?
     var id: String?
     var command: String?
     var ok: Bool?
@@ -45,7 +54,7 @@ enum BridgeProtocol {
     /// Sessions must be re-confirmed (the tab sends a heartbeat every 25 s) or they expire.
     static let sessionLifetime: TimeInterval = 60
     /// The sites the extension supports, by the adapter id it reports, with the name Orilio shows.
-    static let sites = ["youtube-music": "YouTube Music", "spotify": "Spotify", "soundcloud": "SoundCloud"]
+    static let sites = ["youtube-music": "YouTube Music", "youtube": "YouTube", "spotify": "Spotify", "soundcloud": "SoundCloud"]
     /// Cover art hosts of those sites (Google, Spotify, SoundCloud). Anything else is dropped.
     static let artworkHostSuffixes = ["googleusercontent.com", "ggpht.com", "ytimg.com",
                                       "scdn.co", "spotifycdn.com", "sndcdn.com"]
@@ -62,12 +71,21 @@ enum BridgeProtocol {
         }
     }
 
-    static func sourceID(tabId: Int) -> String { "chrome:tab:\(tabId)" }
+    /// Unique across browsers and stable while that browser runs.
+    static func sourceID(browser: String?, tabId: Int) -> String {
+        "chrome:\(validBrowserID(browser)):tab:\(tabId)"
+    }
+
+    static func validBrowserID(_ id: String?) -> String {
+        guard let id, (1...32).contains(id.count), id.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber) })
+        else { return "default" }
+        return id.lowercased()
+    }
 }
 
 extension BridgeMessage {
     /// A validated snapshot, or nil when the message is not a well-formed, playing-or-paused session.
-    func snapshot(providerID: String, receivedAt: Date) -> MediaSessionSnapshot? {
+    func snapshot(providerID: String, receivedAt: Date, browserName: String? = nil) -> MediaSessionSnapshot? {
         guard v == BridgeProtocol.version, type == "session", let tabId, tabId > 0,
               let siteName = BridgeProtocol.sites[site ?? "youtube-music"] else { return nil }
         let playback: PlaybackState
@@ -93,13 +111,16 @@ extension BridgeMessage {
         let validPosition = position.flatMap { $0.isFinite && $0 >= 0 ? min($0, validDuration ?? $0) : nil }
 
         return MediaSessionSnapshot(
-            sourceID: BridgeProtocol.sourceID(tabId: tabId), providerID: providerID,
-            sourceName: pwa == true ? siteName : "\(siteName) · Chrome",
+            sourceID: BridgeProtocol.sourceID(browser: browser, tabId: tabId), providerID: providerID,
+            sourceName: pwa == true ? siteName : "\(siteName) · \(Self.clean(browserName).map { String($0.prefix(40)) } ?? "Chrome")",
             title: title, artist: Self.clean(artist), album: Self.clean(album),
             artworkURL: Self.artworkURL(artwork),
             state: playback, duration: validDuration, position: validPosition, positionDate: receivedAt,
             capabilities: capabilities, updatedAt: receivedAt,
-            expiresAt: receivedAt.addingTimeInterval(BridgeProtocol.sessionLifetime))
+            expiresAt: receivedAt.addingTimeInterval(BridgeProtocol.sessionLifetime),
+            isBuffering: playback == .playing && buffering == true,
+            kind: kind == "video" ? .video : .music,
+            isForeground: visible ?? true)
     }
 
     static func clean(_ text: String?) -> String? {

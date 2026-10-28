@@ -2,10 +2,22 @@
 // The host is started by Chrome only while at least one music tab is connected,
 // so the service worker can sleep when there is nothing to report.
 
+importScripts("policy.js");
+
 const HOST = "com.deaconcornsoft.orilio";
 const PROTOCOL = 1;
 const PORT_NAME = "orilio-media";
-const ORIGINS = ["https://music.youtube.com", "https://open.spotify.com", "https://soundcloud.com"];
+const ORIGINS = ["https://music.youtube.com", "https://open.spotify.com", "https://soundcloud.com",
+                 "https://www.youtube.com", "https://youtube.com"];
+const BROWSER_NAME = globalThis.OrilioPolicy.browserName(navigator.userAgentData?.brands);
+
+// A random id for this running browser, kept for its session (survives worker restarts, not browser
+// restarts). Orilio uses it to keep tab ids of two Chromium browsers apart.
+let browserId = null;
+const ready = chrome.storage.session.get("browserId").then(async ({ browserId: stored }) => {
+  browserId = stored ?? crypto.randomUUID().replaceAll("-", "").slice(0, 16);
+  if (!stored) await chrome.storage.session.set({ browserId });
+});
 const MAX_NATIVE_RETRIES = 6;
 
 /** tabId -> { port, windowId, last } */
@@ -14,8 +26,9 @@ let native = null;
 let nativeRetries = 0;
 let nativeRetryTimer = null;
 
+// Messages wait for the browser id, and keep their order while they wait.
 function postNative(message) {
-  if (native) native.postMessage({ v: PROTOCOL, ...message });
+  ready.then(() => native?.postMessage({ v: PROTOCOL, browser: browserId, ...message }));
 }
 
 function connectNative() {
@@ -36,7 +49,7 @@ function connectNative() {
     native = null;
     scheduleNativeRetry();
   });
-  postNative({ type: "hello", version: chrome.runtime.getManifest().version });
+  postNative({ type: "hello", version: chrome.runtime.getManifest().version, browserName: BROWSER_NAME });
   for (const [tabId, entry] of tabs) if (entry.last) postNative({ ...entry.last, tabId, windowId: entry.windowId });
 }
 
@@ -124,6 +137,6 @@ chrome.tabs.onAttached.addListener((tabId, info) => {
 chrome.runtime.onInstalled.addListener(async () => {
   const open = await chrome.tabs.query({ url: ORIGINS.map((origin) => origin + "/*") });
   for (const tab of open) {
-    chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["content.js"] }).catch(() => {});
+    chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["policy.js", "content.js"] }).catch(() => {});
   }
 });

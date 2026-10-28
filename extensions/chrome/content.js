@@ -15,18 +15,15 @@
   const HEARTBEAT_MS = 25_000; // keeps the session alive in Orilio; changes are reported on events
   const MAX_RECONNECTS = 8;
 
+  const policy = globalThis.OrilioPolicy; // policy.js, loaded first
   const text = (root, selector) => root?.querySelector(selector)?.textContent?.trim() || null;
-  const clock = (value) => {
-    // "1:02:03" or "3:45" -> seconds
-    const parts = String(value ?? "").trim().split(":").map(Number);
-    if (parts.length < 2 || parts.some((n) => !Number.isFinite(n))) return null;
-    return parts.reduce((total, n) => total * 60 + n, 0);
-  };
+  const clock = policy.clock;
   const number = (value) => (Number.isFinite(Number.parseFloat(value)) ? Number.parseFloat(value) : null);
 
   const ADAPTERS = {
     "music.youtube.com": {
       site: "youtube-music",
+      kind: "music",
       root: () => document.querySelector("ytmusic-player-bar"),
       title: (r) => text(r, ".title"),
       // The byline reads "Artist • Album • 2021".
@@ -41,6 +38,7 @@
     },
     "open.spotify.com": {
       site: "spotify",
+      kind: "music",
       root: () => document.querySelector('[data-testid="now-playing-bar"]') ?? document.querySelector("footer"),
       title: (r) => text(r, '[data-testid="context-item-link"]'),
       artist: (r) => text(r, '[data-testid="context-item-info-artist"]'),
@@ -58,6 +56,7 @@
     },
     "soundcloud.com": {
       site: "soundcloud",
+      kind: "music",
       root: () => document.querySelector(".playControls"),
       title: (r) => r?.querySelector(".playbackSoundBadge__titleLink")?.getAttribute("title") || null,
       artist: (r) => text(r, ".playbackSoundBadge__lightLink"),
@@ -76,20 +75,42 @@
       buttons: { playPause: ".playControls__play", next: ".skipControl__next", previous: ".skipControl__previous" },
       watch: [".playbackSoundBadge__titleLink", ".playControls__play"],
     },
+    "www.youtube.com": {
+      site: "youtube",
+      kind: "video",
+      root: () => document.querySelector("#movie_player"),
+      title: () => text(document, "ytd-watch-metadata h1"),
+      artist: () => text(document, "ytd-watch-metadata ytd-channel-name a"),
+      album: () => null,
+      artwork: () => {
+        const id = new URLSearchParams(location.search).get("v");
+        return id && /^[\w-]{6,20}$/.test(id) ? `https://i.ytimg.com/vi/${id}/hqdefault.jpg` : null;
+      },
+      playing: () => null, // the <video> element answers this
+      position: () => null,
+      duration: () => null,
+      buttons: { playPause: ".ytp-play-button", next: ".ytp-next-button", previous: ".ytp-prev-button" },
+      watch: [], // YouTube's own navigation event and media events cover every change
+      events: ["yt-navigate-finish"],
+    },
   };
+  ADAPTERS["youtube.com"] = ADAPTERS["www.youtube.com"];
 
   const adapter = ADAPTERS[location.hostname];
   if (!adapter) return;
 
   let port = null;
   let reconnects = 0;
+  let reconnectTimer = null;
   let heartbeat = null;
   let changeTimer = null;
 
   /** The site's player element, if it is part of the page (some sites play detached audio). */
   function media() {
-    const candidates = [...document.querySelectorAll("video, audio")];
-    return candidates.find((m) => m.currentSrc || m.src) ?? null;
+    return policy.pickMedia([...document.querySelectorAll("video, audio")], {
+      acceptsMuted: policy.acceptsMutedMedia(adapter.site, location.pathname),
+      hasMetadata: Boolean(navigator.mediaSession?.metadata),
+    });
   }
 
   function button(name) {
@@ -113,6 +134,7 @@
   }
 
   function snapshot() {
+    if (policy.isIgnoredPage(adapter.site, location.pathname)) return { type: "session", site: adapter.site, state: "stopped" };
     const root = adapter.root();
     const element = media();
     const metadata = navigator.mediaSession?.metadata ?? null;
@@ -142,11 +164,19 @@
       position,
       capabilities,
       pwa: window.matchMedia("(display-mode: standalone)").matches,
+      buffering: Boolean(element && !element.paused && element.readyState < HTMLMediaElement.HAVE_FUTURE_DATA),
+      kind: adapter.kind,
+      visible: document.visibilityState === "visible",
     };
   }
 
   function report() {
-    if (!port) return;
+    if (!port) {
+      // Something happened while disconnected: try again now instead of waiting for a timer
+      // (and even after the retry budget ran out).
+      if (!reconnectTimer) connect();
+      return;
+    }
     try {
       port.postMessage(snapshot());
     } catch {
@@ -185,7 +215,9 @@
   }
 
   function connect() {
-    if (!chrome.runtime?.id) return; // extension was removed or reloaded; this copy is orphaned
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+    if (port || !chrome.runtime?.id) return; // connected already, or orphaned by an extension reload
     try {
       port = chrome.runtime.connect({ name: PORT_NAME });
     } catch {
@@ -209,8 +241,8 @@
 
   // The service worker can be stopped by Chrome; reconnecting wakes it again.
   function scheduleReconnect() {
-    if (reconnects >= MAX_RECONNECTS) return;
-    setTimeout(connect, Math.min(30_000, 500 * 2 ** reconnects++));
+    if (reconnects >= MAX_RECONNECTS || reconnectTimer) return;
+    reconnectTimer = setTimeout(connect, Math.min(30_000, 500 * 2 ** reconnects++));
   }
 
   function reportSoon() {
@@ -220,15 +252,20 @@
 
   // Media events don't bubble, but they can be captured at the document,
   // which also covers the element being replaced.
-  for (const type of ["play", "playing", "pause", "ended", "seeked", "durationchange", "loadedmetadata", "emptied", "ratechange"]) {
+  for (const type of ["play", "playing", "pause", "ended", "seeked", "durationchange", "loadedmetadata", "emptied",
+                      "ratechange", "waiting", "canplay", "stalled", "volumechange"]) {
     document.addEventListener(type, report, true);
   }
+  // Tab shown or hidden: a background video must not take the island from music.
+  document.addEventListener("visibilitychange", report);
+  for (const type of adapter.events ?? []) document.addEventListener(type, reportSoon);
 
   // Changes without a media event (track swaps, detached audio): watch only the few nodes that
   // carry title and play state. Time and progress nodes change every second and are left alone.
   const observer = new MutationObserver(reportSoon);
   let watchAttempts = 0;
   const watch = () => {
+    if (adapter.watch.length === 0) return report();
     const root = adapter.root();
     const nodes = root ? adapter.watch.map((s) => root.querySelector(s)).filter(Boolean) : [];
     if (nodes.length === 0) {
