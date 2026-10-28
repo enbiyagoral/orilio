@@ -252,7 +252,7 @@ private struct ExpandedContent: View {
             ZStack {
                 switch model.tab {
                 case .music: MusicCard(media: model.media)
-                case .shelf: ShelfView(shelf: model.shelf)
+                case .shelf: ShelfView(shelf: model.shelf, draggedOut: { model.dismiss() })
                 }
             }
             .id(model.tab)

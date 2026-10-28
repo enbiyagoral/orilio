@@ -1,0 +1,239 @@
+import AppKit
+import Foundation
+import Testing
+@testable import OrilioPrototype
+
+/// A scratch folder per test, removed afterwards.
+private final class Sandbox {
+    let root = FileManager.default.temporaryDirectory.appending(path: "orilio-store-\(UUID().uuidString)")
+    init() { try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true) }
+    deinit { try? FileManager.default.removeItem(at: root) }
+
+    var storeDirectory: URL { root.appending(path: "Store") }
+    var receivedDirectory: URL { root.appending(path: "Store/Received") }
+
+    func file(_ name: String, in folder: String = "Files", bytes: Int = 64) -> URL {
+        let dir = root.appending(path: folder, directoryHint: .isDirectory)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let url = dir.appending(path: name)
+        FileManager.default.createFile(atPath: url.path, contents: Data(count: bytes))
+        return url
+    }
+
+    @MainActor func shelf() -> ShelfModel {
+        ShelfModel(receivedDirectory: receivedDirectory, store: ShelfStore(directory: storeDirectory))
+    }
+}
+
+@MainActor
+private func settle(until done: () -> Bool) async {
+    for _ in 0..<4_000 where !done() { await Task.yield() }
+}
+
+@MainActor
+private func waitForSave(_ store: URL) async throws {
+    let file = store.appending(path: "shelf.json")
+    for _ in 0..<100 where !FileManager.default.fileExists(atPath: file.path) {
+        try await Task.sleep(for: .milliseconds(50))
+    }
+}
+
+struct ShelfStoreTests {
+    @Test func savedItemsComeBackWithTheirDetails() async throws {
+        let box = Sandbox()
+        let url = box.file("Report.pdf", bytes: 4_096)
+        let item = try #require(ShelfItem.load(url, origin: .reference))
+        let store = ShelfStore(directory: box.storeDirectory)
+        try await store.save([item])
+
+        let restored = await store.load()
+        #expect(restored.count == 1)
+        let back = try #require(restored.first)
+        #expect(back.id == item.id)
+        #expect(back.name == "Report.pdf")
+        #expect(back.size == 4_096)
+        #expect(back.origin == .reference)
+        #expect(back.isAvailable)
+        #expect(back.url.resolvingSymlinksInPath() == url.resolvingSymlinksInPath())
+    }
+
+    @Test func aMovedFileIsFollowedByItsBookmark() async throws {
+        let box = Sandbox()
+        let url = box.file("Notes.txt")
+        let item = try #require(ShelfItem.load(url, origin: .reference))
+        let moved = box.root.appending(path: "Elsewhere/Renamed.txt")
+        try FileManager.default.createDirectory(at: moved.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try FileManager.default.moveItem(at: url, to: moved)
+
+        let found = ShelfStore.resolve(ShelfStore.record(item))
+        #expect(found.isAvailable)
+        #expect(found.url.resolvingSymlinksInPath().path == moved.resolvingSymlinksInPath().path)
+    }
+
+    @Test func deletedOrTrashedFilesAreUnavailableNotErrors() throws {
+        let box = Sandbox()
+        let url = box.file("gone.txt")
+        let item = try #require(ShelfItem.load(url, origin: .reference))
+        try FileManager.default.removeItem(at: url)
+        #expect(!ShelfStore.resolve(ShelfStore.record(item)).isAvailable)
+
+        let trashed = box.file("old.txt", in: ".Trash")
+        #expect(!ShelfStore.isAvailable(trashed))
+    }
+
+    @Test func aMissingOrCorruptFileLoadsAnEmptyShelf() async throws {
+        let box = Sandbox()
+        let store = ShelfStore(directory: box.storeDirectory)
+        #expect(await store.load().isEmpty)
+        try FileManager.default.createDirectory(at: box.storeDirectory, withIntermediateDirectories: true)
+        try Data("not json".utf8).write(to: box.storeDirectory.appending(path: "shelf.json"))
+        #expect(await store.load().isEmpty)
+    }
+}
+
+@MainActor
+struct ShelfPersistenceTests {
+    @Test func theShelfSurvivesARestart() async throws {
+        let box = Sandbox()
+        let first = box.shelf()
+        first.accept(.files([box.file("a.txt"), box.file("b.txt")]), sequence: 1)
+        await settle { first.items.count == 2 }
+        try await waitForSave(box.storeDirectory)
+
+        let relaunched = box.shelf()
+        await relaunched.restore()
+        #expect(Set(relaunched.items.map(\.name)) == ["a.txt", "b.txt"])
+        #expect(relaunched.items.map(\.id) == first.items.map(\.id))
+    }
+
+    @Test func removingNeverDeletesTheUsersFile() async throws {
+        let box = Sandbox()
+        let shelf = box.shelf()
+        let mine = box.file("mine.txt")
+        shelf.accept(.files([mine]), sequence: 1)
+        await settle { !shelf.items.isEmpty }
+        shelf.remove(shelf.items)
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(FileManager.default.fileExists(atPath: mine.path))
+    }
+
+    @Test func removingAReceivedCopyDeletesOnlyOriliosCopy() async throws {
+        let box = Sandbox()
+        let shelf = box.shelf()
+        let image = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 2, pixelsHigh: 2, bitsPerSample: 8,
+                                     samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
+                                     bytesPerRow: 0, bitsPerPixel: 0)!.representation(using: .png, properties: [:])!
+        shelf.accept(.image(image), sequence: 1)
+        await settle { !shelf.items.isEmpty }
+        let copy = try #require(shelf.items.first)
+        #expect(copy.origin == .received)
+        shelf.remove(copy)
+        for _ in 0..<40 where FileManager.default.fileExists(atPath: copy.url.path) {
+            try await Task.sleep(for: .milliseconds(25))
+        }
+        #expect(!FileManager.default.fileExists(atPath: copy.url.path))
+    }
+
+    @Test func aReceivedItemOutsideOriliosFolderIsNeverDeleted() async throws {
+        let box = Sandbox()
+        let shelf = box.shelf()
+        // A saved record claiming to be received, but pointing at a user's file.
+        let user = box.file("user.png")
+        var forged = try #require(ShelfItem.load(user, origin: .received))
+        forged.isAvailable = true
+        try await ShelfStore(directory: box.storeDirectory).save([forged])
+        await shelf.restore()
+        shelf.remove(shelf.items)
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(FileManager.default.fileExists(atPath: user.path))
+    }
+
+    @Test func availabilityIsRecheckedWhenTheShelfIsShown() async throws {
+        let box = Sandbox()
+        let shelf = box.shelf()
+        let url = box.file("soon-gone.txt")
+        shelf.accept(.files([url]), sequence: 1)
+        await settle { !shelf.items.isEmpty }
+        try FileManager.default.removeItem(at: url)
+        shelf.refreshAvailability()
+        await settle { shelf.items.first?.isAvailable == false }
+        #expect(shelf.items.first?.isAvailable == false)
+    }
+}
+
+@MainActor
+struct ShelfSelectionTests {
+    @Test func selectionDecidesWhatAnActionAppliesTo() async {
+        let box = Sandbox()
+        let shelf = box.shelf()
+        shelf.accept(.files([box.file("1"), box.file("2"), box.file("3")]), sequence: 1)
+        await settle { shelf.items.count == 3 }
+        let (one, two, three) = (shelf.items[0], shelf.items[1], shelf.items[2])
+
+        shelf.select(one.id, extending: false)
+        shelf.select(two.id, extending: true)
+        #expect(Set(shelf.targets(for: one).map(\.id)) == [one.id, two.id]) // drag a selected tile: all selected
+        #expect(shelf.targets(for: three).map(\.id) == [three.id])         // an unselected tile: only itself
+        shelf.select(two.id, extending: true)
+        #expect(shelf.selection == [one.id])
+        shelf.remove(one)
+        #expect(shelf.selection.isEmpty)
+    }
+
+    @Test func copyPutsFileURLsOnThePasteboard() async throws {
+        let box = Sandbox()
+        let shelf = box.shelf()
+        let url = box.file("copy-me.txt")
+        shelf.accept(.files([url]), sequence: 1)
+        await settle { !shelf.items.isEmpty }
+        let pasteboard = NSPasteboard(name: .init("orilio-test-\(UUID().uuidString)"))
+        defer { pasteboard.releaseGlobally() }
+        shelf.copy(shelf.items, to: pasteboard)
+        let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL]
+        #expect(urls?.map(\.standardizedFileURL) == [url.standardizedFileURL])
+    }
+}
+
+@MainActor
+struct ShelfKeyboardTests {
+    @Test func keysDoNothingWithoutASelection() async {
+        let box = Sandbox()
+        let shelf = box.shelf()
+        shelf.accept(.files([box.file("a")]), sequence: 1)
+        await settle { !shelf.items.isEmpty }
+        for (code, command) in [(UInt16(49), false), (51, false), (8, true)] {
+            #expect(shelf.keyAction(keyCode: code, command: command) == nil)
+            #expect(!shelf.handleKey(keyCode: code, command: command))
+        }
+        #expect(shelf.items.count == 1)
+    }
+
+    @Test func eachKeyMapsToExactlyOneAction() async {
+        let box = Sandbox()
+        let shelf = box.shelf()
+        shelf.accept(.files([box.file("a")]), sequence: 1)
+        await settle { !shelf.items.isEmpty }
+        shelf.select(shelf.items[0].id, extending: false)
+        // Space previews; it must never remove anything (regression: a focused hidden button once did).
+        #expect(shelf.keyAction(keyCode: 49, command: false) == .quickLook)
+        #expect(shelf.keyAction(keyCode: 51, command: false) == .remove)
+        #expect(shelf.keyAction(keyCode: 117, command: false) == .remove)
+        #expect(shelf.keyAction(keyCode: 8, command: true) == .copy)
+        #expect(shelf.keyAction(keyCode: 8, command: false) == nil) // a plain "c"
+        #expect(shelf.keyAction(keyCode: 49, command: true) == nil) // ⌘Space belongs to Spotlight
+    }
+
+    @Test func deleteRemovesOnlyTheSelectionAndKeepsTheFiles() async throws {
+        let box = Sandbox()
+        let shelf = box.shelf()
+        let keep = box.file("keep"), drop = box.file("drop")
+        shelf.accept(.files([keep, drop]), sequence: 1)
+        await settle { shelf.items.count == 2 }
+        let target = try #require(shelf.items.first { $0.name == "drop" })
+        shelf.select(target.id, extending: false)
+        #expect(shelf.handleKey(keyCode: 51, command: false))
+        #expect(shelf.items.map(\.name) == ["keep"])
+        try await Task.sleep(for: .milliseconds(150))
+        #expect(FileManager.default.fileExists(atPath: drop.path))
+    }
+}

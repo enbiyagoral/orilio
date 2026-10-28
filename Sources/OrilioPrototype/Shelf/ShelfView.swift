@@ -34,6 +34,8 @@ struct ShelfView: View {
     }
 
     let shelf: ShelfModel
+    /// Called after items were dragged out and received somewhere: the island can step aside.
+    var draggedOut: () -> Void = {}
     @State private var section = Section.files
     @Namespace private var sections
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -57,16 +59,19 @@ struct ShelfView: View {
                 }
             }
             switch section {
-            case .files: FilesStrip(shelf: shelf)
+            case .files: FilesStrip(shelf: shelf, draggedOut: draggedOut)
             case .screenshots: ScreenshotsPlaceholder()
             }
         }
         .animation(.easeInOut(duration: 0.2), value: shelf.problem)
+        // Once each time the shelf is shown: files may have moved or been deleted meanwhile.
+        .task { shelf.refreshAvailability() }
     }
 }
 
 private struct FilesStrip: View {
     let shelf: ShelfModel
+    let draggedOut: () -> Void
 
     var body: some View {
         if shelf.items.isEmpty && shelf.pending.isEmpty {
@@ -76,7 +81,7 @@ private struct FilesStrip: View {
                 LazyHStack(spacing: 8) {
                     ForEach(shelf.pending) { PendingTile(pending: $0) }
                     ForEach(shelf.items) { item in
-                        ShelfTile(item: item) { shelf.remove(item) }
+                        ShelfTile(item: item, shelf: shelf, draggedOut: draggedOut)
                             .transition(.scale(scale: 0.9).combined(with: .opacity))
                     }
                 }
@@ -89,29 +94,38 @@ private struct FilesStrip: View {
 
 private struct ShelfTile: View {
     let item: ShelfItem
-    let remove: () -> Void
+    let shelf: ShelfModel
+    let draggedOut: () -> Void
     @State private var hovering = false
 
     var body: some View {
-        VStack(spacing: 3) {
-            Image(nsImage: NSWorkspace.shared.icon(forFile: item.url.path))
-                .resizable()
-                .frame(width: 40, height: 40)
-            Text(item.name)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.white)
-                .lineLimit(1)
-                .truncationMode(.middle)
-            Text(detail)
-                .font(.system(size: 9))
-                .foregroundStyle(.white.opacity(Metrics.secondaryText))
-                .lineLimit(1)
-        }
-        .frame(width: 78, height: 80)
-        .background(.white.opacity(hovering ? 0.08 : 0), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .overlay(alignment: .topTrailing) {
+        let selected = shelf.selection.contains(item.id)
+        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+        ZStack(alignment: .topTrailing) {
+            VStack(spacing: 3) {
+                Image(nsImage: NSWorkspace.shared.icon(forFile: item.url.path))
+                    .resizable()
+                    .frame(width: 40, height: 40)
+                    .saturation(item.isAvailable ? 1 : 0)
+                    .opacity(item.isAvailable ? 1 : 0.4)
+                Text(item.name)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.white.opacity(item.isAvailable ? 1 : 0.5))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text(detail)
+                    .font(.system(size: 9, weight: item.isAvailable ? .regular : .semibold))
+                    .foregroundStyle(item.isAvailable ? .white.opacity(Metrics.secondaryText) : .orange)
+                    .lineLimit(1)
+            }
+            .frame(width: 78, height: 80)
+            .background(selected ? mint.opacity(0.16) : .white.opacity(hovering ? 0.08 : 0), in: shape)
+            .overlay(shape.strokeBorder(selected ? mint.opacity(0.7) : .clear, lineWidth: 1))
+            // Clicks, double-clicks, the context menu and dragging out are handled in AppKit underneath.
+            .overlay { ShelfTileInteraction(item: item, shelf: shelf) { received in if received { draggedOut() } } }
+
             if hovering {
-                Button(action: remove) {
+                Button { shelf.remove(item) } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 13))
                         .symbolRenderingMode(.palette)
@@ -124,24 +138,22 @@ private struct ShelfTile: View {
                 .transition(.opacity)
             }
         }
-        .contentShape(Rectangle())
         .onHover { hovering = $0 }
         .animation(.easeOut(duration: 0.12), value: hovering)
-        .onTapGesture(count: 2) { NSWorkspace.shared.open(item.url) }
-        .contextMenu {
-            Button("Open") { NSWorkspace.shared.open(item.url) }
-            Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([item.url]) }
-            Divider()
-            Button("Remove from Shelf", action: remove) // never deletes the file
-        }
-        .help(item.url.path)
+        .animation(.easeOut(duration: 0.12), value: selected)
+        .help(item.isAvailable ? item.url.path : "Missing: \(item.url.path)")
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(item.name), \(detail)")
-        .accessibilityAction(named: "Open") { NSWorkspace.shared.open(item.url) }
-        .accessibilityAction(named: "Remove from Shelf", remove)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+        .accessibilityAction { shelf.select(item.id, extending: false) }
+        .accessibilityAction(named: "Open") { shelf.open([item]) }
+        .accessibilityAction(named: "Quick Look") { QuickLook.show([item]) }
+        .accessibilityAction(named: "Show in Finder") { shelf.reveal([item]) }
+        .accessibilityAction(named: "Remove from Shelf") { shelf.remove(item) }
     }
 
     private var detail: String {
+        if !item.isAvailable { return "Missing" }
         if item.isFolder { return "Folder" }
         return item.size.map { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) }
             ?? item.contentType?.localizedDescription ?? ""
