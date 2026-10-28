@@ -16,10 +16,20 @@ enum ShelfSection: String, CaseIterable, Identifiable {
     var id: Self { self }
 }
 
+/// The island's modules, in the order of the tab bar (the M3 hub design's order).
 enum IslandTab: String, CaseIterable, Identifiable {
-    case music = "Music"
+    case calendar = "Calendar"
+    case music = "Now Playing"
     case shelf = "Shelf"
     var id: Self { self }
+
+    var symbol: String {
+        switch self {
+        case .calendar: "calendar"
+        case .music: "music.note"
+        case .shelf: "tray"
+        }
+    }
 }
 
 enum SettingsKeys {
@@ -57,6 +67,7 @@ final class IslandModel {
     let media: MediaCoordinator
     let shelf: ShelfModel
     let library: ScreenshotLibrary
+    let calendar: CalendarModule
     /// Whether the drag over the island carries something the shelf can take.
     private(set) var dropIsValid = true
     /// Where a drop will go: the screenshot library if it is what's on screen, else the File Shelf.
@@ -64,13 +75,25 @@ final class IslandModel {
 
     init(providers: [any MediaProvider] = [], shelf: ShelfModel = ShelfModel(),
          library: ScreenshotLibrary = ScreenshotLibrary(store: ScreenshotStore(
-             directory: FileManager.default.temporaryDirectory.appending(path: "orilio-unused-library")))) {
+             directory: FileManager.default.temporaryDirectory.appending(path: "orilio-unused-library"))),
+         calendar: CalendarModule = CalendarModule(source: NoCalendarSource(), reminders: NoReminders(),
+                                                   defaults: UserDefaults(suiteName: "orilio.unused") ?? .standard)) {
         let showDemo = UserDefaults.standard.bool(forKey: SettingsKeys.showDemoSource)
         demo = DemoMediaProvider(enabled: showDemo)
         media = MediaCoordinator(providers: providers + [demo])
         self.shelf = shelf
         self.library = library
+        self.calendar = calendar
     }
+
+    /// A meeting about to start, for the collapsed island (only when Calendar is on and readable).
+    var meetingSoon: CalendarEvent? {
+        guard calendar.status == .ready else { return nil }
+        return calendar.dayNow().soon()
+    }
+
+    /// Wider than the notch only while something live is shown (the design's 412 pt meeting state).
+    var liveCollapsedWidth: CGFloat? { meetingSoon == nil ? nil : IslandGeometry.meetingWidth }
 
     /// Same state, new size (the Screenshots grid wants more room): let the window follow.
     private func relayout() {

@@ -265,10 +265,11 @@ struct ScreenshotIslandTests {
         var g = IslandGeometry.make(screenFrame: CGRect(x: 0, y: 0, width: 1512, height: 982), safeAreaTop: 32,
                                     auxLeftWidth: 662, auxRightWidth: 664, menuBarHeight: 32)
         g.usableHeight = 950
-        #expect(g.size(for: .pinned, tall: true).height == 32 + IslandGeometry.tallHeight)
-        g.usableHeight = 260 // a small display
-        #expect(g.size(for: .pinned, tall: true).height <= 260 + 32 - IslandGeometry.shadowMargin * 2 + 0.5)
-        #expect(g.size(for: .pinned, tall: true).height >= g.full.height) // never smaller than the normal panel
+        #expect(g.size(for: .pinned, tall: true).height == IslandGeometry.tallHeight)
+        g.usableHeight = 330 // a small display: capped by the screen…
+        #expect(g.size(for: .pinned, tall: true).height == 330 + 32 - IslandGeometry.shadowMargin * 2)
+        g.usableHeight = 200 // …but never smaller than the normal panel
+        #expect(g.size(for: .pinned, tall: true).height == g.full.height)
     }
 }
 

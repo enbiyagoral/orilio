@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 /// Orilio's accent: a neon green that stays readable as text and controls on the black island.
-let mint = Color(red: 0.22, green: 1.0, blue: 0.55)
+let mint = Color(red: 0.169, green: 1.0, blue: 0.722) // #2BFFB8, the M3 hub design's accent
 private let coverGradient = LinearGradient(
     colors: [Color(red: 0.96, green: 0.78, blue: 0.68), Color(red: 0.96, green: 0.55, blue: 0.6), Color(red: 0.4, green: 0.27, blue: 0.56)],
     startPoint: .topLeading, endPoint: .bottomTrailing)
@@ -11,7 +11,7 @@ private let coverGradient = LinearGradient(
 enum Metrics {
     static let padding: CGFloat = 18
     static let innerRadius: CGFloat = 14
-    static let openRadius: CGFloat = padding + innerRadius
+    static let openRadius: CGFloat = 36 // the design's panel radius
     static let previewPadding: CGFloat = 12
     static let previewInnerRadius: CGFloat = 10
     static let previewRadius: CGFloat = previewPadding + previewInnerRadius
@@ -73,7 +73,7 @@ struct IslandView: View {
         let geometry = model.geometry
         let state = model.state
         let open = state.isOpen
-        let size = geometry.size(for: state, tall: model.wantsTallPanel)
+        let size = geometry.size(for: state, tall: model.wantsTallPanel, collapsedWidth: model.liveCollapsedWidth)
         let ear = open ? IslandGeometry.earRadius : 0
         let radius = switch state {
         case .collapsed: Metrics.collapsedRadius
@@ -85,13 +85,14 @@ struct IslandView: View {
         ZStack(alignment: .top) {
             shape
                 .fill(.black)
-                .shadow(color: .black.opacity(open ? 0.45 : 0), radius: 14, y: 8)
+                // The design's 0 24 60 rgba(0,0,0,.55), kept inside the window's shadow margin.
+                .shadow(color: .black.opacity(open ? 0.55 : 0), radius: 18, y: 14)
 
             ZStack(alignment: .top) {
                 switch state {
                 case .pinned:
+                    // The header shares the notch's row, so content starts at the very top.
                     ExpandedContent(model: model)
-                        .padding(.top, geometry.topInset)
                         .padding(.horizontal, ear)
                         .transition(contentTransition)
                 case .expanded:
@@ -105,7 +106,10 @@ struct IslandView: View {
                         .padding(.horizontal, ear)
                         .transition(contentTransition)
                 case .collapsed:
-                    if !geometry.hasNotch {
+                    if let meeting = model.meetingSoon {
+                        TimelineView(.everyMinute) { context in MeetingPill(event: meeting, now: context.date) }
+                            .transition(.opacity.animation(.easeOut(duration: 0.15)))
+                    } else if !geometry.hasNotch {
                         CompactPill(media: model.media)
                             .transition(.opacity.animation(.easeOut(duration: 0.15)))
                     }
@@ -222,35 +226,32 @@ private struct PreviewContent: View {
 
 private struct ExpandedContent: View {
     @Bindable var model: IslandModel
-    @Namespace private var tabs
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        VStack(spacing: 14) {
-            HStack(spacing: 6) {
-                Text("ORILIO")
-                    .font(.system(size: 10, weight: .heavy))
-                    .tracking(1.4)
-                    .foregroundStyle(.white.opacity(Metrics.secondaryText))
-                Spacer()
+        VStack(spacing: 0) {
+            // 38 pt header: tabs left of the notch, pin and close right of it (M3 hub design).
+            HStack(spacing: 2) {
                 HStack(spacing: 2) {
                     ForEach(IslandTab.allCases) { tab in
-                        Button(tab.rawValue) {
-                            withAnimation(reduceMotion ? nil : .spring(duration: 0.35, bounce: 0.15)) { model.tab = tab }
+                        ModuleTab(tab: tab, selected: model.tab == tab, live: isLive(tab)) {
+                            withAnimation(reduceMotion ? nil : .spring(duration: 0.3, bounce: 0.1)) { model.tab = tab }
                         }
-                        .buttonStyle(TabButtonStyle(selected: model.tab == tab, namespace: tabs))
                     }
                 }
-                .padding(3)
-                .background(.white.opacity(0.07), in: Capsule())
+                .accessibilityElement(children: .contain)
+                .accessibilityLabel("Modules")
                 Spacer()
-                IconButton(symbol: model.state == .pinned ? "pin.fill" : "pin",
-                           label: model.state == .pinned ? "Unpin" : "Keep open") { model.togglePin() }
-                IconButton(symbol: "xmark", label: "Close") { model.dismiss() }
+                HeaderButton(symbol: model.state == .pinned ? "pin.fill" : "pin", label: "Keep island open",
+                             active: model.state == .pinned) { model.togglePin() }
+                HeaderButton(symbol: "xmark", label: "Close island (Esc)", active: false) { model.dismiss() }
             }
+            .padding(.horizontal, 14)
+            .frame(height: max(IslandGeometry.headerHeight, model.geometry.topInset))
 
             ZStack {
                 switch model.tab {
+                case .calendar: CalendarPanel(module: model.calendar)
                 case .music: MusicCard(media: model.media)
                 case .shelf: ShelfView(shelf: model.shelf, library: model.library, section: $model.shelfSection,
                                        draggedOut: { model.dismiss() })
@@ -258,11 +259,73 @@ private struct ExpandedContent: View {
             }
             .id(model.tab)
             .transition(.reveal(reduceMotion))
+            .padding(.top, 10)
+            .padding(.horizontal, 20)
+            .padding(.bottom, 20)
             .frame(maxHeight: .infinity, alignment: .top)
         }
-        .padding(.horizontal, Metrics.padding)
-        .padding(.top, 6)
-        .padding(.bottom, Metrics.padding)
+    }
+
+    /// A small dot on a tab that has something live while another tab is shown.
+    private func isLive(_ tab: IslandTab) -> Bool {
+        guard model.tab != tab else { return false }
+        switch tab {
+        case .calendar: return model.meetingSoon != nil
+        case .music: return model.media.current?.state == .playing
+        case .shelf: return false
+        }
+    }
+}
+
+/// A 32 × 28 icon tab (radius 9): white on a 14% plate when selected, 55% white otherwise.
+private struct ModuleTab: View {
+    let tab: IslandTab
+    let selected: Bool
+    let live: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: tab.symbol)
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(selected ? .white : .white.opacity(0.55))
+                .frame(width: 32, height: 28)
+                .background(selected ? Color.white.opacity(0.14) : .clear, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .overlay(alignment: .topTrailing) {
+                    if live {
+                        Circle().fill(mint).frame(width: 5, height: 5)
+                            .shadow(color: mint, radius: 3)
+                            .padding(.top, 4).padding(.trailing, 5)
+                    }
+                }
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(PressableStyle())
+        .help(tab.rawValue)
+        .accessibilityLabel(tab.rawValue)
+        .accessibilityAddTraits(selected ? [.isSelected, .isButton] : .isButton)
+    }
+}
+
+/// Pin and close: 30 × 28, radius 9; the pin turns accent-colored on a plate when active.
+private struct HeaderButton: View {
+    let symbol: String
+    let label: String
+    let active: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(active ? mint : .white.opacity(0.6))
+                .frame(width: 30, height: 28)
+                .background(active ? Color.white.opacity(0.14) : .clear, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(PressableStyle())
+        .help(label)
+        .accessibilityLabel(label)
     }
 }
 

@@ -58,9 +58,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let shelf = ShelfModel(store: ShelfStore())
         self.shelf = shelf
         Task { await shelf.restore() }
+        let calendar = CalendarModule()
+        AppModules.calendar = calendar
+        calendar.start() // reads state only if the user turned Calendar on before; never prompts here
         let library = ScreenshotLibrary()
         Task { await library.load() } // metadata only; thumbnails load as cells appear
-        controller = IslandWindowController(model: IslandModel(providers: providers, shelf: shelf, library: library))
+        controller = IslandWindowController(model: IslandModel(providers: providers, shelf: shelf, library: library,
+                                                               calendar: calendar))
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {

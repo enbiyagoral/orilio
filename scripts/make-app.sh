@@ -22,6 +22,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>LSMinimumSystemVersion</key><string>14.6</string>
   <key>LSUIElement</key><true/>
   <key>NSHighResolutionCapable</key><true/>
+  <key>NSCalendarsFullAccessUsageDescription</key><string>Orilio shows today's events and your next meeting in the notch. Calendar data stays on this Mac.</string>
+  <key>NSCalendarsUsageDescription</key><string>Orilio shows today's events and your next meeting in the notch. Calendar data stays on this Mac.</string>
   <key>NSAppleEventsUsageDescription</key><string>Orilio shows what is playing in Spotify and Music, and controls playback when you use its buttons.</string>
 </dict></plist>
 PLIST
