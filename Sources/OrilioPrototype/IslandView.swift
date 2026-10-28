@@ -197,6 +197,9 @@ struct IslandView: View {
         // The Screenshots grid makes the open panel taller without a state change: grow and shrink
         // the same way (the window keeps its larger size until the shrink has finished).
         .animation(shapeAnimation(collapsing: !model.showsTallPanel), value: model.showsTallPanel)
+        // A module's own panel (the mirror, Quick Look, onboarding) resizes the same way; one spring
+        // that settles within the window's shrink delay, whichever way the size goes.
+        .animation(Theme.current.spring(duration: IslandModel.closeDuration, bounce: 0.12), value: model.shownCustomPanel)
         // Outside the animation on purpose: the window resizes instantly and the island must stay
         // pinned to the top edge, not glide from its old position.
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)

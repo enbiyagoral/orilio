@@ -464,6 +464,15 @@ final class IslandWindowController {
             panel.setFrame(target, display: true)
             panel.contentView?.layoutSubtreeIfNeeded() // settle the current island in the bigger window
         } else {
+            // Taller but narrower (or the reverse), as when the mirror opens: grow to hold both
+            // sizes now, so nothing is cut off while the shape animates.
+            let current = panel.frame
+            if target.width > current.width || target.height > current.height {
+                let width = max(current.width, target.width), height = max(current.height, target.height)
+                let x = ((model.geometry.centerX - width / 2) * model.geometry.scale).rounded() / model.geometry.scale
+                panel.setFrame(CGRect(x: x, y: model.geometry.screenTop - height, width: width, height: height), display: true)
+                panel.contentView?.layoutSubtreeIfNeeded()
+            }
             // Keep the window large until the SwiftUI shrink animation has finished, then shrink it
             // so the empty area stops catching clicks.
             let delay = Theme.current.reducesMotion ? 0 : IslandModel.closeDuration
