@@ -20,6 +20,7 @@ enum ShelfSection: String, CaseIterable, Identifiable {
 enum IslandTab: String, CaseIterable, Identifiable {
     case calendar = "Calendar"
     case clipboard = "Clipboard"
+    case notes = "Notes and Tasks"
     case music = "Now Playing"
     case shelf = "Shelf"
     var id: Self { self }
@@ -28,6 +29,7 @@ enum IslandTab: String, CaseIterable, Identifiable {
         switch self {
         case .calendar: "calendar"
         case .clipboard: "list.clipboard"
+        case .notes: "checklist"
         case .music: "music.note"
         case .shelf: "tray"
         }
@@ -59,6 +61,9 @@ final class IslandModel {
     }
     /// The screenshot grid gets a taller panel; everything else keeps the compact one.
     var wantsTallPanel: Bool { isTall(state) }
+    /// What the island draws. Trails `wantsTallPanel` by one turn when growing, so the window is
+    /// already tall when the shape starts to grow (see `relayout`).
+    private(set) var showsTallPanel = false
 
     func isTall(_ state: IslandState) -> Bool {
         state == .pinned && tab == .shelf && shelfSection == .screenshots
@@ -71,6 +76,7 @@ final class IslandModel {
     let library: ScreenshotLibrary
     let calendar: CalendarModule
     let clipboard: ClipboardModule
+    let notes: NotesModule
     /// Whether the drag over the island carries something the shelf can take.
     private(set) var dropIsValid = true
     /// Where a drop will go: the screenshot library if it is what's on screen, else the File Shelf.
@@ -83,7 +89,9 @@ final class IslandModel {
                                                    defaults: UserDefaults(suiteName: "orilio.unused") ?? .standard),
          clipboard: ClipboardModule = ClipboardModule(
              store: ClipboardStore(directory: FileManager.default.temporaryDirectory.appending(path: "orilio-unused-clipboard")),
-             defaults: UserDefaults(suiteName: "orilio.unused") ?? .standard)) {
+             defaults: UserDefaults(suiteName: "orilio.unused") ?? .standard),
+         notes: NotesModule = NotesModule(store: NotesStore(
+             directory: FileManager.default.temporaryDirectory.appending(path: "orilio-unused-notes")))) {
         let showDemo = UserDefaults.standard.bool(forKey: SettingsKeys.showDemoSource)
         demo = DemoMediaProvider(enabled: showDemo)
         media = MediaCoordinator(providers: providers + [demo])
@@ -91,6 +99,7 @@ final class IslandModel {
         self.library = library
         self.calendar = calendar
         self.clipboard = clipboard
+        self.notes = notes
     }
 
     /// A meeting about to start, for the collapsed island (only when Calendar is on and readable).
@@ -103,8 +112,22 @@ final class IslandModel {
     var liveCollapsedWidth: CGFloat? { meetingSoon == nil ? nil : IslandGeometry.meetingWidth }
 
     /// Same state, new size (the Screenshots grid wants more room): let the window follow.
+    /// Window first, shape second, as in `set`: if both changed in one update, SwiftUI would
+    /// animate the root view's size with the shape and the island would slide down inside the
+    /// taller window. Tabs and sections also change without `withAnimation` (their views animate
+    /// through `.animation(_:value:)`), so the window resize never runs inside an animated update.
     private func relayout() {
-        if state.isOpen { onWillChangeState?(state) }
+        guard state.isOpen else { return }
+        let tall = isTall(state)
+        onWillChangeState?(state) // grows the window now, or shrinks it after the animation
+        if tall, !showsTallPanel {
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.showsTallPanel = self.isTall(self.state)
+            }
+        } else {
+            showsTallPanel = tall
+        }
     }
 
     @ObservationIgnored var onWillChangeState: ((IslandState) -> Void)?
@@ -176,6 +199,7 @@ final class IslandModel {
         onWillChangeState?(new)
         if !state.isOpen, new.isOpen { media.refreshAll() }
         state = new
+        showsTallPanel = isTall(new)
     }
 
     private func schedule(_ target: IslandState, after delay: Duration) {

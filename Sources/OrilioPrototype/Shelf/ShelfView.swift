@@ -40,9 +40,7 @@ struct ShelfView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 2) {
                 ForEach(ShelfSection.allCases) { item in
-                    Button(title(for: item)) {
-                        withAnimation(reduceMotion ? nil : .spring(duration: 0.3, bounce: 0.1)) { section = item }
-                    }
+                    Button(title(for: item)) { section = item } // animated below, see IslandModel.relayout
                     .buttonStyle(TabButtonStyle(selected: section == item, namespace: sections))
                 }
                 Spacer(minLength: 8)
@@ -59,6 +57,7 @@ struct ShelfView: View {
             case .screenshots: ScreenshotsView(library: library)
             }
         }
+        .animation(reduceMotion ? nil : .spring(duration: 0.3, bounce: 0.1), value: section)
         .animation(.easeInOut(duration: 0.2), value: shelf.problem)
         .animation(.easeInOut(duration: 0.2), value: library.problem)
         // Once each time the shelf is shown: files may have moved or been deleted meanwhile.

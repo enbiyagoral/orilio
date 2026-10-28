@@ -73,7 +73,7 @@ struct IslandView: View {
         let geometry = model.geometry
         let state = model.state
         let open = state.isOpen
-        let size = geometry.size(for: state, tall: model.wantsTallPanel, collapsedWidth: model.liveCollapsedWidth)
+        let size = geometry.size(for: state, tall: model.showsTallPanel, collapsedWidth: model.liveCollapsedWidth)
         let ear = open ? IslandGeometry.earRadius : 0
         let radius = switch state {
         case .collapsed: Metrics.collapsedRadius
@@ -125,6 +125,9 @@ struct IslandView: View {
         .accessibilityLabel("Orilio island")
         .accessibilityAction(named: "Open controls") { model.tap() }
         .animation(shapeAnimation(collapsing: state == .collapsed), value: state)
+        // The Screenshots grid makes the open panel taller without a state change: grow and shrink
+        // the same way (the window keeps its larger size until the shrink has finished).
+        .animation(shapeAnimation(collapsing: !model.showsTallPanel), value: model.showsTallPanel)
         // Outside the animation on purpose: the window resizes instantly and the island must stay
         // pinned to the top edge, not glide from its old position.
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -234,9 +237,7 @@ private struct ExpandedContent: View {
             HStack(spacing: 2) {
                 HStack(spacing: 2) {
                     ForEach(IslandTab.allCases) { tab in
-                        ModuleTab(tab: tab, selected: model.tab == tab, live: isLive(tab)) {
-                            withAnimation(reduceMotion ? nil : .spring(duration: 0.3, bounce: 0.1)) { model.tab = tab }
-                        }
+                        ModuleTab(tab: tab, selected: model.tab == tab, live: isLive(tab)) { model.tab = tab }
                     }
                 }
                 .accessibilityElement(children: .contain)
@@ -253,6 +254,7 @@ private struct ExpandedContent: View {
                 switch model.tab {
                 case .calendar: CalendarPanel(module: model.calendar)
                 case .clipboard: ClipboardPanel(module: model.clipboard, library: model.library)
+                case .notes: NotesPanel(module: model.notes)
                 case .music: MusicCard(media: model.media)
                 case .shelf: ShelfView(shelf: model.shelf, library: model.library, section: $model.shelfSection,
                                        draggedOut: { model.dismiss() })
@@ -265,6 +267,7 @@ private struct ExpandedContent: View {
             .padding(.bottom, 20)
             .frame(maxHeight: .infinity, alignment: .top)
         }
+        .animation(reduceMotion ? nil : .spring(duration: 0.3, bounce: 0.1), value: model.tab)
     }
 
     /// A small dot on a tab that has something live while another tab is shown.
@@ -273,7 +276,7 @@ private struct ExpandedContent: View {
         switch tab {
         case .calendar: return model.meetingSoon != nil
         case .music: return model.media.current?.state == .playing
-        case .clipboard, .shelf: return false
+        case .clipboard, .notes, .shelf: return false
         }
     }
 }
