@@ -79,8 +79,46 @@ final class IslandModel {
     /// The mirror's panel as drawn; like `showsTallPanel`, it trails the window by a turn when growing.
     private(set) var shownMirrorPanel: CGSize?
 
-    /// The open island's size while it shows the mirror (the M4.1 design's card or mirror).
+    /// The first-run flow, while it is on screen.
+    private(set) var onboarding: OnboardingModel?
+    /// After the flow: the one-time "Orilio lives here now" hint under the notch.
+    private(set) var showsLivesHereHint = false
+    @ObservationIgnored private var hintTask: Task<Void, Never>?
+
+    /// Without a notch the onboarding panel floats 6 pt below the menu bar (the M5 no-notch design).
+    var onboardingFloats: Bool { onboarding != nil && !geometry.hasNotch }
+    static let floatingGap: CGFloat = 6
+
+    /// Shows the first-run flow in this island (first launch, or "Replay onboarding").
+    func startOnboarding(defaults: UserDefaults = .standard, loginStatus: LoginItem.Status = LoginItem.status) {
+        hintTask?.cancel()
+        showsLivesHereHint = false
+        onboarding = OnboardingModel(modules: modules, defaults: defaults, loginStatus: loginStatus)
+        if state == .pinned { relayout() } else { set(.pinned) } // pinned: the island takes the keyboard
+    }
+
+    /// Ends the flow with the current choices (Done, Esc, the close button) and shows the hint.
+    func finishOnboarding() {
+        guard let onboarding else { return }
+        onboarding.finish()
+        self.onboarding = nil
+        if !modules.isVisible(tab) { tab = modules.visible[0] }
+        set(.collapsed)
+        showsLivesHereHint = true
+        hintTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(6))
+            guard !Task.isCancelled else { return }
+            self?.showsLivesHereHint = false
+        }
+    }
+
+    /// The open island's size while it shows the mirror (the M4.1 design's card or mirror) or the
+    /// first-run flow (the M5 design's 760 × 480).
     func mirrorPanel(for state: IslandState) -> CGSize? {
+        if onboarding != nil, state.isOpen {
+            let size = OnboardingModel.panelSize
+            return onboardingFloats ? CGSize(width: size.width, height: size.height + geometry.topInset + Self.floatingGap) : size
+        }
         guard state.isOpen, state != .dropTarget, tab == .mirror else { return nil }
         if state == .expanded { return mirror.panelSize(scale: geometry.panelWidth / IslandGeometry.fullWidth, hoverCard: true) }
         return mirror.panelSize(scale: geometry.panelWidth / IslandGeometry.fullWidth)
@@ -232,6 +270,10 @@ final class IslandModel {
     func hover(_ inside: Bool) {
         pending?.cancel()
         pending = nil
+        if inside, showsLivesHereHint {
+            hintTask?.cancel()
+            showsLivesHereHint = false // the hint goes on the first hover
+        }
         if inside, state == .collapsed, hoverOpens {
             schedule(.expanded, after: Self.openDelay, choosingTab: true)
         } else if !inside, state == .expanded {
@@ -288,7 +330,10 @@ final class IslandModel {
         }
         set(state == .pinned ? .expanded : .pinned)
     }
-    func dismiss() { set(.collapsed) }
+    func dismiss() {
+        if onboarding != nil { return finishOnboarding() } // never a half state
+        set(.collapsed)
+    }
 
     // MARK: Dragging onto the island
 

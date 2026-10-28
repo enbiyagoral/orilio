@@ -218,6 +218,7 @@ final class IslandWindowController {
     private var outsideClickMonitor: Any?
     private var insideClickMonitor: Any?
     private var widthTask: Task<Void, Never>?
+    private var hint: NSPanel?
     /// Where the last outside press started, to tell a click from the start of a drag.
     private var outsidePress: NSPoint?
 
@@ -277,7 +278,7 @@ final class IslandWindowController {
         // Another app came forward (including the source the user just jumped to): put the controller away.
         observers.append(NotificationCenter.default.addObserver(forName: NSApplication.didResignActiveNotification,
                                                                 object: nil, queue: .main) { [weak model] _ in
-            MainActor.assumeIsolated { if model?.state == .pinned { model?.dismiss() } }
+            MainActor.assumeIsolated { if model?.state == .pinned, model?.onboarding == nil { model?.dismiss() } }
         })
 
         reposition()
@@ -410,9 +411,10 @@ final class IslandWindowController {
 
     /// The collapsed island widens for a live meeting and narrows again; follow it without a timer.
     private func followLiveWidth() {
-        withObservationTracking { _ = (model.liveCollapsedWidth, model.earLayout) } onChange: { [weak self] in
+        withObservationTracking { _ = (model.liveCollapsedWidth, model.earLayout, model.showsLivesHereHint) } onChange: { [weak self] in
             Task { @MainActor in
                 guard let self else { return }
+                self.updateHint()
                 if !self.model.state.isOpen { self.resizeCollapsed() }
                 self.refreshVisibility() // a meeting starting now shows even over a fullscreen app
                 self.followLiveWidth()
@@ -434,6 +436,38 @@ final class IslandWindowController {
         }
     }
 
+    /// The one-time "Orilio lives here now" hint, centered under the island; it never takes clicks.
+    private func updateHint() {
+        if model.showsLivesHereHint {
+            if hint == nil {
+                let hint = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 460, height: 120), styleMask: [.borderless, .nonactivatingPanel],
+                                   backing: .buffered, defer: false)
+                hint.isOpaque = false
+                hint.backgroundColor = .clear
+                hint.hasShadow = false
+                hint.ignoresMouseEvents = true
+                IslandWindowPolicy.apply(to: hint, allSpaces: true)
+                hint.contentView = NSHostingView(rootView: LivesHereHint())
+                self.hint = hint
+            }
+            guard let hint else { return }
+            let geometry = model.geometry
+            // The design: the arrow starts about 88 pt below the top of the screen.
+            hint.setFrameOrigin(NSPoint(x: (geometry.centerX - 230).rounded(), y: geometry.screenTop - 88 - 120))
+            hint.alphaValue = 0
+            hint.orderFrontRegardless()
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = Theme.current.reducesMotion ? 0 : 0.5
+                hint.animator().alphaValue = 1
+            }
+        } else if let hint, hint.isVisible {
+            NSAnimationContext.runAnimationGroup({ context in
+                context.duration = Theme.current.reducesMotion ? 0 : 0.4
+                hint.animator().alphaValue = 0
+            }, completionHandler: { MainActor.assumeIsolated { hint.orderOut(nil) } })
+        }
+    }
+
     private func watchOutsideClicks(_ on: Bool) {
         if on, outsideClickMonitor == nil {
             // Global monitors see only events in other apps, so everything here is outside the island.
@@ -450,6 +484,7 @@ final class IslandWindowController {
     }
 
     private func outsideEvent(_ type: NSEvent.EventType, at point: NSPoint) {
+        guard model.onboarding == nil else { return } // the flow ends with Done or Esc, not a stray click
         switch type {
         case .leftMouseDown:
             outsidePress = point

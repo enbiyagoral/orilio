@@ -35,7 +35,10 @@ private struct ActivateOnFocus: ViewModifier {
     @FocusState private var focused: Bool
 
     func body(content: Content) -> some View {
-        content.focused($focused).onChange(of: focused) { if focused { NSApp.activate() } }
+        content
+            .focused($focused)
+            .onChange(of: focused) { if focused { NSApp.activate() } }
+            .tint(.white) // a white caret, not the system's blue
     }
 }
 
@@ -102,7 +105,9 @@ private struct NoteEditor: View {
             .scrollIndicators(.never)
             .autocorrectionDisabled()
             .modifier(ActivateOnFocus())
-            .padding(9) // with the text view's own 5 pt inset, the design's 14
+            // The design's 14 pt on every side: 14 above, 9 + the text container's own 5 at the sides,
+            // so the caret and the first line start exactly where the placeholder does.
+            .padding(EdgeInsets(top: 14, leading: 9, bottom: 14, trailing: 9))
             .overlay(alignment: .topLeading) {
                 if module.currentText.isEmpty {
                     Text("Type to capture a thought…")

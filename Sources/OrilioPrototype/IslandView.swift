@@ -24,6 +24,8 @@ enum Metrics {
 struct IslandShape: Shape {
     var ear: CGFloat
     var bottom: CGFloat
+    /// Above 0, the shape floats this far below the top with all four corners rounded (no notch).
+    var floatTop: CGFloat = 0
 
     var animatableData: AnimatablePair<CGFloat, CGFloat> {
         get { AnimatablePair(ear, bottom) }
@@ -31,6 +33,10 @@ struct IslandShape: Shape {
     }
 
     func path(in rect: CGRect) -> Path {
+        if floatTop > 0 {
+            let panel = CGRect(x: rect.minX, y: rect.minY + floatTop, width: rect.width, height: rect.height - floatTop)
+            return Path(roundedRect: panel, cornerRadius: min(bottom, panel.height / 2), style: .continuous)
+        }
         let e = ear
         let b = min(bottom, (rect.width - 2 * e) / 2, rect.height - e)
         var p = Path()
@@ -74,17 +80,20 @@ struct IslandView: View {
         let open = state.isOpen
         let size = geometry.size(for: state, tall: model.showsTallPanel, collapsedWidth: model.liveCollapsedWidth,
                                  panel: model.shownMirrorPanel)
-        let ear = open ? IslandGeometry.earRadius : 0
+        let floats = model.onboardingFloats && open
+        let ear = open && !floats ? IslandGeometry.earRadius : 0
         let radius = switch state {
         case .collapsed: Metrics.collapsedRadius
         case .dropTarget: Metrics.previewRadius
-        case .expanded, .pinned: Metrics.openRadius
+        case .expanded, .pinned: model.onboarding != nil ? OnboardingModel.radius : Metrics.openRadius
         }
-        let shape = IslandShape(ear: ear, bottom: radius)
+        let shape = IslandShape(ear: ear, bottom: radius, floatTop: floats ? geometry.topInset + IslandModel.floatingGap : 0)
 
         ZStack(alignment: .top) {
             shape
                 .fill(.black)
+                // The no-notch design's hairline edge: 0.5 pt of 22% white.
+                .overlay(shape.stroke(.white.opacity(floats ? 0.22 : 0), lineWidth: 0.5))
                 // The design's 0 24 60 rgba(0,0,0,.55), kept inside the window's shadow margin.
                 .shadow(color: .black.opacity(open ? 0.55 : 0), radius: 18, y: 14)
 
@@ -205,7 +214,11 @@ private struct ExpandedContent: View {
     @Environment(\.reducesMotion) private var reduceMotion
 
     var body: some View {
-        if model.tab == .mirror {
+        if let onboarding = model.onboarding {
+            OnboardingView(model: onboarding, floating: model.onboardingFloats) { model.finishOnboarding() }
+                .padding(.top, model.onboardingFloats ? model.geometry.topInset + IslandModel.floatingGap : 0)
+                .transition(.opacity)
+        } else if model.tab == .mirror {
             // The M4.1 design: the mirror has its own header ("Mirror" and close), no tab bar.
             MirrorView(mirror: model.mirror, hoverOnly: model.state == .expanded) { model.dismiss() }
                 .transition(.opacity)

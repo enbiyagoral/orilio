@@ -1051,6 +1051,18 @@ private struct StartupPane: View {
 
             HStack(spacing: 20) {
                 VStack(alignment: .leading, spacing: 2) {
+                    Text("Onboarding").font(.system(size: 13.5, weight: .medium))
+                    Text("The first-run tour in the island").font(.system(size: 12)).foregroundStyle(Design.secondary)
+                }
+                Spacer(minLength: 0)
+                DesignButton(title: "Replay onboarding") {
+                    OnboardingModel.reset()
+                    AppModules.island?.startOnboarding()
+                }
+            }
+
+            HStack(spacing: 20) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text("Toggle the island").font(.system(size: 13.5, weight: .medium))
                     Text("Global shortcut, works in any app").font(.system(size: 12)).foregroundStyle(Design.secondary)
                 }

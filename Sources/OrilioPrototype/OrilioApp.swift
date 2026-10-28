@@ -109,7 +109,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         self.positioner = positioner
         GlobalHotKey.register { [weak positioner] in positioner?.toggle() }
-        startUp(island: island, positioner: positioner)
+        if OnboardingModel.shouldShow() {
+            // The first launch happens in the island; once the displays are placed.
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(600))
+                island.startOnboarding()
+            }
+        } else {
+            startUp(island: island, positioner: positioner)
+        }
     }
 
     /// Settings › Startup › "When Orilio starts".

@@ -49,6 +49,7 @@ private struct ClipboardHistory: View {
                         .textFieldStyle(.plain)
                         .font(.system(size: 13))
                         .focused($searching)
+                        .tint(.white) // a white caret, not the system's blue
                         .accessibilityLabel("Search clipboard history")
                 }
                 .padding(.horizontal, 12)

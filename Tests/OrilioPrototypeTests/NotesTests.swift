@@ -193,7 +193,8 @@ struct NotesModuleTests {
         module.sync = recorder
         module.addTask("a")
         module.deleteTask(module.tasks[0])
-        try await Task.sleep(for: .milliseconds(100))
+        // The adapter is called from detached tasks: wait for the result, not a fixed time.
+        for _ in 0..<100 where await recorder.deletes == 0 { try await Task.sleep(for: .milliseconds(20)) }
         #expect(await recorder.upserts == ["a"])
         #expect(await recorder.deletes == 1)
     }

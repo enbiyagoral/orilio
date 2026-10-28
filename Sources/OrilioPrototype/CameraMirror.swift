@@ -305,13 +305,13 @@ final class CameraMirrorModel {
     private func perform(_ effect: MirrorEffect) {
         switch effect {
         case .requestAccess:
-            AVCaptureDevice.requestAccess(for: .video) { granted in
-                Task { @MainActor [weak self] in self?.send(.accessAnswered(granted: granted)) }
+            AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
+                Task { @MainActor in self?.send(.accessAnswered(granted: granted)) }
             }
         case .start(let id, _):
-            camera.start(deviceID: id) { started in
+            camera.start(deviceID: id) { [weak self] started in
                 guard !started else { return }
-                Task { @MainActor [weak self] in self?.send(.inUseElsewhere) }
+                Task { @MainActor in self?.send(.inUseElsewhere) }
             }
         case .setMirrored:
             break // the preview view reads `snapshot` and flips its connection
@@ -326,7 +326,7 @@ final class CameraMirrorModel {
         let center = NotificationCenter.default
         let workspace = NSWorkspace.shared.notificationCenter
         func add(_ c: NotificationCenter, _ name: Notification.Name, object: Any? = nil,
-                 _ handler: @escaping @MainActor @Sendable (CameraMirrorModel, Notification) -> Void) {
+                 _ handler: @escaping @MainActor @Sendable (CameraMirrorModel) -> Void) {
             let token = c.addObserver(forName: name, object: object, queue: .main) { [weak self] note in
                 let device = note.object as? AVCaptureDevice
                 let camera = device.map(CameraDevices.camera)
@@ -337,19 +337,19 @@ final class CameraMirrorModel {
                     } else if let camera, name == AVCaptureDevice.wasDisconnectedNotification {
                         self.send(.cameraRemoved(id: camera.id))
                     } else {
-                        handler(self, note)
+                        handler(self)
                     }
                 }
             }
             observers.append((c, token))
         }
-        add(center, AVCaptureDevice.wasConnectedNotification) { _, _ in }
-        add(center, AVCaptureDevice.wasDisconnectedNotification) { _, _ in }
+        add(center, AVCaptureDevice.wasConnectedNotification) { _ in }
+        add(center, AVCaptureDevice.wasDisconnectedNotification) { _ in }
         // Another app took the camera (a call started), or the session failed.
-        add(center, AVCaptureSession.runtimeErrorNotification, object: camera.session) { model, _ in model.send(.inUseElsewhere) }
-        add(center, AVCaptureSession.wasInterruptedNotification, object: camera.session) { model, _ in model.send(.inUseElsewhere) }
+        add(center, AVCaptureSession.runtimeErrorNotification, object: camera.session) { model in model.send(.inUseElsewhere) }
+        add(center, AVCaptureSession.wasInterruptedNotification, object: camera.session) { model in model.send(.inUseElsewhere) }
         // The mirror goes away with the Mac: sleep, screen sleep or lock, a session switch, display changes.
-        let close: @MainActor @Sendable (CameraMirrorModel, Notification) -> Void = { model, _ in
+        let close: @MainActor @Sendable (CameraMirrorModel) -> Void = { model in
             guard model.snapshot.state != .off else { return }
             model.send(.hidden)
             model.mustClose.forEach { $0() }
