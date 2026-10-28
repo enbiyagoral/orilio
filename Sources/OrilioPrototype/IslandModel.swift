@@ -30,6 +30,8 @@ enum IslandTab: String, CaseIterable, Identifiable {
     case notes = "Notes and Tasks"
     case shelf = "Shelf"
     case mirror = "Camera Mirror"
+    /// Installed extensions (their island content); hidden while none is enabled.
+    case extensions = "Extensions"
     var id: Self { self }
 
     var symbol: String {
@@ -41,6 +43,7 @@ enum IslandTab: String, CaseIterable, Identifiable {
         case .music: "music.note"
         case .shelf: "tray"
         case .mirror: "camera"
+        case .extensions: "puzzlepiece.extension"
         }
     }
 }
@@ -114,13 +117,17 @@ final class IslandModel {
     }
 
     /// The open island's size while it shows the mirror (the M4.1 design's card or mirror), the
-    /// first-run flow (the M5 design's 760 × 480) or a Shelf file in Quick Look (560 pt tall).
+    /// first-run flow (the M5 design's 760 × 480), an extension (12 pt taller) or a Shelf file in Quick Look (560 pt tall).
     func customPanel(for state: IslandState) -> CGSize? {
         if state == .pinned, tab == .shelf, shelfSection == .files, shelf.previewing != nil {
             let room = geometry.usableHeight + geometry.topInset - IslandGeometry.shadowMargin * 2
             return CGSize(width: geometry.panelWidth, height: min(Self.quickLookHeight, max(geometry.full.height, room)))
         }
         if onboarding != nil, state.isOpen { return OnboardingModel.panelSize }
+        // The ExtPrayer design's island is 12 pt taller than the hub (720 × 316): the five rows and the footnote.
+        if state.isOpen, state != .dropTarget, tab == .extensions {
+            return CGSize(width: geometry.full.width, height: geometry.full.height + (12 * geometry.panelWidth / IslandGeometry.fullWidth).rounded())
+        }
         guard state.isOpen, state != .dropTarget, tab == .mirror else { return nil }
         if state == .expanded { return mirror.panelSize(scale: geometry.panelWidth / IslandGeometry.fullWidth, hoverCard: true) }
         return mirror.panelSize(scale: geometry.panelWidth / IslandGeometry.fullWidth)
@@ -203,7 +210,7 @@ final class IslandModel {
         case .clipboard: if clipboard.status == .on { clipboard.pause() }
         case .focus: focus.reset()
         case .mirror: mirror.setVisible(false)
-        case .notes, .music, .shelf: break
+        case .notes, .music, .shelf, .extensions: break
         }
         if tab == module { tab = modules.visible[0] }
     }
@@ -213,7 +220,8 @@ final class IslandModel {
     var earLayout: EarLayout {
         let playing = media.current.flatMap { $0.state == .playing ? $0 : nil }
         return LiveActivityResolver.layout(meeting: meetingSoon, focus: FocusEarKind(focus), transient: live.transient,
-                                           nowPlaying: playing, visible: modules.visibleSet, indicators: modules.indicators)
+                                           nowPlaying: playing, visible: modules.visibleSet, indicators: modules.indicators,
+                                           extensionEar: ExtensionHost.shared.ear)
     }
 
     /// A meeting about to start, for the collapsed island (only when Calendar is on and readable),
@@ -416,7 +424,7 @@ final class IslandModel {
         case .notes:
             guard let task = notes.visibleTasks.first(where: { $0.id == notes.selectedTaskID }) else { return false }
             notes.toggle(task)
-        case .mirror:
+        case .mirror, .extensions:
             return false
         }
         return true

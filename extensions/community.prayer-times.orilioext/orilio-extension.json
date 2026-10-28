@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "id": "community.prayer-times",
+  "name": "Prayer Times",
+  "version": "0.4.0",
+  "author": "Orilio contributors",
+  "license": "GPL-3.0-or-later",
+  "minOrilio": "0.1.0",
+  "provides": ["widget.ear", "widget.island", "reminders"],
+  "refresh": { "everyMinutes": 60 },
+  "permissions": {
+    "network": ["ezanvakti.emushaf.net"],
+    "notifications": true,
+    "location": "city-picker",
+    "storage": true
+  },
+  "settings": [
+    { "key": "city", "type": "city", "label": "City" },
+    { "key": "remindBefore", "type": "choice", "label": "Remind me before", "default": 10,
+      "options": [ { "value": 0, "label": "Off" }, { "value": 5, "label": "5 min" },
+                   { "value": 10, "label": "10 min" }, { "value": 15, "label": "15 min" } ] },
+    { "key": "notifyAtTime", "type": "toggle", "label": "Notify at prayer time", "default": true },
+    { "key": "showCountdown", "type": "toggle", "label": "Show countdown in the notch", "default": true }
+  ]
+}

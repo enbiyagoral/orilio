@@ -92,12 +92,12 @@ final class SettingsNavigation {
 /// The Settings window: a sidebar of panes in three groups (the M5 Settings design).
 struct SettingsView: View {
     enum Pane: String, CaseIterable, Identifiable {
-        case general, modules, appearance, displays, startup, calendar, clipboard, shortcuts, updates, about
+        case general, modules, appearance, displays, startup, calendar, clipboard, shortcuts, extensions, updates, about
         var id: Self { self }
 
         static let groups: [(String, [Pane])] = [
             ("General", [.general, .modules, .appearance, .displays, .startup]),
-            ("Modules", [.calendar, .clipboard, .shortcuts]),
+            ("Modules", [.calendar, .clipboard, .shortcuts, .extensions]),
             ("Orilio", [.updates, .about]),
         ]
 
@@ -119,6 +119,7 @@ struct SettingsView: View {
             case .calendar: "calendar"
             case .clipboard: "doc.on.clipboard"
             case .shortcuts: "keyboard"
+            case .extensions: "puzzlepiece.extension"
             case .updates: "arrow.triangle.2.circlepath"
             case .about: "info.circle"
             }
@@ -133,6 +134,7 @@ struct SettingsView: View {
             case .calendar: Design.hex(0xFF453A)
             case .clipboard: Design.hex(0x13A57A)
             case .shortcuts: Design.hex(0x636366)
+            case .extensions: Design.hex(0xBF5AF2)
             case .about: Design.hex(0x1C1C1E)
             }
         }
@@ -194,6 +196,7 @@ struct SettingsView: View {
             case .calendar: CalendarPane()
             case .clipboard: ClipboardPane()
             case .shortcuts: ShortcutsPane(store: .shared)
+            case .extensions: ExtensionsPane(host: .shared)
             case .updates: UpdatesPane()
             case .about: AboutPane()
             }
@@ -674,6 +677,7 @@ extension IslandTab {
         case .music: "Now Playing"
         case .shelf: "Shelf & Screenshots"
         case .mirror: "Camera Mirror"
+        case .extensions: "Extensions"
         }
     }
 
@@ -686,6 +690,7 @@ extension IslandTab {
         case .music: "Spotify, Music · Automation"
         case .shelf: "Files you drop · ⌘⇧4 captures"
         case .mirror: "Camera · only while open"
+        case .extensions: "From installed extensions · sandboxed"
         }
     }
 }

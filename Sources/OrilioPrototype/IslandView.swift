@@ -286,15 +286,24 @@ private struct ExpandedContent: View {
     private var hub: some View {
         VStack(spacing: 0) {
             // 38 pt header: tabs left of the notch, pin and close right of it (M3 hub design).
+            let tabs = Array(model.modules.visible.enumerated())
+            let fit = tabsLeftOfNotch
             HStack(spacing: 2) {
                 HStack(spacing: 2) {
-                    ForEach(Array(model.modules.visible.enumerated()), id: \.element) { index, tab in
-                        ModuleTab(tab: tab, selected: model.tab == tab, live: isLive(tab),
-                                  badge: model.showsModuleBadges && index < 6 ? index + 1 : nil) { model.tab = tab }
-                    }
+                    ForEach(tabs.prefix(fit), id: \.element) { index, tab in moduleTab(index, tab) }
                 }
+                .frame(width: tabs.count > fit ? leftOfNotch : nil, alignment: .leading)
                 .accessibilityElement(children: .contain)
                 .accessibilityLabel("Modules")
+                if tabs.count > fit {
+                    // More tabs than fit left of the notch: the rest go right of it, never under it.
+                    HStack(spacing: 2) {
+                        ForEach(tabs.dropFirst(fit), id: \.element) { index, tab in moduleTab(index, tab) }
+                    }
+                    .padding(.leading, model.geometry.notchWidth + Self.notchGap)
+                    .accessibilityElement(children: .contain)
+                    .accessibilityLabel("More modules")
+                }
                 Spacer()
                 if layout == .floating, !model.geometry.displayName.isEmpty {
                     // No notch to place the island by: the panel says which display it's on.
@@ -325,12 +334,15 @@ private struct ExpandedContent: View {
                     // Quick Look grows the island to 560 pt and back (see `IslandModel.customPanel`).
                     .onChange(of: model.shelf.previewing) { model.relayout() }
                 case .mirror: EmptyView() // drawn without the hub (see `body`)
+                case .extensions: ExtensionsPanel(host: .shared)
                 }
             }
             .id(model.tab)
             .transition(.reveal(reduceMotion))
-            // Music lays out its own padding around a full-width glow.
-            .padding(model.tab == .music ? EdgeInsets() : EdgeInsets(top: 10, leading: 20, bottom: 20, trailing: 20))
+            // Music lays out its own padding around a full-width glow; an extension follows the ExtPrayer design.
+            .padding(model.tab == .music ? EdgeInsets()
+                     : model.tab == .extensions ? EdgeInsets(top: 14, leading: 28, bottom: 16, trailing: 28)
+                     : EdgeInsets(top: 10, leading: 20, bottom: 20, trailing: 20))
             .frame(maxHeight: .infinity, alignment: .top)
             // Holding ⌘: the content dims so the tab numbers read first.
             .opacity(model.showsModuleBadges ? 0.45 : 1)
@@ -362,6 +374,24 @@ private struct ExpandedContent: View {
         .animation(Theme.current.spring(duration: 0.3, bounce: 0.1), value: model.tab)
     }
 
+    private static let notchGap: CGFloat = 6
+
+    /// How many 32 pt tabs (2 pt apart) fit between the panel's 14 pt edge and the notch; all of them
+    /// without a notch.
+    private var tabsLeftOfNotch: Int {
+        let count = model.modules.visible.count
+        guard layout == .notch, model.geometry.notchWidth > 0 else { return count }
+        return min(count, max(1, Int((leftOfNotch - Self.notchGap + 2) / 34)))
+    }
+
+    /// From the header's 14 pt inset to the notch's left edge.
+    private var leftOfNotch: CGFloat { (model.geometry.panelWidth - model.geometry.notchWidth) / 2 - 14 }
+
+    private func moduleTab(_ index: Int, _ tab: IslandTab) -> some View {
+        ModuleTab(tab: tab, selected: model.tab == tab, live: isLive(tab),
+                  badge: model.showsModuleBadges && index < 6 ? index + 1 : nil) { model.tab = tab }
+    }
+
     /// A small dot on a tab that has something live while another tab is shown.
     private func isLive(_ tab: IslandTab) -> Bool {
         guard model.tab != tab else { return false }
@@ -369,6 +399,7 @@ private struct ExpandedContent: View {
         case .calendar: return model.meetingSoon != nil
         case .music: return model.media.current?.state == .playing
         case .focus: return model.focus.isRunning
+        case .extensions: return ExtensionHost.shared.ear != nil
         case .clipboard, .notes, .shelf, .mirror: return false // the mirror never claims attention
         }
     }
@@ -993,6 +1024,8 @@ private struct CollapsedEars: View {
             TransientEar(transient: transient, side: side)
         case .nowPlaying(let session)?:
             MusicEar(session: session, side: side)
+        case .extensionEar(let content, let withMusic)?:
+            ExtensionEarView(content: content, side: side, withMusic: withMusic)
         case nil:
             EmptyView()
         }

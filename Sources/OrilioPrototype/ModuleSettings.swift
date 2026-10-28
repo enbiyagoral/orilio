@@ -71,7 +71,11 @@ final class ModuleSettings {
         Set(CollapsedIndicator.allCases).subtracting(preferences.hiddenIndicators.compactMap(CollapsedIndicator.init(rawValue:)))
     }
 
-    var visible: [IslandTab] { order.filter { !hidden.contains($0) } }
+    /// The Extensions tab shows only while an enabled extension has something for the island
+    /// (set by the app; nothing in tests).
+    @ObservationIgnored var extensionsAvailable: () -> Bool = { false }
+
+    var visible: [IslandTab] { order.filter { !hidden.contains($0) && ($0 != .extensions || extensionsAvailable()) } }
     var visibleSet: Set<IslandTab> { Set(visible) }
 
     func isVisible(_ tab: IslandTab) -> Bool { !hidden.contains(tab) }

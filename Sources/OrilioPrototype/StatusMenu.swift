@@ -63,6 +63,12 @@ enum MenuStatus {
             return [session.title, session.artist].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
         case .transient(let transient)?:
             return transient.title
+        case .extensionEar(let content, _)?:
+            return [content.leading, content.trailing].compactMap { part in
+                guard let part else { return nil }
+                if part.style == "countdown", let target = part.target { return ExtensionCountdown.text(to: target, from: now) }
+                return part.text
+            }.joined(separator: " · ")
         case nil:
             return nil
         }

@@ -24,7 +24,8 @@ private actor RecordingNotifier: FocusNotifier {
 @MainActor
 private final class Clock {
     // A year ahead: the module's real Timer, armed for the fake deadline, never fires mid-test.
-    var now = Date.now.addingTimeInterval(365 * 86_400)
+    // Noon, so a test's sessions never cross midnight whenever the suite runs.
+    var now = Calendar.current.date(bySettingHour: 12, minute: 0, second: 0, of: Date.now.addingTimeInterval(365 * 86_400))!
     func advance(_ seconds: TimeInterval) { now.addTimeInterval(seconds) }
 }
 

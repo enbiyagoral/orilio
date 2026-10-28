@@ -7,7 +7,7 @@ import Observation
 
 /// What the collapsed island can show, highest priority first.
 enum LiveActivityKind: Int, Comparable {
-    case meeting, focus, transient, nowPlaying
+    case meeting, focus, transient, extensionEar, nowPlaying
     static func < (a: Self, b: Self) -> Bool { a.rawValue < b.rawValue }
 }
 
@@ -52,6 +52,8 @@ struct LiveActivity: Equatable, Identifiable {
         case focus(FocusEarKind)
         case transient(Transient)
         case nowPlaying(MediaSessionSnapshot)
+        /// An extension's ears; with music playing it keeps only the leading one.
+        case extensionEar(ExtensionEarContent, withMusic: Bool)
     }
 
     let payload: Payload
@@ -62,6 +64,7 @@ struct LiveActivity: Equatable, Identifiable {
         case .focus: .focus
         case .transient: .transient
         case .nowPlaying: .nowPlaying
+        case .extensionEar: .extensionEar
         }
     }
 
@@ -71,6 +74,7 @@ struct LiveActivity: Equatable, Identifiable {
         case .focus: "focus"
         case .transient(let transient): "transient.\(transient.id)"
         case .nowPlaying(let session): "music.\(session.sourceID)"
+        case .extensionEar(let content, _): "extension.\(content.extensionID)"
         }
     }
 
@@ -81,6 +85,7 @@ struct LiveActivity: Equatable, Identifiable {
         case .focus: .focus
         case .transient(let transient): transient.module
         case .nowPlaying: .music
+        case .extensionEar: .extensions
         }
     }
 }
@@ -107,14 +112,15 @@ struct EarLayout: Equatable {
 /// 1. A meeting within 10 minutes (and the first 5 after it starts) takes both ears.
 /// 2. A confirmation takes both ears for 2 s, over anything except a meeting.
 /// 3. A focus session takes the leading ear; music playing may keep the trailing one.
-/// 4. Music playing takes both ears.
-/// 5. Otherwise idle: the island is the notch.
+/// 4. An extension's ears (a prayer countdown); music playing keeps the trailing one.
+/// 5. Music playing takes both ears.
+/// 6. Otherwise idle: the island is the notch.
 ///
 /// Hidden modules and indicators the user turned off never claim the notch.
 enum LiveActivityResolver {
     static func layout(meeting: CalendarEvent?, focus: FocusEarKind?, transient: Transient?,
                        nowPlaying: MediaSessionSnapshot?, visible: Set<IslandTab>,
-                       indicators: Set<CollapsedIndicator>) -> EarLayout {
+                       indicators: Set<CollapsedIndicator>, extensionEar: ExtensionEarContent? = nil) -> EarLayout {
         func allowed(_ module: IslandTab, _ indicator: CollapsedIndicator?) -> Bool {
             visible.contains(module) && indicator.map(indicators.contains) ?? true
         }
@@ -130,6 +136,10 @@ enum LiveActivityResolver {
         if let focus, allowed(.focus, .focus) {
             let activity = LiveActivity(payload: .focus(focus))
             return EarLayout(leading: activity, trailing: music ?? (focus == .onBreak ? activity : nil))
+        }
+        if let extensionEar, allowed(.extensions, nil) {
+            let activity = LiveActivity(payload: .extensionEar(extensionEar, withMusic: music != nil))
+            return EarLayout(leading: activity, trailing: music ?? activity)
         }
         return EarLayout(leading: music, trailing: music)
     }
@@ -188,6 +198,10 @@ extension EarLayout {
             return 20
         case (.nowPlaying, .trailing):
             return EqualizerView.Style.wave.size.width
+        case (.extensionEar(let content, let withMusic), _):
+            guard let part = ExtensionEarContent.part(content, side: side, withMusic: withMusic) else { return 0 }
+            let icon: CGFloat = ExtensionIcons.symbol(part.icon) == nil ? 0 : 11 + 6
+            return icon + (part.style == "countdown" ? text("88:88", mono: true) : text(part.text ?? ""))
         }
     }
 }

@@ -151,6 +151,7 @@ enum KeyHints {
         case .shelf: [("↑↓", "Move"), ("⏎", "Open"), ("␣", "Preview"), ("⌘⌫", "Remove"), ("esc", "Close")]
         case .notes: [("↑↓", "Move"), ("⏎", "Done"), ("⌘⌫", "Delete"), ("esc", "Close")]
         case .mirror: [("⇥", "Next"), ("⌘", "Modules"), ("esc", "Close")]
+        case .extensions: [("⇥", "Next"), ("⌘", "Modules"), ("esc", "Close")]
         }
     }
 }

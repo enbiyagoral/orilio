@@ -13,12 +13,18 @@ let package = Package(
         .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.6.0"),
     ],
     targets: [
+        // What the app and the extension runner share: the manifest, the result contract, the XPC interfaces.
+        .target(name: "OrilioExtensionKit"),
+        // The JavaScript side of an extension. Linked only into the runner (and the tests), never the app.
+        .target(name: "OrilioExtensionEngine", dependencies: ["OrilioExtensionKit"]),
+        // The sandboxed XPC service extensions run in (bundled in Contents/XPCServices by make-app.sh).
+        .executableTarget(name: "OrilioExtensionRunner", dependencies: ["OrilioExtensionEngine"]),
         .executableTarget(
             name: "OrilioPrototype",
-            dependencies: [.product(name: "Sparkle", package: "Sparkle")],
+            dependencies: [.product(name: "Sparkle", package: "Sparkle"), "OrilioExtensionKit"],
             // The app bundle keeps Sparkle.framework in Contents/Frameworks (see scripts/make-app.sh).
             linkerSettings: [.unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"])]
         ),
-        .testTarget(name: "OrilioPrototypeTests", dependencies: ["OrilioPrototype"]),
+        .testTarget(name: "OrilioPrototypeTests", dependencies: ["OrilioPrototype", "OrilioExtensionEngine"]),
     ]
 )

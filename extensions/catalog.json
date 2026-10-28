@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "extensions": [
+    {
+      "id": "community.prayer-times",
+      "name": "Prayer Times",
+      "tagline": "Times and reminders for your city",
+      "description": "Shows the next prayer and a countdown in the notch, lists today’s times, and can remind you before each one. The times are Diyanet İşleri Başkanlığı’s own, from the EzanVakti API; a month is kept on this Mac, so it works offline.",
+      "author": "Orilio contributors",
+      "version": "0.4.0",
+      "license": "GPL-3.0-or-later",
+      "category": "lifestyle",
+      "icon": "sunrise",
+      "tint": "mint",
+      "does": ["Next prayer and countdown in the ear", "Today’s five times when opened", "Reminder 5, 10 or 15 min before"],
+      "permissions": { "network": ["ezanvakti.emushaf.net"], "notifications": true, "location": "city-picker", "storage": true },
+      "package": "community.prayer-times.orilioext"
+    }
+  ]
+}

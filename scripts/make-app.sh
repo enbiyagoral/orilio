@@ -30,6 +30,33 @@ cp Resources/WhatsNew.json LICENSE "$APP/Contents/Resources/" # LICENSE: the GPL
 xcrun actool Resources/Assets.xcassets --compile "$APP/Contents/Resources" --platform macosx \
   --minimum-deployment-target 14.6 --app-icon AppIcon --output-partial-info-plist "build/icon-info.plist" >/dev/null
 cp .build/artifacts/sparkle/Sparkle/LICENSE "$APP/Contents/Resources/Sparkle-LICENSE.txt" # MIT, plus what Sparkle includes
+# Extensions that ship with Orilio, and the catalog entries describing them.
+mkdir -p "$APP/Contents/Resources/Extensions"
+cp extensions/catalog.json "$APP/Contents/Resources/Extensions/"
+ditto extensions/community.prayer-times.orilioext "$APP/Contents/Resources/Extensions/community.prayer-times.orilioext"
+# The sandboxed XPC service extensions run in: no network, no files outside its container.
+XPC="$APP/Contents/XPCServices/OrilioExtensionRunner.xpc"
+mkdir -p "$XPC/Contents/MacOS"
+cp "$BIN/OrilioExtensionRunner" "$XPC/Contents/MacOS/"
+cat > "$XPC/Contents/Info.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>CFBundleIdentifier</key><string>com.enbiyagoral.orilio.ExtensionRunner</string>
+  <key>CFBundleName</key><string>OrilioExtensionRunner</string>
+  <key>CFBundleExecutable</key><string>OrilioExtensionRunner</string>
+  <key>CFBundlePackageType</key><string>XPC!</string>
+  <key>CFBundleShortVersionString</key><string>$VERSION</string>
+  <key>CFBundleVersion</key><string>$BUILD</string>
+  <key>LSMinimumSystemVersion</key><string>14.6</string>
+  <key>XPCService</key><dict><key>ServiceType</key><string>Application</string></dict>
+</dict></plist>
+PLIST
+cat > build/runner.entitlements <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict><key>com.apple.security.app-sandbox</key><true/></dict></plist>
+PLIST
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -57,11 +84,12 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>NSAppleEventsUsageDescription</key><string>Orilio shows what is playing in Spotify and Music, and controls playback when you use its buttons.</string>
 </dict></plist>
 PLIST
-# Inside out: Sparkle's helpers, the framework, then the app (ad-hoc; Sparkle verifies updates by EdDSA).
+# Inside out: Sparkle's helpers, the framework, the extension runner, then the app (ad-hoc; Sparkle verifies updates by EdDSA).
 codesign --force --sign - "$APP/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices/Installer.xpc"
 codesign --force --sign - --preserve-metadata=entitlements "$APP/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices/Downloader.xpc"
 codesign --force --sign - "$APP/Contents/Frameworks/Sparkle.framework/Versions/B/Autoupdate"
 codesign --force --sign - "$APP/Contents/Frameworks/Sparkle.framework/Versions/B/Updater.app"
 codesign --force --sign - "$APP/Contents/Frameworks/Sparkle.framework"
+codesign --force --sign - --entitlements build/runner.entitlements "$XPC"
 codesign --force --sign - "$APP"
 echo "Built $APP — open it with: open $APP"

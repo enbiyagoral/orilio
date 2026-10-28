@@ -54,7 +54,7 @@ struct ModuleSettingsTests {
         let defaults = freshDefaults()
         defaults.set(["shelf", "nonsense", "music"], forKey: "modules.order") // written by M3.5, migrated
         let modules = ModuleSettings(defaults: defaults)
-        #expect(modules.order == [.shelf, .music, .calendar, .focus, .clipboard, .notes, .mirror])
+        #expect(modules.order == [.shelf, .music, .calendar, .focus, .clipboard, .notes, .mirror, .extensions])
     }
 }
 

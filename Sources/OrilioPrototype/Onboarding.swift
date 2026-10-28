@@ -81,8 +81,9 @@ final class OnboardingModel {
     /// Applies the choices (visibility only, no permission) and remembers the flow was seen. Esc
     /// and closing the island end here too, so there is never a half state.
     func finish() {
-        for tab in IslandTab.allCases where chosen.contains(tab) { modules.setVisible(tab, true) }
-        for tab in IslandTab.allCases where !chosen.contains(tab) { modules.setVisible(tab, false) }
+        // Extensions aren't a module the flow offers: their tab follows what's installed.
+        for tab in IslandTab.allCases where tab != .extensions && chosen.contains(tab) { modules.setVisible(tab, true) }
+        for tab in IslandTab.allCases where tab != .extensions && !chosen.contains(tab) { modules.setVisible(tab, false) }
         defaults.set(version, forKey: Self.completedKey)
     }
 }
@@ -96,6 +97,7 @@ extension IslandTab {
         case .focus, .notes, .shelf: "No permission"
         case .clipboard: "Off by default · local only"
         case .mirror: "Asks for Camera"
+        case .extensions: "Settings › Extensions"
         }
     }
 
@@ -108,6 +110,7 @@ extension IslandTab {
         case .shelf: "Shelf"
         case .clipboard: "Clipboard"
         case .mirror: "Camera Mirror"
+        case .extensions: "Extensions"
         }
     }
 }

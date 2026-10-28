@@ -76,6 +76,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         focus.start() // a session from before the restart resumes or completes; never prompts
         let modules = ModuleSettings(store: .shared) // one preferences store for modules and the theme
         AppModules.modules = modules
+        modules.extensionsAvailable = { ExtensionHost.shared.hasIslandContent }
+        ExtensionHost.shared.start() // the runner starts only when an installed extension is enabled
+        Task { await ExtensionCatalog.shared.load() }
         let library = ScreenshotLibrary()
         Task { await library.load() } // metadata only; thumbnails load as cells appear
         library.startWatchingIfEnabled()

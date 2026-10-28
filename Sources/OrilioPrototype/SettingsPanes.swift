@@ -177,7 +177,7 @@ struct GeneralPane: View {
 }
 
 /// The design's select: a 30 pt, 10% ink field that opens a native menu.
-private struct PopUpButton<Value: Hashable>: View {
+struct PopUpButton<Value: Hashable>: View {
     let options: [(Value, String)]
     let selection: Value
     let pick: (Value) -> Void
