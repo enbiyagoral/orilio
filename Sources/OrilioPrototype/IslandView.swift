@@ -319,7 +319,7 @@ private struct ExpandedContent: View {
                 case .clipboard: ClipboardPanel(module: model.clipboard, library: model.library)
                 case .notes: NotesPanel(module: model.notes)
                 case .focus: FocusPanel(module: model.focus)
-                case .music: MusicCard(media: model.media)
+                case .music: MusicCard(media: model.media, island: model)
                 case .shelf: ShelfView(shelf: model.shelf, library: model.library, section: $model.shelfSection,
                                        draggedOut: { model.dismiss() })
                     // Quick Look grows the island to 560 pt and back (see `IslandModel.customPanel`).
@@ -482,6 +482,8 @@ private struct Artwork: View {
 private struct MusicCard: View {
     @Environment(\.islandLayout) private var layout
     let media: MediaCoordinator
+    /// For trackpad swipes over the cover (see `IslandModel.swiped`).
+    var island: IslandModel? = nil
     @Environment(\.reducesMotion) private var reduceMotion
 
     var body: some View {
@@ -506,7 +508,7 @@ private struct MusicCard: View {
                                secondary: .init("Not now") { access.decline(session.providerID) }, layout: .ask)
                         .padding(EdgeInsets(top: 10, leading: 20, bottom: 20, trailing: 20))
                 } else if let session {
-                    NowPlaying(session: session, media: media)
+                    NowPlaying(session: session, media: media, island: island)
                         // A different source is a different card: cross-fade, and start with fresh control state.
                         .id(session.sourceID)
                         .transition(.opacity)
@@ -573,6 +575,7 @@ final class PlayerAccess {
 private struct NowPlaying: View {
     let session: MediaSessionSnapshot
     let media: MediaCoordinator
+    var island: IslandModel? = nil
     /// Direction of the last skip the user asked for, for the title transition.
     @State private var step = 1
     @State private var feedback = ControlFeedback()
@@ -596,6 +599,9 @@ private struct NowPlaying: View {
                     }
             }
             .frame(width: 150, height: 150)
+            // A two-finger swipe on the cover skips (left: next, right: previous); elsewhere it changes module.
+            .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { island?.skipZone = $0 }
+            .onDisappear { island?.skipZone = nil }
             .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 14) {
@@ -666,6 +672,12 @@ private struct NowPlaying: View {
         .animation(reduceMotion ? nil : .spring(duration: 0.4, bounce: 0.1), value: session.title)
         .animation(.easeInOut(duration: 0.2), value: feedback.failure)
         .onChange(of: session.state) { feedback.confirm(playing: session.state == .playing) }
+        .onChange(of: island?.swipeSkip) { _, request in
+            guard let request else { return }
+            let next = request.step > 0
+            guard session.capabilities.contains(next ? .next : .previous), !feedback.inFlight.contains(.skip) else { return }
+            run(.skip, next ? .next : .previous, step: request.step)
+        }
     }
 
     private var subtitle: String {

@@ -422,6 +422,29 @@ final class IslandModel {
         return true
     }
 
+    // MARK: Trackpad swipes
+
+    /// The music card's cover, in window coordinates (y down): a swipe there skips the track.
+    @ObservationIgnored var skipZone: CGRect?
+    /// A skip asked for by a swipe; the music card runs it, with its own transition and feedback.
+    private(set) var swipeSkip: SwipeSkip?
+    struct SwipeSkip: Equatable {
+        let id = UUID()
+        let step: Int
+    }
+
+    /// Fingers left: the next module (or track, over the cover); right: the previous one.
+    func swiped(_ direction: SwipeTracker.Direction, at point: CGPoint) {
+        guard state == .pinned || state == .expanded, onboarding == nil,
+              !(tab == .shelf && shelf.previewing != nil) else { return } // Quick Look scrolls its own content
+        let step = direction == .left ? 1 : -1
+        if tab == .music, let zone = skipZone, zone.contains(point) {
+            swipeSkip = SwipeSkip(step: step)
+        } else {
+            selectAdjacentTab(step)
+        }
+    }
+
     // MARK: Focus end
 
     /// The one time Focus interrupts: the island opens by itself on the session-done (or

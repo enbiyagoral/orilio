@@ -214,3 +214,44 @@ extension View {
         modifier(KeyboardFocusRing(primary: primary, radius: radius))
     }
 }
+
+/// Two-finger horizontal swipes on the trackpad: one action per gesture, decided from the first few
+/// points of movement, so a vertical scroll (lists, the screenshot grid) never turns into a swipe.
+/// Pure; fed with the finger's movement (the scroll deltas with natural scrolling undone).
+struct SwipeTracker {
+    enum Direction: Equatable { case left, right }
+    enum Phase { case began, changed, ended, other }
+
+    /// Movement before the axis is decided, and how far a horizontal one has to go.
+    static let decideAfter: CGFloat = 8
+    static let threshold: CGFloat = 60
+
+    private enum Axis { case undecided, horizontal, vertical }
+    private var axis = Axis.undecided
+    private var dx: CGFloat = 0, dy: CGFloat = 0
+    private var fired = false
+
+    mutating func event(_ phase: Phase, dx fingerDX: CGFloat, dy fingerDY: CGFloat) -> Direction? {
+        switch phase {
+        case .began:
+            self = SwipeTracker()
+            return add(fingerDX, fingerDY)
+        case .changed:
+            return add(fingerDX, fingerDY)
+        case .ended, .other:
+            self = SwipeTracker()
+            return nil
+        }
+    }
+
+    private mutating func add(_ x: CGFloat, _ y: CGFloat) -> Direction? {
+        dx += x
+        dy += y
+        if axis == .undecided, abs(dx) + abs(dy) >= Self.decideAfter {
+            axis = abs(dx) > 1.5 * abs(dy) ? .horizontal : .vertical
+        }
+        guard axis == .horizontal, !fired, abs(dx) >= Self.threshold else { return nil }
+        fired = true
+        return dx < 0 ? .left : .right
+    }
+}

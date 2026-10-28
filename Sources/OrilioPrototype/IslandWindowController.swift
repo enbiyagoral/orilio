@@ -261,6 +261,8 @@ final class IslandWindowController {
     private var outsideClickMonitor: Any?
     private var insideClickMonitor: Any?
     private var keyMonitor: Any?
+    private var swipeMonitor: Any?
+    private var swipe = SwipeTracker()
     private var widthTask: Task<Void, Never>?
     private var hint: NSPanel?
     /// Where the last outside press started, to tell a click from the start of a drag.
@@ -326,6 +328,25 @@ final class IslandWindowController {
                 return self.model.handleKey(key, editing: editing)
             }
             return consumed ? nil : event
+        }
+        // Two-finger swipes over the open island (scroll events reach it under the pointer, key or not).
+        // Never consumed: vertical scrolling goes on to the lists as before.
+        swipeMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
+            guard event.hasPreciseScrollingDeltas, event.momentumPhase.isEmpty else { return event } // trackpads only, no coasting
+            let window = event.windowNumber, location = event.locationInWindow
+            let phase: SwipeTracker.Phase = event.phase.contains(.began) ? .began
+                : event.phase.contains(.changed) ? .changed
+                : event.phase.contains(.ended) || event.phase.contains(.cancelled) ? .ended : .other
+            // With natural scrolling the deltas already follow the fingers; otherwise they're reversed.
+            let sign: CGFloat = event.isDirectionInvertedFromDevice ? 1 : -1
+            let dx = event.scrollingDeltaX * sign, dy = event.scrollingDeltaY * sign
+            MainActor.assumeIsolated {
+                guard let self, window == self.panel.windowNumber,
+                      let direction = self.swipe.event(phase, dx: dx, dy: dy) else { return }
+                let height = self.panel.contentView?.bounds.height ?? 0
+                self.model.swiped(direction, at: CGPoint(x: location.x, y: height - location.y))
+            }
+            return event
         }
         model.onWillChangeState = { [weak self] in self?.apply($0) }
         // A click anywhere in the hover panel keeps it: the user is now working in it (typing in a
@@ -433,6 +454,8 @@ final class IslandWindowController {
         insideClickMonitor = nil
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
         keyMonitor = nil
+        if let swipeMonitor { NSEvent.removeMonitor(swipeMonitor) }
+        swipeMonitor = nil
         observers.forEach(NotificationCenter.default.removeObserver)
         observers = []
         model.onWillChangeState = nil

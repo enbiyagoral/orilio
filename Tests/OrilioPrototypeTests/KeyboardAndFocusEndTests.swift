@@ -197,3 +197,48 @@ struct FocusEndTests {
         #expect(!island.keyboardOpened)
     }
 }
+
+struct SwipeTrackerTests {
+    @Test func aHorizontalSwipeFiresOncePerGesture() {
+        var t = SwipeTracker()
+        #expect(t.event(.began, dx: -6, dy: 1) == nil)
+        #expect(t.event(.changed, dx: -30, dy: 2) == nil)
+        #expect(t.event(.changed, dx: -30, dy: 0) == .left) // past 60 pt
+        #expect(t.event(.changed, dx: -80, dy: 0) == nil) // one action per gesture
+        #expect(t.event(.ended, dx: 0, dy: 0) == nil)
+        #expect(t.event(.began, dx: 10, dy: 0) == nil)
+        #expect(t.event(.changed, dx: 55, dy: 3) == .right)
+    }
+
+    @Test func verticalScrollingNeverBecomesASwipe() {
+        var t = SwipeTracker()
+        #expect(t.event(.began, dx: 2, dy: 9) == nil) // decided vertical in the first points
+        #expect(t.event(.changed, dx: -90, dy: 40) == nil) // drifting sideways later changes nothing
+        var diagonal = SwipeTracker()
+        #expect(diagonal.event(.began, dx: -7, dy: 6) == nil) // not clearly horizontal: vertical wins
+        #expect(diagonal.event(.changed, dx: -100, dy: 0) == nil)
+    }
+}
+
+@MainActor
+struct SwipeRoutingTests {
+    @Test func swipesChangeModulesAndSkipOnlyOverTheCover() {
+        let island = IslandModel(focus: FocusModule(defaults: UserDefaults(suiteName: "orilio.swipe.\(UUID().uuidString)")!, notifier: Quiet()))
+        island.isPointerBusy = { false }
+        let collapsedTab = island.tab
+        island.swiped(.left, at: .zero) // collapsed: nothing
+        #expect(island.tab == collapsedTab)
+        island.tap()
+        let start = island.tab
+        island.swiped(.left, at: .zero)
+        #expect(island.tab != start)
+        island.swiped(.right, at: .zero)
+        #expect(island.tab == start)
+        island.tab = .music
+        island.skipZone = CGRect(x: 40, y: 60, width: 150, height: 150)
+        island.swiped(.left, at: CGPoint(x: 100, y: 100)) // over the cover: the next track, same module
+        #expect(island.tab == .music && island.swipeSkip?.step == 1)
+        island.swiped(.right, at: CGPoint(x: 500, y: 100)) // elsewhere on the music card: the previous module
+        #expect(island.tab != .music)
+    }
+}
