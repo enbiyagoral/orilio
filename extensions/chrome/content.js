@@ -113,6 +113,16 @@
     });
   }
 
+  /** Media Session actions the site registered, as reported by media-session-bridge.js. */
+  function sessionActions() {
+    return new Set((document.documentElement.dataset.orilioActions ?? "").split(" ").filter(Boolean));
+  }
+
+  /** Asks the site's own Media Session handler, the path the media keys take. */
+  function invokeAction(action, value) {
+    document.dispatchEvent(new CustomEvent("orilio:media-action", { detail: value === undefined ? action : `${action}:${value}` }));
+  }
+
   function button(name) {
     const selector = adapter.buttons[name];
     return selector ? adapter.root()?.querySelector(selector) ?? null : null;
@@ -146,11 +156,13 @@
     const duration = elementDuration ?? adapter.duration(root);
     const position = element && Number.isFinite(element.currentTime) ? element.currentTime : adapter.position(root);
 
+    const actions = sessionActions();
     const capabilities = ["focus"];
     if (element || button("playPause")) capabilities.push("playPause");
-    if (element && elementDuration) capabilities.push("seek"); // never fake a seek with clicks on a bar
-    if (button("next")) capabilities.push("next");
-    if (button("previous")) capabilities.push("previous");
+    // Seek through the element, or the site's own seek handler; never by faking clicks on a bar.
+    if ((element && elementDuration) || (actions.has("seekto") && duration)) capabilities.push("seek");
+    if (actions.has("nexttrack") || button("next")) capabilities.push("next");
+    if (actions.has("previoustrack") || button("previous")) capabilities.push("previous");
 
     return {
       type: "session",
@@ -201,15 +213,27 @@
       return done(true);
     }
     if (message.command === "next" || message.command === "previous") {
-      const control = button(message.command);
+      const action = message.command === "next" ? "nexttrack" : "previoustrack";
+      if (sessionActions().has(action)) {
+        invokeAction(action);
+        return done(true);
+      }
+      const control = button(message.command); // fallback for sites without the handler
       if (!control) return done(false, "unsupported");
       control.click();
       return done(true);
     }
     if (message.command === "seek") {
-      if (!element || !Number.isFinite(message.position) || message.position < 0) return done(false, "unsupported");
-      element.currentTime = Math.min(message.position, Number.isFinite(element.duration) ? element.duration : message.position);
-      return done(true);
+      if (!Number.isFinite(message.position) || message.position < 0) return done(false, "unsupported");
+      if (element) {
+        element.currentTime = Math.min(message.position, Number.isFinite(element.duration) ? element.duration : message.position);
+        return done(true);
+      }
+      if (sessionActions().has("seekto")) {
+        invokeAction("seekto", message.position);
+        return done(true);
+      }
+      return done(false, "unsupported");
     }
     done(false, "unsupported");
   }
@@ -258,6 +282,8 @@
   }
   // Tab shown or hidden: a background video must not take the island from music.
   document.addEventListener("visibilitychange", report);
+  // The site registered or dropped a Media Session action: capabilities changed.
+  new MutationObserver(reportSoon).observe(document.documentElement, { attributes: true, attributeFilter: ["data-orilio-actions"] });
   for (const type of adapter.events ?? []) document.addEventListener(type, reportSoon);
 
   // Changes without a media event (track swaps, detached audio): watch only the few nodes that

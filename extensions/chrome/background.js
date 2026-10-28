@@ -137,6 +137,9 @@ chrome.tabs.onAttached.addListener((tabId, info) => {
 chrome.runtime.onInstalled.addListener(async () => {
   const open = await chrome.tabs.query({ url: ORIGINS.map((origin) => origin + "/*") });
   for (const tab of open) {
+    // The bridge only catches handlers registered after it loads, so these tabs fall back to the
+    // site's buttons until the page reloads.
+    chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["media-session-bridge.js"], world: "MAIN" }).catch(() => {});
     chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["policy.js", "content.js"] }).catch(() => {});
   }
 });
