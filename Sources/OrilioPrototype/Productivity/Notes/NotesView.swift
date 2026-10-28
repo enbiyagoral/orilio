@@ -254,7 +254,7 @@ private struct TaskRow: View {
                 ZStack {
                     Circle()
                         .strokeBorder(.white.opacity(task.done ? 0 : 0.35), lineWidth: 1.5)
-                        .background(Circle().fill(task.done ? mint : .clear))
+                        .background(Circle().fill(task.done ? accent(.rest) : .clear))
                     if task.done {
                         Image(systemName: "checkmark").font(.system(size: 9, weight: .heavy)).foregroundStyle(Design.ink)
                     }

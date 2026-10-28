@@ -12,27 +12,20 @@ enum Entry {
 
 struct OrilioApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    @AppStorage(StartupSettings.Keys.menuBarIcon) private var menuBarIcon = true
 
     var body: some Scene {
-        MenuBarExtra("Orilio", systemImage: "rectangle.topthird.inset.filled") {
+        // Hidden from Settings › Startup; opening Orilio again (Finder, Spotlight) then opens Settings.
+        MenuBarExtra("Orilio", systemImage: "rectangle.topthird.inset.filled", isInserted: $menuBarIcon) {
             MenuContent()
-        }
-        Settings {
-            SettingsView()
         }
     }
 }
 
 private struct MenuContent: View {
-    @Environment(\.openSettings) private var openSettings
-
     var body: some View {
-        Button("Settings…") {
-            // Accessory apps are never frontmost on their own; without this the window opens behind.
-            NSApp.activate()
-            openSettings()
-        }
-        .keyboardShortcut(",")
+        Button("Settings…") { SettingsWindow.show() }
+            .keyboardShortcut(",")
         #if DEBUG
         DebugMenu()
         #endif
@@ -42,6 +35,7 @@ private struct MenuContent: View {
     }
 }
 
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var positioner: IslandPositioner?
     private var bridge: BridgeServer?
@@ -52,6 +46,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillFinishLaunching(_ notification: Notification) {
         // No Dock icon, no app switcher entry. Works without an Info.plist (LSUIElement).
         NSApp.setActivationPolicy(.accessory)
+        // One Orilio at a time: a second launch hands over to the running one ("reopen", which opens
+        // Settings when the menu bar icon is hidden) and quits.
+        let others = NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "")
+            .filter { $0 != .current && $0.activationPolicy != .prohibited } // Chrome's native host is no app
+        if let running = others.first, let url = running.bundleURL {
+            NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
+            exit(0)
+        }
+    }
+
+    /// Opening Orilio while it runs (Finder, Spotlight, a second launch).
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if !StartupSettings.showsMenuBarIcon { SettingsWindow.show() }
+        return false
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -75,7 +83,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task { await notes.load() }
         let focus = FocusModule()
         focus.start() // a session from before the restart resumes or completes; never prompts
-        let modules = ModuleSettings()
+        let modules = ModuleSettings(store: .shared) // one preferences store for modules and the theme
         AppModules.modules = modules
         let library = ScreenshotLibrary()
         Task { await library.load() } // metadata only; thumbnails load as cells appear
@@ -85,9 +93,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                  calendar: calendar, clipboard: clipboard, notes: notes, focus: focus, modules: modules)
         AppModules.island = island
         // One island per display that should have one; extra ones share every module and the music.
-        positioner = IslandPositioner(primary: island) {
+        let positioner = IslandPositioner(primary: island) {
             IslandModel(shelf: shelf, library: library, calendar: calendar, clipboard: clipboard, notes: notes,
                         focus: focus, modules: modules, live: island.live, sharing: island)
+        }
+        self.positioner = positioner
+        GlobalHotKey.register { [weak positioner] in positioner?.toggle() }
+        startUp(island: island, positioner: positioner)
+    }
+
+    /// Settings › Startup › "When Orilio starts".
+    private func startUp(island: IslandModel, positioner: IslandPositioner) {
+        switch StartupSettings.launch {
+        case .quiet:
+            break
+        case .settings:
+            SettingsWindow.show()
+        case .hello:
+            // A moment later, once the displays and fullscreen state are known. Never over a
+            // fullscreen app or a meeting (the only thing above a confirmation).
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(1))
+                guard !positioner.pointerDisplayIsFullscreen, island.meetingSoon == nil else { return }
+                island.live.flash(Transient(symbol: "sparkles", title: "Orilio is ready", module: island.modules.visible[0]))
+            }
         }
     }
 
@@ -162,3 +191,24 @@ private struct DebugMenu: View {
     }
 }
 #endif
+
+/// Orilio's own Settings window, so it can be opened from anywhere (launch, reopen, the menu).
+@MainActor
+enum SettingsWindow {
+    private static var window: NSWindow?
+
+    static func show() {
+        if window == nil {
+            let window = NSWindow(contentViewController: NSHostingController(rootView: SettingsView()))
+            window.title = "Orilio Settings"
+            window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
+            window.setContentSize(NSSize(width: 820, height: 600))
+            window.isReleasedWhenClosed = false
+            window.center()
+            self.window = window
+        }
+        // An accessory app is never frontmost on its own; without this the window opens behind.
+        NSApp.activate()
+        window?.makeKeyAndOrderFront(nil)
+    }
+}

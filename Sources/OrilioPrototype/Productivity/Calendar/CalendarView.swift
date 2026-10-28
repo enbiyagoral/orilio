@@ -108,7 +108,7 @@ private struct NextCard: View {
                 Text(eyebrow(event))
                     .font(.system(size: 11, weight: .semibold))
                     .tracking(1.32) // 0.12 em
-                    .foregroundStyle(mint)
+                    .foregroundStyle(accent(.live))
                 Text(event?.title ?? "You're free")
                     .font(.system(size: 22, weight: .semibold))
                     .tracking(-0.44)
@@ -134,8 +134,8 @@ private struct NextCard: View {
                                 .font(.system(size: 14, weight: .semibold))
                                 .foregroundStyle(Design.ink)
                                 .frame(maxWidth: .infinity, minHeight: 44)
-                                .background(mint, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                                .shadow(color: mint.opacity(0.4), radius: 12)
+                                .background(accent(.action), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                                .themeGlow(.action, radius: 12, opacity: 0.4)
                         }
                         .buttonStyle(PressableStyle())
                         .accessibilityHint("Opens the \(event.meeting!.provider.rawValue) link in your browser or the meeting app")
@@ -309,7 +309,7 @@ struct ModuleMessage: View {
                             .foregroundStyle(Design.ink)
                             .padding(.horizontal, 16)
                             .frame(height: 32)
-                            .background(mint, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            .background(accent(.action), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                     }
                     .buttonStyle(PressableStyle())
                     .padding(.top, 6)

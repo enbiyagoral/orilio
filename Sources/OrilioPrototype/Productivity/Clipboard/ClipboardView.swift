@@ -22,11 +22,11 @@ struct ClipboardPanel: View {
         case .off:
             ModuleMessage(symbol: "list.clipboard", title: "Keep a history of what you copy",
                           detail: "Starts from now. Kept on this Mac only; items marked private and copies from password managers are skipped.",
-                          action: ("Turn On Clipboard History", { Task { await module.enable() } }), tint: mint)
+                          action: ("Turn On Clipboard History", { Task { await module.enable() } }), tint: accent(.action))
         case .blocked:
             ModuleMessage(symbol: "hand.raised", title: "Clipboard access is off",
                           detail: "macOS is set to deny Orilio reading other apps' copies. Allow it in System Settings › Privacy & Security › Paste from Other Apps.",
-                          action: ("Open System Settings", { NSWorkspace.shared.open(ClipboardModule.pasteSettingsURL) }), tint: mint)
+                          action: ("Open System Settings", { NSWorkspace.shared.open(ClipboardModule.pasteSettingsURL) }), tint: accent(.action))
         case .on, .paused:
             ClipboardHistory(module: module, library: library)
         }
@@ -86,7 +86,7 @@ private struct ClipboardHistory: View {
     @ViewBuilder private var status: some View {
         if module.status == .paused {
             Button { module.resume() } label: {
-                Text("Paused · Resume").font(.system(size: 11.5, weight: .medium)).foregroundStyle(mint)
+                Text("Paused · Resume").font(.system(size: 11.5, weight: .medium)).foregroundStyle(accent(.action))
             }
             .buttonStyle(.plain)
             .help("Copies made while paused are not recorded")
@@ -122,7 +122,7 @@ private struct ClipRow: View {
                 }
                 Text(copied ? "Copied" : ClipboardPolicy.age(of: item.copiedAt, at: now))
                     .font(.system(size: 11.5))
-                    .foregroundStyle(copied ? mint : .white.opacity(0.5))
+                    .foregroundStyle(copied ? accent(.rest) : .white.opacity(0.5))
                 Text(index < 9 ? "⌘\(index + 1)" : "")
                     .font(.system(size: 11))
                     .foregroundStyle(.white.opacity(0.4))
@@ -130,7 +130,7 @@ private struct ClipRow: View {
             }
             .padding(.horizontal, 10)
             .frame(height: 38)
-            .background(copied ? mint.opacity(0.12) : .clear, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+            .background(copied ? accent(.rest).opacity(0.12) : .clear, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -158,7 +158,7 @@ private struct KindTile: View {
         let (symbol, ink): (String, Color) = switch kind {
         case .text: ("text.alignleft", .white)
         case .link: ("link", Design.linkInk)
-        case .code: ("chevron.left.forwardslash.chevron.right", mint)
+        case .code: ("chevron.left.forwardslash.chevron.right", accent(.rest))
         case .image: ("photo", .white)
         case .files: ("doc", .white)
         }
@@ -170,7 +170,7 @@ private struct KindTile: View {
                 let shape = RoundedRectangle(cornerRadius: 7, style: .continuous)
                 switch kind {
                 case .link: shape.fill(Design.linkTile)
-                case .code: shape.fill(mint.opacity(0.14))
+                case .code: shape.fill(accent(.rest).opacity(0.14))
                 case .image: shape.fill(Design.imageGradient)
                 default: shape.fill(.white.opacity(0.1))
                 }

@@ -89,6 +89,20 @@ final class IslandPositioner {
         update()
     }
 
+    /// The global shortcut: closes whatever island is open, else opens the one on the pointer's
+    /// display (it shows even over a fullscreen app while open).
+    func toggle() {
+        let open = islands.values.filter { $0.model.state.isOpen }
+        guard open.isEmpty else { return open.forEach { $0.model.dismiss() } }
+        let display = ScreenResolver.display(at: NSEvent.mouseLocation, in: screens)
+        (islands.values.first { $0.screen.id == display } ?? islands.values.first)?.model.tap()
+    }
+
+    /// Whether the display under the pointer shows a fullscreen app (the startup hello stays away then).
+    var pointerDisplayIsFullscreen: Bool {
+        ScreenResolver.display(at: NSEvent.mouseLocation, in: screens).map(fullscreenDisplays.contains) ?? false
+    }
+
     // MARK: Fullscreen
 
     private func recheckFullscreen() {

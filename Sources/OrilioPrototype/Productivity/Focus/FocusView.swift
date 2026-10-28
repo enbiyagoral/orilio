@@ -52,8 +52,8 @@ struct FocusPanel: View {
                             .foregroundStyle(Design.ink)
                             .padding(.horizontal, 22)
                             .frame(height: 44)
-                            .background(mint, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                            .shadow(color: mint.opacity(0.4), radius: 12)
+                            .background(accent(.action), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                            .themeGlow(.action, radius: 12, opacity: 0.4)
                     }
                     .buttonStyle(PressableStyle())
                     Button(action: module.reset) {
@@ -71,7 +71,7 @@ struct FocusPanel: View {
                     Toggle("Notify me when a session ends", isOn: Binding(
                         get: { module.notify }, set: { on in Task { await module.setNotify(on) } }))
                         .toggleStyle(.checkbox)
-                        .tint(mint)
+                        .tint(accent(.rest))
                         .font(.system(size: 13))
                         .foregroundStyle(.white.opacity(0.75))
                     if module.notificationsDenied {
@@ -92,7 +92,7 @@ struct FocusPanel: View {
 private struct FocusRing: View {
     let module: FocusModule
     let now: Date
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.reducesMotion) private var reduceMotion
 
     var body: some View {
         let remaining = module.remaining(at: now)
@@ -100,9 +100,9 @@ private struct FocusRing: View {
             Circle().stroke(Design.track, lineWidth: 10)
             Circle()
                 .trim(from: 0, to: module.fraction(at: now))
-                .stroke(mint, style: StrokeStyle(lineWidth: 10, lineCap: .round))
+                .stroke(accent(.live), style: StrokeStyle(lineWidth: 10, lineCap: .round))
                 .rotationEffect(.degrees(-90))
-                .shadow(color: mint.opacity(module.isRunning ? 0.45 : 0), radius: 10)
+                .themeGlow(.live, radius: 10, opacity: module.isRunning ? 0.45 : 0)
                 .animation(reduceMotion ? nil : .linear(duration: 1), value: remaining)
             VStack(spacing: 2) {
                 Text(FocusSession.text(remaining))
@@ -143,7 +143,7 @@ private struct SessionDots: View {
     var body: some View {
         HStack(spacing: 5) {
             ForEach(0..<FocusModule.dailyGoal, id: \.self) { index in
-                Circle().fill(index < count ? mint : .white.opacity(0.2)).frame(width: 8, height: 8)
+                Circle().fill(index < count ? accent(.rest) : .white.opacity(0.2)).frame(width: 8, height: 8)
             }
             if count > FocusModule.dailyGoal {
                 Text("+\(count - FocusModule.dailyGoal)").font(.system(size: 11.5)).foregroundStyle(.white.opacity(0.5))

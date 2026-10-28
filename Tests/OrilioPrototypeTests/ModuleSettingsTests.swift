@@ -14,7 +14,7 @@ struct ModuleSettingsTests {
     @Test func defaultsFollowTheDesign() {
         let modules = ModuleSettings(defaults: freshDefaults())
         #expect(modules.visible == [.calendar, .clipboard, .notes, .focus, .music, .shelf])
-        #expect(modules.defaultTab == nil)
+        #expect(modules.openWith == .live)
         #expect(modules.indicators == Set(CollapsedIndicator.allCases))
     }
 
@@ -23,12 +23,12 @@ struct ModuleSettingsTests {
         let modules = ModuleSettings(defaults: defaults)
         modules.setVisible(.clipboard, false)
         modules.move(.shelf, by: -1)
-        modules.setDefault(.notes)
+        modules.setOpenWith(.first)
         modules.setIndicator(.music, false)
 
         let again = ModuleSettings(defaults: defaults)
         #expect(again.visible == [.calendar, .notes, .focus, .shelf, .music])
-        #expect(again.defaultTab == .notes)
+        #expect(again.openWith == .first)
         #expect(again.indicators == [.focus, .meeting])
     }
 
@@ -38,16 +38,17 @@ struct ModuleSettingsTests {
         #expect(modules.visible.count == 1)
     }
 
-    @Test func hidingTheDefaultFallsBackToLastUsed() {
+    @Test func dragReorderChangesTheTabOrder() {
         let modules = ModuleSettings(defaults: freshDefaults())
-        modules.setDefault(.focus)
-        modules.setVisible(.focus, false)
-        #expect(modules.defaultTab == nil)
+        modules.move(from: [5], to: 0) // Shelf to the front
+        #expect(modules.visible.first == .shelf)
+        modules.move(.shelf, by: 1)
+        #expect(modules.visible.prefix(2) == [.calendar, .shelf])
     }
 
     @Test func unknownOrMissingSavedModulesAreTolerated() {
         let defaults = freshDefaults()
-        defaults.set(["shelf", "nonsense", "music"], forKey: ModuleKeys.order) // e.g. written by an older version
+        defaults.set(["shelf", "nonsense", "music"], forKey: "modules.order") // written by M3.5, migrated
         let modules = ModuleSettings(defaults: defaults)
         #expect(modules.order == [.shelf, .music, .calendar, .clipboard, .notes, .focus])
     }
@@ -73,15 +74,24 @@ struct ModuleIntegrationTests {
         #expect(model.earLayout.isIdle)
     }
 
-    @Test func clickingTheCollapsedIslandOpensTheLiveModule() {
+    @Test func whenTheIslandOpensShow() {
         let (model, focus, modules) = island()
-        modules.setDefault(.notes)
-        model.tap()
+        model.tab = .notes
+        model.tap() // live, nothing live: stays on the last module
         #expect(model.tab == .notes)
         model.dismiss()
         focus.begin()
-        model.tap()
+        model.tap() // live: the focus session
         #expect(model.tab == .focus)
+        model.dismiss()
+        modules.setOpenWith(.last)
+        model.tab = .notes
+        model.tap()
+        #expect(model.tab == .notes)
+        model.dismiss()
+        modules.setOpenWith(.first)
+        model.tap()
+        #expect(model.tab == modules.visible[0])
     }
 
     @Test func liveStatesNeverSwitchAnOpenModule() {

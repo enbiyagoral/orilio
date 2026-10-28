@@ -223,12 +223,21 @@ final class IslandModel {
     }
 
     /// Hover and clicks open to the module that is live, else the default one.
-    private func chooseOpeningTab() { tab = earLayout.primary?.module ?? modules.defaultTab ?? tab }
+    private func chooseOpeningTab() { tab = openingTab }
+
+    /// Settings › Modules › "When the island opens, show".
+    private var openingTab: IslandTab {
+        switch modules.openWith {
+        case .live: earLayout.primary?.module ?? tab
+        case .last: tab
+        case .first: modules.visible[0]
+        }
+    }
 
     /// A click on one ear of the collapsed island opens that ear's module.
     func tapEar(_ side: EarSide) {
         guard !state.isOpen else { return tap() }
-        tab = earLayout.activity(at: side)?.module ?? modules.defaultTab ?? tab
+        tab = earLayout.activity(at: side)?.module ?? openingTab
         set(.pinned)
     }
     func togglePin() {

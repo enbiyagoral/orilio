@@ -182,7 +182,7 @@ final class ScreenshotCell: NSCollectionViewItem {
 
     private func updateBorder() {
         view.layer?.borderWidth = isSelected ? 2 : 1
-        view.layer?.borderColor = isSelected ? NSColor(mint).cgColor : NSColor.white.withAlphaComponent(0.08).cgColor
+        view.layer?.borderColor = isSelected ? NSColor(accent(.rest)).cgColor : NSColor.white.withAlphaComponent(0.08).cgColor
         view.setAccessibilitySelected(isSelected)
     }
 }

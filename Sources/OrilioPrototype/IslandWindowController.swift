@@ -15,6 +15,9 @@ struct IslandGeometry: Equatable {
     var usableHeight: CGFloat = .greatestFiniteMagnitude
     /// Pixels per point; positions snap to this display's pixel grid (1x and 2x screens mix).
     var scale: CGFloat = 2
+    /// Settings › Appearance › Panel size: the open panel's width (560, 700 or 820 pt). The content
+    /// height scales with it; the collapsed island doesn't change.
+    var panelWidth: CGFloat = IslandGeometry.fullWidth
 
     static let pillWidth: CGFloat = 220     // fits a mini cover + a short title in the menu bar band
     // The M3 hub design: a 700 × 304 panel whose 38 pt header row shares the notch's row (tabs to
@@ -44,7 +47,7 @@ struct IslandGeometry: Equatable {
 
     /// Click: the full controller.
     var full: CGSize {
-        CGSize(width: Self.fullWidth, height: max(topInset, Self.headerHeight) + Self.contentHeight)
+        CGSize(width: panelWidth, height: max(topInset, Self.headerHeight) + (Self.contentHeight * panelWidth / Self.fullWidth).rounded())
     }
 
     /// A drag over the island: enough room for a clear drop zone, no more.
@@ -55,7 +58,7 @@ struct IslandGeometry: Equatable {
     /// The full panel grown for the screenshot grid, capped so it never runs off the screen.
     var tall: CGSize {
         let room = usableHeight + topInset - Self.shadowMargin * 2
-        return CGSize(width: Self.fullWidth, height: min(Self.tallHeight, max(full.height, room)))
+        return CGSize(width: panelWidth, height: min(Self.tallHeight * panelWidth / Self.fullWidth, max(full.height, room)))
     }
 
     func size(for state: IslandState, tall wantsTall: Bool = false, collapsedWidth: CGFloat? = nil) -> CGSize {
@@ -283,7 +286,8 @@ final class IslandWindowController {
 
     /// Places the island on its display. Never activates the app, so the user's focus stays put.
     func reposition() {
-        let geometry = screen.geometry
+        var geometry = screen.geometry
+        geometry.panelWidth = PreferencesStore.shared.value.panelSize.width
         if geometry != model.geometry { model.geometry = geometry }
         panel.setFrame(geometry.windowFrame(for: model.state, tall: model.wantsTallPanel,
                                             collapsedWidth: model.liveCollapsedWidth), display: true)
@@ -342,7 +346,7 @@ final class IslandWindowController {
         guard show != panel.isVisible else { return }
         if !show { return panel.orderOut(nil) }
         reposition()
-        guard sliding, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { return panel.orderFrontRegardless() }
+        guard sliding, !Theme.current.reducesMotion else { return panel.orderFrontRegardless() }
         // Slide down from above the top edge.
         let target = panel.frame
         panel.setFrame(target.offsetBy(dx: 0, dy: target.height), display: false)
@@ -390,7 +394,7 @@ final class IslandWindowController {
         } else {
             // Keep the window large until the SwiftUI shrink animation has finished, then shrink it
             // so the empty area stops catching clicks.
-            let delay = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : IslandModel.closeDuration
+            let delay = Theme.current.reducesMotion ? 0 : IslandModel.closeDuration
             shrinkTask = Task { [weak self] in
                 try? await Task.sleep(for: .seconds(delay))
                 guard let self, !Task.isCancelled, self.model.state == state else { return }
@@ -417,7 +421,7 @@ final class IslandWindowController {
         widthTask?.cancel()
         let target = model.geometry.windowFrame(for: .collapsed, collapsedWidth: model.liveCollapsedWidth)
         guard target.width < panel.frame.width else { return reposition() }
-        let delay = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : 0.44
+        let delay = Theme.current.reducesMotion ? 0 : 0.44
         widthTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(delay))
             guard let self, !Task.isCancelled, !self.model.state.isOpen else { return }

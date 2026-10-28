@@ -2,7 +2,6 @@ import AppKit
 import SwiftUI
 
 /// Orilio's accent: a neon green that stays readable as text and controls on the black island.
-let mint = Color(red: 0.169, green: 1.0, blue: 0.722) // #2BFFB8, the M3 hub design's accent
 private let coverGradient = LinearGradient(
     colors: [Color(red: 0.96, green: 0.78, blue: 0.68), Color(red: 0.96, green: 0.55, blue: 0.6), Color(red: 0.4, green: 0.27, blue: 0.56)],
     startPoint: .topLeading, endPoint: .bottomTrailing)
@@ -67,7 +66,7 @@ private extension AnyTransition {
 
 struct IslandView: View {
     let model: IslandModel
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.reducesMotion) private var reduceMotion
 
     var body: some View {
         let geometry = model.geometry
@@ -132,7 +131,7 @@ struct IslandView: View {
         .accessibilityAction(named: "Open controls") { model.tap() }
         .animation(shapeAnimation(collapsing: state == .collapsed), value: state)
         // One spring when the collapsed island widens or narrows for what it shows.
-        .animation(reduceMotion ? nil : .spring(duration: 0.44, bounce: 0.15), value: state == .collapsed ? size.width : 0)
+        .animation(Theme.current.spring(duration: 0.44, bounce: 0.15), value: state == .collapsed ? size.width : 0)
         // The Screenshots grid makes the open panel taller without a state change: grow and shrink
         // the same way (the window keeps its larger size until the shrink has finished).
         .animation(shapeAnimation(collapsing: !model.showsTallPanel), value: model.showsTallPanel)
@@ -140,6 +139,8 @@ struct IslandView: View {
         // pinned to the top edge, not glide from its old position.
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .environment(\.colorScheme, .dark)
+        .environment(\.reducesMotion, Theme.current.reducesMotion)
+
     }
 
     private var contentTransition: AnyTransition {
@@ -151,11 +152,10 @@ struct IslandView: View {
     }
 
     private func shapeAnimation(collapsing: Bool) -> Animation? {
-        if reduceMotion { return nil }
         // Springs are interruptible: hovering back mid-close retargets from where the shape is.
-        return collapsing
-            ? .spring(duration: IslandModel.closeDuration, bounce: 0)
-            : .spring(duration: IslandModel.openDuration, bounce: 0.22)
+        collapsing
+            ? Theme.current.spring(duration: IslandModel.closeDuration)
+            : Theme.current.spring(duration: IslandModel.openDuration, bounce: 0.22)
     }
 }
 
@@ -191,17 +191,17 @@ private struct ActivityIndicator: View {
             let playing = expectedPlaying ?? (session.state == .playing)
             Image(systemName: playing ? "play.rectangle.fill" : "pause.rectangle")
                 .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(mint.opacity(playing ? 1 : 0.5))
+                .foregroundStyle(accent(.live).opacity(playing ? 1 : 0.5))
                 .accessibilityHidden(true)
         } else {
-            EqualizerView(mode: EqualizerView.Mode(session, expectedPlaying: expectedPlaying), color: NSColor(mint))
+            EqualizerView(mode: EqualizerView.Mode(session, expectedPlaying: expectedPlaying), color: NSColor(accent(.live)))
         }
     }
 }
 
 private struct ExpandedContent: View {
     @Bindable var model: IslandModel
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.reducesMotion) private var reduceMotion
 
     var body: some View {
         VStack(spacing: 0) {
@@ -239,7 +239,7 @@ private struct ExpandedContent: View {
             .padding(model.tab == .music ? EdgeInsets() : EdgeInsets(top: 10, leading: 20, bottom: 20, trailing: 20))
             .frame(maxHeight: .infinity, alignment: .top)
         }
-        .animation(reduceMotion ? nil : .spring(duration: 0.3, bounce: 0.1), value: model.tab)
+        .animation(Theme.current.spring(duration: 0.3, bounce: 0.1), value: model.tab)
     }
 
     /// A small dot on a tab that has something live while another tab is shown.
@@ -270,8 +270,8 @@ private struct ModuleTab: View {
                 .background(selected ? Color.white.opacity(0.14) : .clear, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
                 .overlay(alignment: .topTrailing) {
                     if live {
-                        Circle().fill(mint).frame(width: 5, height: 5)
-                            .shadow(color: mint, radius: 3)
+                        Circle().fill(accent(.live)).frame(width: 5, height: 5)
+                            .themeGlow(.live, radius: 3, opacity: 1)
                             .padding(.top, 4).padding(.trailing, 5)
                     }
                 }
@@ -297,7 +297,7 @@ private struct HeaderButton: View {
         Button(action: action) {
             Image(systemName: symbol)
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(active ? mint : .white.opacity(0.6))
+                .foregroundStyle(active ? accent(.rest) : .white.opacity(0.6))
                 .frame(width: 30, height: 28)
                 .background(active ? Color.white.opacity(0.14) : .clear, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
                 .contentShape(Rectangle())
@@ -345,7 +345,7 @@ private struct Artwork: View {
 
 private struct MusicCard: View {
     let media: MediaCoordinator
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.reducesMotion) private var reduceMotion
 
     var body: some View {
         ZStack {
@@ -369,7 +369,7 @@ private struct NowPlaying: View {
     /// Direction of the last skip the user asked for, for the title transition.
     @State private var step = 1
     @State private var feedback = ControlFeedback()
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.reducesMotion) private var reduceMotion
 
     var body: some View {
         let caps = session.capabilities
@@ -496,7 +496,7 @@ private struct PlayPauseButton: View {
     let media: MediaCoordinator
     @Binding var feedback: ControlFeedback
     let diameter: CGFloat
-    /// A mint disc with a black glyph; otherwise a white glyph alone (the full Music panel).
+    /// An accent disc with a dark glyph; otherwise a white glyph alone (the full Music panel).
     var filled = true
 
     var body: some View {
@@ -510,7 +510,7 @@ private struct PlayPauseButton: View {
                 .contentTransition(.symbolEffect(.replace.downUp))
                 .foregroundStyle(filled ? .black : .white)
                 .frame(width: diameter, height: diameter)
-                .background(filled ? mint : .clear, in: Circle())
+                .background(filled ? accent(.action) : .clear, in: Circle())
                 .contentShape(Circle())
         }
         .buttonStyle(PressableStyle())
@@ -622,7 +622,7 @@ private struct SourceBadge: View {
         .font(.system(size: 10, weight: .semibold))
         .foregroundStyle(isDemo ? .black : .white.opacity(0.75))
         .padding(.horizontal, 8).padding(.vertical, 4)
-        .background(isDemo ? mint.opacity(0.85) : .white.opacity(0.1), in: Capsule())
+        .background(isDemo ? accent(.rest).opacity(0.85) : .white.opacity(0.1), in: Capsule())
 
         if media.sessions.count > 1 {
             Menu {
@@ -705,7 +705,7 @@ private struct PermissionLink: View {
         }
         .buttonStyle(.plain)
         .font(.system(size: 12, weight: .semibold))
-        .foregroundStyle(mint)
+        .foregroundStyle(accent(.action))
     }
 }
 
@@ -820,16 +820,16 @@ private struct MeetingEarView: View {
                     .foregroundStyle(Color(red: 0, green: 0.078, blue: 0.051)) // #00140D
                     .padding(.horizontal, 10)
                     .frame(height: 22)
-                    .background(mint, in: Capsule())
-                    .shadow(color: mint.opacity(0.5), radius: 7)
+                    .background(accent(.action), in: Capsule())
+                    .themeGlow(.action, radius: 7, opacity: 0.5)
             }
             .buttonStyle(PressableStyle())
             .padding(.trailing, -8) // the design's 6 pt right inset for the pill
             .accessibilityLabel("Join \(event.title)")
         } else {
             Text(CalendarDay.countdown(to: event.start, from: now))
-                .foregroundStyle(mint)
-                .shadow(color: mint.opacity(0.55), radius: 5)
+                .foregroundStyle(accent(.live))
+                .themeGlow(.live, radius: 5, opacity: 0.55)
                 .accessibilityHidden(true)
         }
     }
@@ -848,14 +848,14 @@ private struct FocusEar: View {
                     Circle().stroke(.white.opacity(0.2), lineWidth: 2.4)
                     Circle()
                         .trim(from: 0, to: module.fraction(at: now))
-                        .stroke(mint, style: StrokeStyle(lineWidth: 2.4, lineCap: .round))
+                        .stroke(accent(.live), style: StrokeStyle(lineWidth: 2.4, lineCap: .round))
                         .rotationEffect(.degrees(-90))
                 }
                 .frame(width: 12, height: 12)
                 Text(FocusSession.text(remaining)).monospacedDigit()
             }
-            .foregroundStyle(mint.opacity(module.isRunning ? 1 : 0.55))
-            .shadow(color: mint.opacity(module.isRunning ? 0.5 : 0), radius: 5)
+            .foregroundStyle(accent(.live).opacity(module.isRunning ? 1 : 0.55))
+            .themeGlow(.live, radius: 5, opacity: module.isRunning ? 0.5 : 0)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Focus timer \(FocusSession.text(remaining))\(module.isRunning ? "" : ", paused")")
         }
@@ -869,7 +869,7 @@ private struct TransientEar: View {
     var body: some View {
         if side == .leading {
             HStack(spacing: 7) {
-                Image(systemName: transient.symbol).font(.system(size: 11, weight: .heavy)).foregroundStyle(mint)
+                Image(systemName: transient.symbol).font(.system(size: 11, weight: .heavy)).foregroundStyle(accent(.rest))
                 Text(transient.title).lineLimit(1)
             }
             .accessibilityElement(children: .combine)

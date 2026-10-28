@@ -12,7 +12,7 @@ struct EqualizerView: NSViewRepresentable {
     let mode: Mode
     var color: NSColor = .white
     var style: Style = .arch
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.reducesMotion) private var reduceMotion
 
     /// The bars' shape and motion.
     struct Style: Equatable {

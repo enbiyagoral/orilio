@@ -12,14 +12,14 @@ struct DropTargetView: View {
         HStack(spacing: 10) {
             Image(systemName: valid ? "tray.and.arrow.down.fill" : "nosign")
                 .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(valid ? mint : .white.opacity(Metrics.secondaryText))
+                .foregroundStyle(valid ? accent(.action) : .white.opacity(Metrics.secondaryText))
             Text(valid ? "Drop to add to \(destination)" : "This can't go on the \(destination)")
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(valid ? .white : .white.opacity(Metrics.secondaryText))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(valid ? mint.opacity(0.08) : .clear, in: shape)
-        .overlay(shape.strokeBorder(valid ? mint.opacity(0.9) : .white.opacity(0.2),
+        .background(valid ? accent(.action).opacity(0.08) : .clear, in: shape)
+        .overlay(shape.strokeBorder(valid ? accent(.action).opacity(0.9) : .white.opacity(0.2),
                                     style: StrokeStyle(lineWidth: 1.5, dash: valid ? [] : [5, 4])))
         .padding(Metrics.previewPadding)
         .animation(.easeInOut(duration: 0.15), value: valid)
@@ -35,7 +35,7 @@ struct ShelfView: View {
     /// Called after items were dragged out and received somewhere: the island can step aside.
     var draggedOut: () -> Void = {}
     @Namespace private var sections
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.reducesMotion) private var reduceMotion
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -58,7 +58,7 @@ struct ShelfView: View {
             case .screenshots: ScreenshotsView(library: library)
             }
         }
-        .animation(reduceMotion ? nil : .spring(duration: 0.3, bounce: 0.1), value: section)
+        .animation(Theme.current.spring(duration: 0.3, bounce: 0.1), value: section)
         .animation(.easeInOut(duration: 0.2), value: shelf.problem)
         .animation(.easeInOut(duration: 0.2), value: library.problem)
         // Once each time the shelf is shown: files may have moved or been deleted meanwhile.
@@ -121,8 +121,8 @@ private struct ShelfTile: View {
             }
             .padding(10)
             .frame(height: 146)
-            .background(selected ? mint.opacity(0.16) : .white.opacity(hovering ? 0.08 : 0.05), in: shape)
-            .overlay(shape.strokeBorder(selected ? mint.opacity(0.7) : .white.opacity(0.08), lineWidth: 1))
+            .background(selected ? accent(.rest).opacity(0.16) : .white.opacity(hovering ? 0.08 : 0.05), in: shape)
+            .overlay(shape.strokeBorder(selected ? accent(.rest).opacity(0.7) : .white.opacity(0.08), lineWidth: 1))
             // Clicks, double-clicks, the context menu and dragging out are handled in AppKit underneath.
             .overlay { TileInteraction(actions: .shelf(item, in: shelf, draggedOut: draggedOut)) }
 
