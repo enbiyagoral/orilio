@@ -329,6 +329,6 @@ final class NetworkStatus {
             let offline = path.status != .satisfied
             Task { @MainActor in NetworkStatus.shared.offline = offline }
         }
-        monitor.start(queue: DispatchQueue(label: "com.deaconcornsoft.orilio.network"))
+        monitor.start(queue: DispatchQueue(label: "com.enbiyagoral.orilio.network"))
     }
 }

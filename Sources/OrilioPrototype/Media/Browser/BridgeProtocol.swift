@@ -44,7 +44,7 @@ struct BridgeMessage: Codable, Equatable, Sendable {
 
 enum BridgeProtocol {
     static let version = 1
-    static let hostName = "com.deaconcornsoft.orilio"
+    static let hostName = "com.enbiyagoral.orilio"
     /// Fixed by the `key` in extensions/chrome/manifest.json.
     static let extensionID = "jpnkibdkjlelnemfnpifoakbglenjnbg"
     static let extensionOrigin = "chrome-extension://\(extensionID)/"

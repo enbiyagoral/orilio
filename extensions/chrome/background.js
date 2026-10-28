@@ -4,7 +4,7 @@
 
 importScripts("policy.js");
 
-const HOST = "com.deaconcornsoft.orilio";
+const HOST = "com.enbiyagoral.orilio";
 const PROTOCOL = 1;
 const PORT_NAME = "orilio-media";
 const ORIGINS = ["https://music.youtube.com", "https://open.spotify.com", "https://soundcloud.com",

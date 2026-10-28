@@ -200,7 +200,7 @@ private extension CameraMirrorState {
 /// render server.
 final class CameraSession: @unchecked Sendable {
     let session = AVCaptureSession()
-    private let queue = DispatchQueue(label: "com.deaconcornsoft.orilio.camera")
+    private let queue = DispatchQueue(label: "com.enbiyagoral.orilio.camera")
 
     /// Switches to the camera and runs. Reports `false` when another app holds the camera.
     func start(deviceID: String, completion: @escaping @Sendable (Bool) -> Void) {

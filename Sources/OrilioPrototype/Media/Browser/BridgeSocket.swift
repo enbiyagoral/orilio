@@ -97,7 +97,7 @@ final class BridgeServer: @unchecked Sendable {
     }
 
     // All mutable state is confined to `queue`.
-    private let queue = DispatchQueue(label: "com.deaconcornsoft.orilio.bridge")
+    private let queue = DispatchQueue(label: "com.enbiyagoral.orilio.bridge")
     private let path: String
     private let onEvent: @Sendable (Event) -> Void
     private var listener: DispatchSourceRead?

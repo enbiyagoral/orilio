@@ -21,7 +21,7 @@ extension MediaError {
 final class AppleScriptRunner: @unchecked Sendable {
     static let shared = AppleScriptRunner()
 
-    private let queue = DispatchQueue(label: "com.deaconcornsoft.orilio.applescript", qos: .userInitiated)
+    private let queue = DispatchQueue(label: "com.enbiyagoral.orilio.applescript", qos: .userInitiated)
     private var compiled: [String: NSAppleScript] = [:] // only touched on `queue`
 
     func run<T: Sendable>(_ source: String,
