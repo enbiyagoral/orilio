@@ -13,7 +13,7 @@ private let meeting = CalendarEvent(id: "m", eventIdentifier: nil, title: "Desig
 struct ModuleSettingsTests {
     @Test func defaultsFollowTheDesign() {
         let modules = ModuleSettings(defaults: freshDefaults())
-        #expect(modules.visible == [.calendar, .clipboard, .notes, .focus, .music, .shelf])
+        #expect(modules.visible == [.calendar, .focus, .music, .clipboard, .notes, .shelf]) // the M4 Settings order; Camera Mirror starts off
         #expect(modules.openWith == .live)
         #expect(modules.indicators == Set(CollapsedIndicator.allCases))
     }
@@ -27,7 +27,7 @@ struct ModuleSettingsTests {
         modules.setIndicator(.music, false)
 
         let again = ModuleSettings(defaults: defaults)
-        #expect(again.visible == [.calendar, .notes, .focus, .shelf, .music])
+        #expect(again.visible == [.calendar, .focus, .music, .shelf, .notes])
         #expect(again.openWith == .first)
         #expect(again.indicators == [.focus, .meeting])
     }
@@ -50,7 +50,7 @@ struct ModuleSettingsTests {
         let defaults = freshDefaults()
         defaults.set(["shelf", "nonsense", "music"], forKey: "modules.order") // written by M3.5, migrated
         let modules = ModuleSettings(defaults: defaults)
-        #expect(modules.order == [.shelf, .music, .calendar, .clipboard, .notes, .focus])
+        #expect(modules.order == [.shelf, .music, .calendar, .focus, .clipboard, .notes, .mirror])
     }
 }
 
@@ -108,6 +108,7 @@ struct ModuleIntegrationTests {
         let (model, _, modules) = island()
         modules.setVisible(.clipboard, false)
         model.tab = .calendar
+        model.tab = .music
         model.selectAdjacentTab(1)
         #expect(model.tab == .notes) // the hidden Clipboard is skipped
         model.tab = .calendar

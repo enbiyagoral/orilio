@@ -61,17 +61,18 @@ struct IslandGeometry: Equatable {
         return CGSize(width: panelWidth, height: min(Self.tallHeight * panelWidth / Self.fullWidth, max(full.height, room)))
     }
 
-    func size(for state: IslandState, tall wantsTall: Bool = false, collapsedWidth: CGFloat? = nil) -> CGSize {
+    /// `panel` replaces the open size for a module with its own (the camera mirror).
+    func size(for state: IslandState, tall wantsTall: Bool = false, collapsedWidth: CGFloat? = nil, panel: CGSize? = nil) -> CGSize {
         switch state {
         case .collapsed: CGSize(width: max(collapsed.width, collapsedWidth ?? 0), height: collapsed.height)
-        case .expanded, .pinned: wantsTall ? tall : full
+        case .expanded, .pinned: panel ?? (wantsTall ? tall : full)
         case .dropTarget: dropTarget
         }
     }
 
     /// Collapsed: exactly the island. Open: the island plus ears and shadow room.
-    func windowFrame(for state: IslandState, tall: Bool = false, collapsedWidth: CGFloat? = nil) -> CGRect {
-        var size = size(for: state, tall: tall, collapsedWidth: collapsedWidth)
+    func windowFrame(for state: IslandState, tall: Bool = false, collapsedWidth: CGFloat? = nil, panel: CGSize? = nil) -> CGRect {
+        var size = size(for: state, tall: tall, collapsedWidth: collapsedWidth, panel: panel)
         if state.isOpen {
             size.width += 2 * (Self.earRadius + Self.shadowMargin)
             size.height += Self.shadowMargin
@@ -290,7 +291,7 @@ final class IslandWindowController {
         geometry.panelWidth = PreferencesStore.shared.value.panelSize.width
         if geometry != model.geometry { model.geometry = geometry }
         panel.setFrame(geometry.windowFrame(for: model.state, tall: model.wantsTallPanel,
-                                            collapsedWidth: model.liveCollapsedWidth), display: true)
+                                            collapsedWidth: model.liveCollapsedWidth, panel: model.mirrorPanel(for: model.state)), display: true)
     }
 
     /// To another display (pointer moved, a display was unplugged); the island's state goes with it.
@@ -374,6 +375,9 @@ final class IslandWindowController {
     private func apply(_ state: IslandState) {
         shrinkTask?.cancel()
         watchOutsideClicks(state == .pinned)
+        // Revealed over a fullscreen app and now closing with the pointer gone from the top: hide
+        // again (no further pointer event may come to do it).
+        if state == .collapsed, revealed, NSEvent.mouseLocation.y < screen.frame.maxY - 80 { revealed = false }
         Task { @MainActor [weak self] in self?.refreshVisibility() } // once the new state is set
 
         if state == .pinned, model.pinTakesFocus {
@@ -387,7 +391,8 @@ final class IslandWindowController {
         }
 
         // Sized for the state being entered (the model still reports the old one at this point).
-        let target = model.geometry.windowFrame(for: state, tall: model.isTall(state), collapsedWidth: model.liveCollapsedWidth)
+        let target = model.geometry.windowFrame(for: state, tall: model.isTall(state), collapsedWidth: model.liveCollapsedWidth,
+                                                panel: model.mirrorPanel(for: state))
         if target.width >= panel.frame.width, target.height >= panel.frame.height {
             panel.setFrame(target, display: true)
             panel.contentView?.layoutSubtreeIfNeeded() // settle the current island in the bigger window

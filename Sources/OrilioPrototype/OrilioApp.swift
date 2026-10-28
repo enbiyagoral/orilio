@@ -16,7 +16,10 @@ struct OrilioApp: App {
 
     var body: some Scene {
         // Hidden from Settings › Startup; opening Orilio again (Finder, Spotlight) then opens Settings.
-        MenuBarExtra("Orilio", systemImage: "rectangle.topthird.inset.filled", isInserted: $menuBarIcon) {
+        // SwiftUI writes `isInserted` back on every scene update; writing an unchanged value to the
+        // defaults would post a change, rebuild the scene and loop, so only real changes are stored.
+        MenuBarExtra("Orilio", systemImage: "rectangle.topthird.inset.filled",
+                     isInserted: Binding(get: { menuBarIcon }, set: { if $0 != menuBarIcon { menuBarIcon = $0 } })) {
             MenuContent()
         }
     }
@@ -24,6 +27,12 @@ struct OrilioApp: App {
 
 private struct MenuContent: View {
     var body: some View {
+        // The quick way to the camera mirror; gone with the module when it is hidden.
+        // Read from the preferences store, which exists before the menu is built (the island doesn't yet).
+        if ModuleSettings(store: .shared).isVisible(.mirror) {
+            Button("Mirror") { AppModules.island?.openMirror() }
+            Divider()
+        }
         Button("Settings…") { SettingsWindow.show() }
             .keyboardShortcut(",")
         #if DEBUG
@@ -90,7 +99,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         library.startWatchingIfEnabled()
         AppModules.library = library
         let island = IslandModel(providers: providers, shelf: shelf, library: library,
-                                 calendar: calendar, clipboard: clipboard, notes: notes, focus: focus, modules: modules)
+                                 calendar: calendar, clipboard: clipboard, notes: notes, focus: focus, modules: modules,
+                                 mirror: CameraMirrorModel())
         AppModules.island = island
         // One island per display that should have one; extra ones share every module and the music.
         let positioner = IslandPositioner(primary: island) {
@@ -199,16 +209,25 @@ enum SettingsWindow {
 
     static func show() {
         if window == nil {
+            // The design's 1040 × 760 window: dark, no title, the traffic lights over the sidebar.
             let window = NSWindow(contentViewController: NSHostingController(rootView: SettingsView()))
             window.title = "Orilio Settings"
-            window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
-            window.setContentSize(NSSize(width: 820, height: 600))
+            window.styleMask = [.titled, .closable, .miniaturizable, .fullSizeContentView]
+            window.titlebarAppearsTransparent = true
+            window.titleVisibility = .hidden
+            window.isMovableByWindowBackground = true
+            window.appearance = NSAppearance(named: .darkAqua)
+            window.backgroundColor = NSColor(red: 0x1C / 255, green: 0x1C / 255, blue: 0x1F / 255, alpha: 1)
+            window.setContentSize(NSSize(width: 1040, height: 760))
             window.isReleasedWhenClosed = false
             window.center()
             self.window = window
         }
-        // An accessory app is never frontmost on its own; without this the window opens behind.
+        // An accessory app is never frontmost on its own. macOS may decline the activation (it does
+        // when the request doesn't come from a click in Orilio), so also bring the window forward
+        // regardless; a click in it then activates Orilio.
         NSApp.activate()
         window?.makeKeyAndOrderFront(nil)
+        window?.orderFrontRegardless()
     }
 }

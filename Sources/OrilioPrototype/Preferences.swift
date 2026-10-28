@@ -85,6 +85,8 @@ struct Preferences: Codable, Equatable {
     var accent = Accent.mint
     var motion = Motion.spring
     var followReduceMotion = true
+    /// Camera Mirror is the one module that starts hidden; this turns it on.
+    var mirrorEnabled = false
 
     init() {}
 
@@ -102,6 +104,7 @@ struct Preferences: Codable, Equatable {
         accent = value(.accent, d.accent)
         motion = value(.motion, d.motion)
         followReduceMotion = value(.followReduceMotion, d.followReduceMotion)
+        mirrorEnabled = value(.mirrorEnabled, d.mirrorEnabled)
     }
 
     /// The stored value; on first run after M3.5, the module keys it replaces are carried over.

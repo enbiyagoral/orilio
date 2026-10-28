@@ -68,8 +68,11 @@ final class IslandPositioner {
             let island = IslandWindowController(model: model, screen: target, allSpaces: settings.allSpaces)
             islands[ObjectIdentifier(island)] = island
         }
+        for island in islands.values { island.reposition() }
+        // Also at launch and when displays change, not only on a Space or app switch: Orilio may
+        // start while a fullscreen app is already in front.
+        fullscreenDisplays = FullscreenDetector.displays(in: screens)
         for island in islands.values {
-            island.reposition()
             island.setFullscreen(fullscreenDisplays.contains(island.screen.id) ? settings.fullscreen : nil)
         }
         updatePointerMonitor()

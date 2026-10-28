@@ -18,12 +18,14 @@ enum ShelfSection: String, CaseIterable, Identifiable {
 
 /// The island's modules, in the order of the tab bar (the M3 hub design's order).
 enum IslandTab: String, CaseIterable, Identifiable {
+    // The M4 Settings design's order; Camera Mirror is off until the user turns it on.
     case calendar = "Calendar"
-    case clipboard = "Clipboard"
-    case notes = "Notes and Tasks"
     case focus = "Focus"
     case music = "Now Playing"
+    case clipboard = "Clipboard"
+    case notes = "Notes and Tasks"
     case shelf = "Shelf"
+    case mirror = "Camera Mirror"
     var id: Self { self }
 
     var symbol: String {
@@ -34,6 +36,7 @@ enum IslandTab: String, CaseIterable, Identifiable {
         case .focus: "timer"
         case .music: "music.note"
         case .shelf: "tray"
+        case .mirror: "camera"
         }
     }
 }
@@ -56,8 +59,15 @@ final class IslandModel {
 
     private(set) var state: IslandState = .collapsed
     var tab: IslandTab = .music {
-        didSet { if tab != oldValue { relayout() } }
+        didSet {
+            guard tab != oldValue else { return }
+            if tab == .mirror { tabBeforeMirror = oldValue }
+            relayout()
+            updateMirror()
+        }
     }
+    /// Where the island goes back to when the mirror closes.
+    @ObservationIgnored private var tabBeforeMirror: IslandTab?
     var shelfSection: ShelfSection = .files {
         didSet { if shelfSection != oldValue { relayout() } }
     }
@@ -66,7 +76,20 @@ final class IslandModel {
     /// What the island draws. Trails `wantsTallPanel` by one turn when growing, so the window is
     /// already tall when the shape starts to grow (see `relayout`).
     private(set) var showsTallPanel = false
+    /// The mirror's panel as drawn; like `showsTallPanel`, it trails the window by a turn when growing.
+    private(set) var shownMirrorPanel: CGSize?
 
+    /// The open island's size while it shows the mirror (the M4.1 design's card or mirror).
+    func mirrorPanel(for state: IslandState) -> CGSize? {
+        guard state.isOpen, state != .dropTarget, tab == .mirror else { return nil }
+        if state == .expanded { return mirror.panelSize(scale: geometry.panelWidth / IslandGeometry.fullWidth, hoverCard: true) }
+        return mirror.panelSize(scale: geometry.panelWidth / IslandGeometry.fullWidth)
+    }
+
+    /// The camera runs only in an island the user opened (a click, not a hover) on the mirror.
+    private func updateMirror() {
+        mirror.setVisible(state == .pinned && tab == .mirror)
+    }
     func isTall(_ state: IslandState) -> Bool {
         (state == .pinned || state == .expanded) && tab == .shelf && shelfSection == .screenshots
     }
@@ -100,7 +123,10 @@ final class IslandModel {
          focus: FocusModule = FocusModule(defaults: UserDefaults(suiteName: "orilio.unused") ?? .standard),
          modules: ModuleSettings = ModuleSettings(defaults: UserDefaults(suiteName: "orilio.unused") ?? .standard),
          live: LiveActivityCoordinator = LiveActivityCoordinator(),
+         mirror: CameraMirrorModel? = nil,
          sharing other: IslandModel? = nil) {
+        self.mirror = mirror ?? other?.mirror ?? CameraMirrorModel(defaults: UserDefaults(suiteName: "orilio.unused") ?? .standard,
+                                                                     observeSystem: false)
         // Another display's island shows the same music; only its open state is its own.
         if let other {
             demo = other.demo
@@ -120,7 +146,11 @@ final class IslandModel {
         self.live = live
         if !modules.isVisible(tab) { tab = modules.visible[0] }
         modules.whenHidden { [weak self] in self?.moduleHidden($0) }
+        self.mirror.whenChanged { [weak self] in self?.relayout() } // card → live mirror changes the size
+        self.mirror.whenMustClose { [weak self] in if self?.tab == .mirror { self?.dismiss() } }
     }
+
+    let mirror: CameraMirrorModel
 
     /// A hidden module stops its work, so nothing runs (or reads) for a module the user removed.
     /// Nothing stored is deleted: showing it again brings it back as it was, turned off.
@@ -129,6 +159,7 @@ final class IslandModel {
         case .calendar: calendar.disable()
         case .clipboard: if clipboard.status == .on { clipboard.pause() }
         case .focus: focus.reset()
+        case .mirror: mirror.setVisible(false)
         case .notes, .music, .shelf: break
         }
         if tab == module { tab = modules.visible[0] }
@@ -166,9 +197,10 @@ final class IslandModel {
     /// animate the root view's size with the shape and the island would slide down inside the
     /// taller window. Tabs and sections also change without `withAnimation` (their views animate
     /// through `.animation(_:value:)`), so the window resize never runs inside an animated update.
-    private func relayout() {
+    func relayout() {
         guard state.isOpen else { return }
         let tall = isTall(state)
+        let panel = mirrorPanel(for: state)
         onWillChangeState?(state) // grows the window now, or shrinks it after the animation
         if tall, !showsTallPanel {
             Task { @MainActor [weak self] in
@@ -177,6 +209,14 @@ final class IslandModel {
             }
         } else {
             showsTallPanel = tall
+        }
+        if let panel, panel.width > (shownMirrorPanel?.width ?? 0) || panel.height > (shownMirrorPanel?.height ?? 0) {
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.shownMirrorPanel = self.mirrorPanel(for: self.state)
+            }
+        } else {
+            shownMirrorPanel = panel
         }
     }
 
@@ -296,6 +336,20 @@ final class IslandModel {
         if !state.isOpen, new.isOpen { media.refreshAll() }
         state = new
         showsTallPanel = isTall(new)
+        shownMirrorPanel = mirrorPanel(for: new)
+        updateMirror()
+        // Closing the mirror goes back to the module before it.
+        if new == .collapsed, tab == .mirror {
+            tab = tabBeforeMirror.flatMap { modules.isVisible($0) && $0 != .mirror ? $0 : nil }
+                ?? modules.visible.first { $0 != .mirror } ?? tab
+        }
+    }
+
+    /// The menu bar's "Mirror": open the island straight to the camera mirror.
+    func openMirror() {
+        guard modules.isVisible(.mirror) else { return }
+        tab = .mirror
+        set(.pinned)
     }
 
     private func schedule(_ target: IslandState, after delay: Duration, choosingTab: Bool = false) {

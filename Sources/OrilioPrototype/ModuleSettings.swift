@@ -56,8 +56,9 @@ final class ModuleSettings {
     }
 
     var hidden: Set<IslandTab> {
-        let hidden = Set(preferences.hiddenModules.compactMap(IslandTab.init(key:)))
-        return hidden.count == IslandTab.allCases.count ? [] : hidden // never all of them
+        var hidden = Set(preferences.hiddenModules.compactMap(IslandTab.init(key:)))
+        if !preferences.mirrorEnabled { hidden.insert(.mirror) } // off by default
+        return hidden.count == IslandTab.allCases.count ? [.mirror] : hidden // never all of them
     }
 
     var openWith: Preferences.OpenWith { preferences.openWith }
@@ -74,10 +75,11 @@ final class ModuleSettings {
     /// At least one module always stays.
     func setVisible(_ tab: IslandTab, _ on: Bool) {
         if on {
+            if tab == .mirror { preferences.mirrorEnabled = true }
             preferences.hiddenModules.removeAll { $0 == tab.key }
         } else {
             guard visible.count > 1, !hidden.contains(tab) else { return }
-            preferences.hiddenModules.append(tab.key)
+            if tab == .mirror { preferences.mirrorEnabled = false } else { preferences.hiddenModules.append(tab.key) }
             hideHandlers.forEach { $0(tab) }
         }
     }

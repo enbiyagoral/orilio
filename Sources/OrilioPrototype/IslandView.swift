@@ -72,7 +72,8 @@ struct IslandView: View {
         let geometry = model.geometry
         let state = model.state
         let open = state.isOpen
-        let size = geometry.size(for: state, tall: model.showsTallPanel, collapsedWidth: model.liveCollapsedWidth)
+        let size = geometry.size(for: state, tall: model.showsTallPanel, collapsedWidth: model.liveCollapsedWidth,
+                                 panel: model.shownMirrorPanel)
         let ear = open ? IslandGeometry.earRadius : 0
         let radius = switch state {
         case .collapsed: Metrics.collapsedRadius
@@ -204,6 +205,16 @@ private struct ExpandedContent: View {
     @Environment(\.reducesMotion) private var reduceMotion
 
     var body: some View {
+        if model.tab == .mirror {
+            // The M4.1 design: the mirror has its own header ("Mirror" and close), no tab bar.
+            MirrorView(mirror: model.mirror, hoverOnly: model.state == .expanded) { model.dismiss() }
+                .transition(.opacity)
+        } else {
+            hub
+        }
+    }
+
+    private var hub: some View {
         VStack(spacing: 0) {
             // 38 pt header: tabs left of the notch, pin and close right of it (M3 hub design).
             HStack(spacing: 2) {
@@ -231,6 +242,7 @@ private struct ExpandedContent: View {
                 case .music: MusicCard(media: model.media)
                 case .shelf: ShelfView(shelf: model.shelf, library: model.library, section: $model.shelfSection,
                                        draggedOut: { model.dismiss() })
+                case .mirror: EmptyView() // drawn without the hub (see `body`)
                 }
             }
             .id(model.tab)
@@ -249,7 +261,7 @@ private struct ExpandedContent: View {
         case .calendar: return model.meetingSoon != nil
         case .music: return model.media.current?.state == .playing
         case .focus: return model.focus.isRunning
-        case .clipboard, .notes, .shelf: return false
+        case .clipboard, .notes, .shelf, .mirror: return false // the mirror never claims attention
         }
     }
 }

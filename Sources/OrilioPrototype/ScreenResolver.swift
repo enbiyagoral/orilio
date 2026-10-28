@@ -133,8 +133,12 @@ enum ScreenResolver {
         return result
     }
 
-    /// The display under a point (AppKit coordinates), or nil if it is between displays.
+    /// The display under a point (AppKit coordinates), or nil if it is between displays. The top
+    /// edge counts: with the pointer pushed to the top, `NSEvent.mouseLocation.y` is exactly the
+    /// display's `maxY`, which `CGRect.contains` leaves out.
     static func display(at point: CGPoint, in screens: [ScreenInfo]) -> CGDirectDisplayID? {
-        screens.first { $0.frame.contains(point) }?.id
+        screens.first { s in
+            point.x >= s.frame.minX && point.x < s.frame.maxX && point.y >= s.frame.minY && point.y <= s.frame.maxY
+        }?.id
     }
 }

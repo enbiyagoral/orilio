@@ -17,7 +17,7 @@ enum StartupSettings {
         var detail: String {
             switch self {
             case .quiet: "No window, no sound. Best for login."
-            case .hello: "The island says it's ready for two seconds."
+            case .hello: "The island opens for two seconds, then collapses."
             case .settings: "Useful while you are still setting things up."
             }
         }

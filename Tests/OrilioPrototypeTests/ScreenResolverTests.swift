@@ -47,6 +47,7 @@ struct ScreenResolverTests {
         #expect(ScreenResolver.display(at: CGPoint(x: 1000, y: -500), in: screens) == 2)
         #expect(ScreenResolver.display(at: CGPoint(x: 3000, y: 800), in: screens) == 3)
         #expect(ScreenResolver.display(at: CGPoint(x: 3000, y: 100), in: screens) == nil) // the gap under the side display
+        #expect(ScreenResolver.display(at: CGPoint(x: 1280, y: 1440), in: screens) == 1) // pushed to the top edge
     }
 
     @Test func lidClosedMovesToTheMainExternalAsAPill() {
