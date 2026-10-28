@@ -10,6 +10,12 @@ enum IslandState: Equatable {
     var isOpen: Bool { self != .collapsed }
 }
 
+enum ShelfSection: String, CaseIterable, Identifiable {
+    case files = "Files"
+    case screenshots = "Screenshots"
+    var id: Self { self }
+}
+
 enum IslandTab: String, CaseIterable, Identifiable {
     case music = "Music"
     case shelf = "Shelf"
@@ -33,20 +39,42 @@ final class IslandModel {
     static let closeDuration = 0.3
 
     private(set) var state: IslandState = .collapsed
-    var tab: IslandTab = .music
+    var tab: IslandTab = .music {
+        didSet { if tab != oldValue { relayout() } }
+    }
+    var shelfSection: ShelfSection = .files {
+        didSet { if shelfSection != oldValue { relayout() } }
+    }
+    /// The screenshot grid gets a taller panel; everything else keeps the compact one.
+    var wantsTallPanel: Bool { isTall(state) }
+
+    func isTall(_ state: IslandState) -> Bool {
+        state == .pinned && tab == .shelf && shelfSection == .screenshots
+    }
     var geometry = IslandGeometry.fallback
     var hoverOpens = true
     let demo: DemoMediaProvider
     let media: MediaCoordinator
     let shelf: ShelfModel
+    let library: ScreenshotLibrary
     /// Whether the drag over the island carries something the shelf can take.
     private(set) var dropIsValid = true
+    /// Where a drop will go: the screenshot library if it is what's on screen, else the File Shelf.
+    private(set) var dropGoesToScreenshots = false
 
-    init(providers: [any MediaProvider] = [], shelf: ShelfModel = ShelfModel()) {
+    init(providers: [any MediaProvider] = [], shelf: ShelfModel = ShelfModel(),
+         library: ScreenshotLibrary = ScreenshotLibrary(store: ScreenshotStore(
+             directory: FileManager.default.temporaryDirectory.appending(path: "orilio-unused-library")))) {
         let showDemo = UserDefaults.standard.bool(forKey: SettingsKeys.showDemoSource)
         demo = DemoMediaProvider(enabled: showDemo)
         media = MediaCoordinator(providers: providers + [demo])
         self.shelf = shelf
+        self.library = library
+    }
+
+    /// Same state, new size (the Screenshots grid wants more room): let the window follow.
+    private func relayout() {
+        if state.isOpen { onWillChangeState?(state) }
     }
 
     @ObservationIgnored var onWillChangeState: ((IslandState) -> Void)?
@@ -79,6 +107,7 @@ final class IslandModel {
         dropIsValid = valid
         guard state != .dropTarget else { return }
         stateBeforeDrag = state
+        dropGoesToScreenshots = state == .pinned && tab == .shelf && shelfSection == .screenshots
         set(.dropTarget)
     }
 
@@ -92,7 +121,14 @@ final class IslandModel {
     /// Hands the drop to the shelf and shows it there. Returns whether anything was accepted.
     @discardableResult
     func dropped(_ content: DropContent, sequence: Int) -> Bool {
-        let accepted = shelf.accept(content, sequence: sequence)
+        let accepted: Bool
+        if dropGoesToScreenshots {
+            if case .unsupported = content { accepted = false } else { accepted = true }
+            library.accept(content, receivingInto: shelf.receivedDirectory.deletingLastPathComponent().appending(path: "Incoming"))
+        } else {
+            accepted = shelf.accept(content, sequence: sequence)
+        }
+        dropGoesToScreenshots = false
         stateBeforeDrag = nil
         tab = .shelf
         pinTakesFocus = false

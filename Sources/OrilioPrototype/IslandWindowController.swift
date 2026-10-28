@@ -11,6 +11,8 @@ struct IslandGeometry: Equatable {
     var notchWidth: CGFloat
     var centerX: CGFloat
     var screenTop: CGFloat
+    /// Height of the screen's usable area (below the menu bar, above the Dock).
+    var usableHeight: CGFloat = .greatestFiniteMagnitude
 
     static let pillWidth: CGFloat = 220     // fits a mini cover + a short title in the menu bar band
     static let fullWidth: CGFloat = 540
@@ -18,6 +20,8 @@ struct IslandGeometry: Equatable {
     static let previewWidth: CGFloat = 360
     static let previewHeight: CGFloat = 64  // one row: 40pt cover + 12pt padding above and below
     static let dropTargetHeight: CGFloat = 92 // a 68pt drop zone + 12pt padding
+    /// The Screenshots grid: about four rows of thumbnails, never taller than the usable screen.
+    static let tallHeight: CGFloat = 380
 
     /// Concave "shoulders" that blend the open island into the top edge of the screen.
     static let earRadius: CGFloat = 10
@@ -48,18 +52,24 @@ struct IslandGeometry: Equatable {
         CGSize(width: max(Self.previewWidth, collapsed.width), height: topInset + Self.dropTargetHeight)
     }
 
-    func size(for state: IslandState) -> CGSize {
+    /// The full panel grown for the screenshot grid, capped so it never runs off the screen.
+    var tall: CGSize {
+        let room = usableHeight + topInset - Self.shadowMargin * 2
+        return CGSize(width: Self.fullWidth, height: min(topInset + Self.tallHeight, max(full.height, room)))
+    }
+
+    func size(for state: IslandState, tall wantsTall: Bool = false) -> CGSize {
         switch state {
         case .collapsed: collapsed
         case .expanded: preview
-        case .pinned: full
+        case .pinned: wantsTall ? tall : full
         case .dropTarget: dropTarget
         }
     }
 
     /// Collapsed: exactly the island. Open: the island plus ears and shadow room.
-    func windowFrame(for state: IslandState) -> CGRect {
-        var size = size(for: state)
+    func windowFrame(for state: IslandState, tall: Bool = false) -> CGRect {
+        var size = size(for: state, tall: tall)
         if state.isOpen {
             size.width += 2 * (Self.earRadius + Self.shadowMargin)
             size.height += Self.shadowMargin
@@ -84,11 +94,13 @@ struct IslandGeometry: Equatable {
 
     static func make(for screen: NSScreen) -> IslandGeometry {
         let band = screen.frame.maxY - screen.visibleFrame.maxY
-        return make(screenFrame: screen.frame, safeAreaTop: screen.safeAreaInsets.top,
-                    auxLeftWidth: screen.auxiliaryTopLeftArea?.width,
-                    auxRightWidth: screen.auxiliaryTopRightArea?.width,
-                    // band is 0 when the menu bar auto-hides
-                    menuBarHeight: band > 0 ? band : NSStatusBar.system.thickness)
+        var geometry = make(screenFrame: screen.frame, safeAreaTop: screen.safeAreaInsets.top,
+                            auxLeftWidth: screen.auxiliaryTopLeftArea?.width,
+                            auxRightWidth: screen.auxiliaryTopRightArea?.width,
+                            // band is 0 when the menu bar auto-hides
+                            menuBarHeight: band > 0 ? band : NSStatusBar.system.thickness)
+        geometry.usableHeight = screen.visibleFrame.height
+        return geometry
     }
 }
 
@@ -212,6 +224,8 @@ final class IslandWindowController {
     /// Watches for clicks outside the island while the full controller is open. Mouse monitors
     /// need no permission; it exists only while pinned.
     private var outsideClickMonitor: Any?
+    /// Where the last outside press started, to tell a click from the start of a drag.
+    private var outsidePress: NSPoint?
 
     init(model: IslandModel) {
         self.model = model
@@ -237,7 +251,10 @@ final class IslandWindowController {
         panel.onKey = { [weak model] event in
             guard let model, model.state == .pinned, model.tab == .shelf else { return false }
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-            return model.shelf.handleKey(keyCode: event.keyCode, command: flags == .command)
+            switch model.shelfSection {
+            case .files: return model.shelf.handleKey(keyCode: event.keyCode, command: flags == .command)
+            case .screenshots: return model.library.handleKey(keyCode: event.keyCode, command: flags == .command)
+            }
         }
         model.onWillChangeState = { [weak self] in self?.apply($0) }
 
@@ -281,7 +298,7 @@ final class IslandWindowController {
         guard let screen = targetScreen else { return }
         let geometry = IslandGeometry.make(for: screen)
         if geometry != model.geometry { model.geometry = geometry }
-        panel.setFrame(geometry.windowFrame(for: model.state), display: true)
+        panel.setFrame(geometry.windowFrame(for: model.state, tall: model.wantsTallPanel), display: true)
     }
 
     private func apply(_ state: IslandState) {
@@ -298,7 +315,8 @@ final class IslandWindowController {
             NSApp.deactivate()
         }
 
-        let target = model.geometry.windowFrame(for: state)
+        // Sized for the state being entered (the model still reports the old one at this point).
+        let target = model.geometry.windowFrame(for: state, tall: model.isTall(state))
         if target.width >= panel.frame.width, target.height >= panel.frame.height {
             panel.setFrame(target, display: true)
             panel.contentView?.layoutSubtreeIfNeeded() // settle the current island in the bigger window
@@ -316,13 +334,34 @@ final class IslandWindowController {
 
     private func watchOutsideClicks(_ on: Bool) {
         if on, outsideClickMonitor == nil {
-            // Global monitors see only clicks in other apps, so anything they report is outside the island.
-            outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
-                MainActor.assumeIsolated { self?.model.dismiss() }
+            // Global monitors see only events in other apps, so everything here is outside the island.
+            // A *click* (press and release in place) closes the panel. A press that turns into a drag
+            // doesn't: the user may be bringing a file from Finder to the open shelf.
+            outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .leftMouseUp, .rightMouseDown]) { [weak self] event in
+                MainActor.assumeIsolated { self?.outsideEvent(event.type, at: NSEvent.mouseLocation) }
             }
         } else if !on, let monitor = outsideClickMonitor {
             NSEvent.removeMonitor(monitor)
             outsideClickMonitor = nil
+            outsidePress = nil
         }
+    }
+
+    private func outsideEvent(_ type: NSEvent.EventType, at point: NSPoint) {
+        switch type {
+        case .leftMouseDown:
+            outsidePress = point
+        case .leftMouseUp:
+            guard let start = outsidePress else { return }
+            outsidePress = nil
+            if Self.isClick(from: start, to: point) { model.dismiss() }
+        default: // a right click is always a click
+            model.dismiss()
+        }
+    }
+
+    /// A press and release within a few points is a click; more is a drag.
+    static func isClick(from start: NSPoint, to end: NSPoint) -> Bool {
+        hypot(end.x - start.x, end.y - start.y) <= 4
     }
 }

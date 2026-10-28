@@ -4,6 +4,7 @@ import SwiftUI
 /// Shown while a drag is over the island.
 struct DropTargetView: View {
     let valid: Bool
+    var destination = "Shelf"
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: Metrics.previewInnerRadius, style: .continuous)
@@ -11,7 +12,7 @@ struct DropTargetView: View {
             Image(systemName: valid ? "tray.and.arrow.down.fill" : "nosign")
                 .font(.system(size: 18, weight: .semibold))
                 .foregroundStyle(valid ? mint : .white.opacity(Metrics.secondaryText))
-            Text(valid ? "Drop to add to Shelf" : "This can't go on the Shelf")
+            Text(valid ? "Drop to add to \(destination)" : "This can't go on the \(destination)")
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(valid ? .white : .white.opacity(Metrics.secondaryText))
         }
@@ -27,30 +28,25 @@ struct DropTargetView: View {
 
 /// The Shelf tab: Files now, Screenshots in M2.3.
 struct ShelfView: View {
-    enum Section: String, CaseIterable, Identifiable {
-        case files = "Files"
-        case screenshots = "Screenshots"
-        var id: Self { self }
-    }
-
     let shelf: ShelfModel
+    let library: ScreenshotLibrary
+    @Binding var section: ShelfSection
     /// Called after items were dragged out and received somewhere: the island can step aside.
     var draggedOut: () -> Void = {}
-    @State private var section = Section.files
     @Namespace private var sections
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 2) {
-                ForEach(Section.allCases) { item in
-                    Button(item == .files && !shelf.items.isEmpty ? "\(item.rawValue) \(shelf.items.count)" : item.rawValue) {
+                ForEach(ShelfSection.allCases) { item in
+                    Button(title(for: item)) {
                         withAnimation(reduceMotion ? nil : .spring(duration: 0.3, bounce: 0.1)) { section = item }
                     }
                     .buttonStyle(TabButtonStyle(selected: section == item, namespace: sections))
                 }
                 Spacer(minLength: 8)
-                if let problem = shelf.problem {
+                if let problem = section == .files ? shelf.problem : library.problem {
                     Label(problem, systemImage: "exclamationmark.circle.fill")
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(.orange)
@@ -60,12 +56,18 @@ struct ShelfView: View {
             }
             switch section {
             case .files: FilesStrip(shelf: shelf, draggedOut: draggedOut)
-            case .screenshots: ScreenshotsPlaceholder()
+            case .screenshots: ScreenshotsView(library: library)
             }
         }
         .animation(.easeInOut(duration: 0.2), value: shelf.problem)
+        .animation(.easeInOut(duration: 0.2), value: library.problem)
         // Once each time the shelf is shown: files may have moved or been deleted meanwhile.
         .task { shelf.refreshAvailability() }
+    }
+
+    private func title(for section: ShelfSection) -> String {
+        let count = section == .files ? shelf.items.count : library.items.count
+        return count > 0 ? "\(section.rawValue) \(count)" : section.rawValue
     }
 }
 
@@ -122,7 +124,7 @@ private struct ShelfTile: View {
             .background(selected ? mint.opacity(0.16) : .white.opacity(hovering ? 0.08 : 0), in: shape)
             .overlay(shape.strokeBorder(selected ? mint.opacity(0.7) : .clear, lineWidth: 1))
             // Clicks, double-clicks, the context menu and dragging out are handled in AppKit underneath.
-            .overlay { ShelfTileInteraction(item: item, shelf: shelf) { received in if received { draggedOut() } } }
+            .overlay { TileInteraction(actions: .shelf(item, in: shelf, draggedOut: draggedOut)) }
 
             if hovering {
                 Button { shelf.remove(item) } label: {
@@ -196,21 +198,6 @@ private struct EmptyShelf: View {
         }
         .frame(maxWidth: .infinity, minHeight: 84)
         .overlay(shape.strokeBorder(.white.opacity(0.2), style: StrokeStyle(lineWidth: 1, dash: [5, 4])))
-        .accessibilityElement(children: .combine)
-    }
-}
-
-private struct ScreenshotsPlaceholder: View {
-    var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "photo.stack")
-                .font(.system(size: 22))
-                .foregroundStyle(.white.opacity(Metrics.secondaryText))
-            Text("The screenshot library is on its way.")
-                .font(.system(size: 12))
-                .foregroundStyle(.white.opacity(Metrics.secondaryText))
-        }
-        .frame(maxWidth: .infinity, minHeight: 84)
         .accessibilityElement(children: .combine)
     }
 }

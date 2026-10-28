@@ -73,7 +73,7 @@ struct IslandView: View {
         let geometry = model.geometry
         let state = model.state
         let open = state.isOpen
-        let size = geometry.size(for: state)
+        let size = geometry.size(for: state, tall: model.wantsTallPanel)
         let ear = open ? IslandGeometry.earRadius : 0
         let radius = switch state {
         case .collapsed: Metrics.collapsedRadius
@@ -100,7 +100,7 @@ struct IslandView: View {
                         .padding(.horizontal, ear)
                         .transition(contentTransition)
                 case .dropTarget:
-                    DropTargetView(valid: model.dropIsValid)
+                    DropTargetView(valid: model.dropIsValid, destination: model.dropGoesToScreenshots ? "Screenshots" : "Shelf")
                         .padding(.top, geometry.topInset)
                         .padding(.horizontal, ear)
                         .transition(contentTransition)
@@ -252,7 +252,8 @@ private struct ExpandedContent: View {
             ZStack {
                 switch model.tab {
                 case .music: MusicCard(media: model.media)
-                case .shelf: ShelfView(shelf: model.shelf, draggedOut: { model.dismiss() })
+                case .shelf: ShelfView(shelf: model.shelf, library: model.library, section: $model.shelfSection,
+                                       draggedOut: { model.dismiss() })
                 }
             }
             .id(model.tab)
