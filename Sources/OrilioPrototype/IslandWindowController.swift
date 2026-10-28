@@ -22,6 +22,7 @@ struct IslandGeometry: Equatable {
     static let contentHeight: CGFloat = 266
     /// The collapsed island while a meeting is about to start.
     static let meetingWidth: CGFloat = 412
+    static let focusWidth: CGFloat = 340
     static let previewWidth: CGFloat = 360
     static let previewHeight: CGFloat = 64  // one row: 40pt cover + 12pt padding above and below
     static let dropTargetHeight: CGFloat = 92 // a 68pt drop zone + 12pt padding

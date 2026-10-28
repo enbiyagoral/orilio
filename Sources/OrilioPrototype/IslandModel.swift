@@ -21,6 +21,7 @@ enum IslandTab: String, CaseIterable, Identifiable {
     case calendar = "Calendar"
     case clipboard = "Clipboard"
     case notes = "Notes and Tasks"
+    case focus = "Focus"
     case music = "Now Playing"
     case shelf = "Shelf"
     var id: Self { self }
@@ -30,6 +31,7 @@ enum IslandTab: String, CaseIterable, Identifiable {
         case .calendar: "calendar"
         case .clipboard: "list.clipboard"
         case .notes: "checklist"
+        case .focus: "timer"
         case .music: "music.note"
         case .shelf: "tray"
         }
@@ -77,6 +79,7 @@ final class IslandModel {
     let calendar: CalendarModule
     let clipboard: ClipboardModule
     let notes: NotesModule
+    let focus: FocusModule
     /// Whether the drag over the island carries something the shelf can take.
     private(set) var dropIsValid = true
     /// Where a drop will go: the screenshot library if it is what's on screen, else the File Shelf.
@@ -91,7 +94,8 @@ final class IslandModel {
              store: ClipboardStore(directory: FileManager.default.temporaryDirectory.appending(path: "orilio-unused-clipboard")),
              defaults: UserDefaults(suiteName: "orilio.unused") ?? .standard),
          notes: NotesModule = NotesModule(store: NotesStore(
-             directory: FileManager.default.temporaryDirectory.appending(path: "orilio-unused-notes")))) {
+             directory: FileManager.default.temporaryDirectory.appending(path: "orilio-unused-notes"))),
+         focus: FocusModule = FocusModule(defaults: UserDefaults(suiteName: "orilio.unused") ?? .standard)) {
         let showDemo = UserDefaults.standard.bool(forKey: SettingsKeys.showDemoSource)
         demo = DemoMediaProvider(enabled: showDemo)
         media = MediaCoordinator(providers: providers + [demo])
@@ -100,6 +104,7 @@ final class IslandModel {
         self.calendar = calendar
         self.clipboard = clipboard
         self.notes = notes
+        self.focus = focus
     }
 
     /// A meeting about to start, for the collapsed island (only when Calendar is on and readable).
@@ -108,8 +113,12 @@ final class IslandModel {
         return calendar.dayNow().soon()
     }
 
-    /// Wider than the notch only while something live is shown (the design's 412 pt meeting state).
-    var liveCollapsedWidth: CGFloat? { meetingSoon == nil ? nil : IslandGeometry.meetingWidth }
+    /// Wider than the notch only while something live is shown: a focus session (340 pt) wins over
+    /// a meeting about to start (412 pt), as in the design.
+    var liveCollapsedWidth: CGFloat? {
+        if focus.isActive { return IslandGeometry.focusWidth }
+        return meetingSoon == nil ? nil : IslandGeometry.meetingWidth
+    }
 
     /// Same state, new size (the Screenshots grid wants more room): let the window follow.
     /// Window first, shape second, as in `set`: if both changed in one update, SwiftUI would
