@@ -43,7 +43,10 @@ final class ModuleSettings {
 
     @ObservationIgnored private let defaults: UserDefaults
     /// Called when a module is hidden, so it can stop its work (and give up what it reads).
-    @ObservationIgnored var onHide: ((IslandTab) -> Void)?
+    /// Every display's island registers (each moves off the hidden tab).
+    @ObservationIgnored private var hideHandlers: [(IslandTab) -> Void] = []
+
+    func whenHidden(_ handler: @escaping (IslandTab) -> Void) { hideHandlers.append(handler) }
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -70,7 +73,7 @@ final class ModuleSettings {
             guard visible.count > 1, !hidden.contains(tab) else { return }
             hidden.insert(tab)
             if defaultTab == tab { setDefault(nil) }
-            onHide?(tab)
+            hideHandlers.forEach { $0(tab) }
         }
         defaults.set(hidden.map(\.key).sorted(), forKey: ModuleKeys.hidden)
     }

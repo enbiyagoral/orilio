@@ -43,7 +43,7 @@ private struct MenuContent: View {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private var controller: IslandWindowController?
+    private var positioner: IslandPositioner?
     private var bridge: BridgeServer?
     private var shelf: ShelfModel?
     private var clipboard: ClipboardModule?
@@ -82,9 +82,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         library.startWatchingIfEnabled()
         AppModules.library = library
         let island = IslandModel(providers: providers, shelf: shelf, library: library,
-                                                               calendar: calendar, clipboard: clipboard, notes: notes, focus: focus, modules: modules)
+                                 calendar: calendar, clipboard: clipboard, notes: notes, focus: focus, modules: modules)
         AppModules.island = island
-        controller = IslandWindowController(model: island)
+        // One island per display that should have one; extra ones share every module and the music.
+        positioner = IslandPositioner(primary: island) {
+            IslandModel(shelf: shelf, library: library, calendar: calendar, clipboard: clipboard, notes: notes,
+                        focus: focus, modules: modules, live: island.live, sharing: island)
+        }
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
