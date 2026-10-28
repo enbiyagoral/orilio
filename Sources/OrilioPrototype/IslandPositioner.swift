@@ -9,6 +9,9 @@ import AppKit
 /// - `NSWorkspace.didWake`, "screen is unlocked": for the app's lifetime.
 /// - `NSWorkspace.activeSpaceDidChange`, `didActivateApplication`: for the app's lifetime; each
 ///   re-checks for fullscreen apps once, and once more 0.6 s later (the fullscreen animation).
+/// - Global `leftMouseDown`/`Dragged`/`Up` monitors: for the app's lifetime, to notice a file drag
+///   starting anywhere (the drag pasteboard's change count moves). One cheap read per drag event,
+///   throttled, and only until the drag is recognized. Mouse monitors need no permission.
 /// - A global `mouseMoved` monitor: only while "Display with the pointer" has more than one
 ///   display to choose from, or a fullscreen display uses "Reveal from the top edge". Removed as
 ///   soon as neither holds. It needs no permission (mouse events only).
@@ -26,6 +29,8 @@ final class IslandPositioner {
     private var lastPointerCheck: TimeInterval = 0
     private var edgeDwell: Task<Void, Never>?
     private var fullscreenRecheck: Task<Void, Never>?
+    private var dragMonitor: Any?
+    private var dragWatch = DragWatch()
 
     /// The pointer must rest at the top edge this long before a hidden island slides in.
     static let revealDwell: Duration = .milliseconds(300)
@@ -139,6 +144,35 @@ final class IslandPositioner {
         }
     }
 
+    // MARK: Drags from other apps
+
+    /// A file drag started in another app: every collapsed island shows "Drop on Shelf" until the
+    /// button comes up (the drop itself goes through the island's drag destination).
+    private func mouse(_ type: NSEvent.EventType) {
+        switch dragWatch.event(type, changeCount: { NSPasteboard(name: .drag).changeCount }, now: ProcessInfo.processInfo.systemUptime) {
+        case .started:
+            let types = NSPasteboard(name: .drag).types ?? []
+            guard DropContent.isSupported(types), primary.modules.isVisible(.shelf) else { return }
+            setDropHint(true)
+        case .ended: setDropHint(false)
+        case nil: break
+        }
+    }
+
+    private func setDropHint(_ on: Bool) {
+        for model in islands.values.map(\.model) where model.dropHint != on { model.dropHint = on }
+        guard on, dropHintEnd == nil else { return }
+        // The button-up of a drag doesn't always reach a global monitor (a drop on Orilio's own
+        // window, for one); while the hint shows, check the button now and then.
+        dropHintEnd = Task { [weak self] in
+            while NSEvent.pressedMouseButtons & 1 != 0, !Task.isCancelled { try? await Task.sleep(for: .milliseconds(300)) }
+            self?.dropHintEnd = nil
+            self?.setDropHint(false)
+        }
+    }
+
+    private var dropHintEnd: Task<Void, Never>?
+
     // MARK: Pointer
 
     private var needsPointer: Bool {
@@ -197,6 +231,10 @@ final class IslandPositioner {
     // MARK: Observers
 
     private func observe() {
+        dragMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .leftMouseDragged, .leftMouseUp]) { [weak self] event in
+            let type = event.type
+            MainActor.assumeIsolated { self?.mouse(type) }
+        }
         let center = NotificationCenter.default
         let workspace = NSWorkspace.shared.notificationCenter
         // Defaults and screen changes are handled on the next turn of the run loop, never inline:
@@ -256,5 +294,36 @@ enum FullscreenDetector {
             }
         }
         return result
+    }
+}
+
+/// Tells a drag from a plain press: the drag pasteboard's change count moves once a drag session
+/// begins. Pure, so the order of events is tested.
+struct DragWatch {
+    enum Change: Equatable { case started, ended }
+
+    private var countAtPress: Int?
+    private var recognized = false
+    private var lastCheck: TimeInterval = -.infinity
+    static let throttle: TimeInterval = 0.08
+
+    mutating func event(_ type: NSEvent.EventType, changeCount: () -> Int, now: TimeInterval) -> Change? {
+        switch type {
+        case .leftMouseDown:
+            countAtPress = changeCount()
+            recognized = false
+            return nil
+        case .leftMouseDragged:
+            guard !recognized, let countAtPress, now - lastCheck >= Self.throttle else { return nil }
+            lastCheck = now
+            guard changeCount() != countAtPress else { return nil }
+            recognized = true
+            return .started
+        case .leftMouseUp:
+            defer { recognized = false; countAtPress = nil }
+            return recognized ? .ended : nil
+        default:
+            return nil
+        }
     }
 }

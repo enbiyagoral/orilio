@@ -77,7 +77,7 @@ final class IslandModel {
     /// already tall when the shape starts to grow (see `relayout`).
     private(set) var showsTallPanel = false
     /// The mirror's panel as drawn; like `showsTallPanel`, it trails the window by a turn when growing.
-    private(set) var shownMirrorPanel: CGSize?
+    private(set) var shownCustomPanel: CGSize?
 
     /// The first-run flow, while it is on screen.
     private(set) var onboarding: OnboardingModel?
@@ -88,6 +88,7 @@ final class IslandModel {
     /// Without a notch the onboarding panel floats 6 pt below the menu bar (the M5 no-notch design).
     var onboardingFloats: Bool { onboarding != nil && !geometry.hasNotch }
     static let floatingGap: CGFloat = 6
+    static let quickLookHeight: CGFloat = 560
 
     /// Shows the first-run flow in this island (first launch, or "Replay onboarding").
     func startOnboarding(defaults: UserDefaults = .standard, loginStatus: LoginItem.Status = LoginItem.status) {
@@ -112,9 +113,13 @@ final class IslandModel {
         }
     }
 
-    /// The open island's size while it shows the mirror (the M4.1 design's card or mirror) or the
-    /// first-run flow (the M5 design's 760 × 480).
-    func mirrorPanel(for state: IslandState) -> CGSize? {
+    /// The open island's size while it shows the mirror (the M4.1 design's card or mirror), the
+    /// first-run flow (the M5 design's 760 × 480) or a Shelf file in Quick Look (560 pt tall).
+    func customPanel(for state: IslandState) -> CGSize? {
+        if state == .pinned, tab == .shelf, shelfSection == .files, shelf.previewing != nil {
+            let room = geometry.usableHeight + geometry.topInset - IslandGeometry.shadowMargin * 2
+            return CGSize(width: geometry.panelWidth, height: min(Self.quickLookHeight, max(geometry.full.height, room)))
+        }
         if onboarding != nil, state.isOpen {
             let size = OnboardingModel.panelSize
             return onboardingFloats ? CGSize(width: size.width, height: size.height + geometry.topInset + Self.floatingGap) : size
@@ -147,6 +152,11 @@ final class IslandModel {
     let live: LiveActivityCoordinator
     /// Whether the drag over the island carries something the shelf can take.
     private(set) var dropIsValid = true
+    /// How many items the drag over the island carries ("Release to add 3 files").
+    private(set) var dropCount = 1
+    /// A file drag is under way somewhere on screen: the collapsed island glows ("Drop on Shelf").
+    /// The window follows it like the live width (see `IslandWindowController.followLiveWidth`).
+    var dropHint = false
     /// Where a drop will go: the screenshot library if it is what's on screen, else the File Shelf.
     private(set) var dropGoesToScreenshots = false
 
@@ -240,7 +250,7 @@ final class IslandModel {
     func relayout() {
         guard state.isOpen else { return }
         let tall = isTall(state)
-        let panel = mirrorPanel(for: state)
+        let panel = customPanel(for: state)
         onWillChangeState?(state) // grows the window now, or shrinks it after the animation
         if tall, !showsTallPanel {
             Task { @MainActor [weak self] in
@@ -250,13 +260,13 @@ final class IslandModel {
         } else {
             showsTallPanel = tall
         }
-        if let panel, panel.width > (shownMirrorPanel?.width ?? 0) || panel.height > (shownMirrorPanel?.height ?? 0) {
+        if let panel, panel.width > (shownCustomPanel?.width ?? 0) || panel.height > (shownCustomPanel?.height ?? 0) {
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                self.shownMirrorPanel = self.mirrorPanel(for: self.state)
+                self.shownCustomPanel = self.customPanel(for: self.state)
             }
         } else {
-            shownMirrorPanel = panel
+            shownCustomPanel = panel
         }
     }
 
@@ -339,8 +349,10 @@ final class IslandModel {
 
     // MARK: Dragging onto the island
 
-    func dragEntered(valid: Bool) {
+    func dragEntered(valid: Bool, count: Int = 1) {
         dropIsValid = valid && modules.isVisible(.shelf) // a hidden Shelf takes nothing
+        dropCount = count
+        dropHint = false
         guard state != .dropTarget else { return }
         stateBeforeDrag = state
         dropGoesToScreenshots = state == .pinned && tab == .shelf && shelfSection == .screenshots
@@ -380,13 +392,14 @@ final class IslandModel {
         // Window first, state second: the panel must already be its new size when SwiftUI
         // starts animating, or one frame renders the island offset from the top edge.
         onWillChangeState?(new)
+        if !new.isOpen { shelf.closePreview() } // Quick Look closes with the island
         if !state.isOpen, new.isOpen {
             media.refreshAll()
             if modules.store.value.haptics { NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now) }
         }
         state = new
         showsTallPanel = isTall(new)
-        shownMirrorPanel = mirrorPanel(for: new)
+        shownCustomPanel = customPanel(for: new)
         updateMirror()
         // Closing the mirror goes back to the module before it.
         if new == .collapsed, tab == .mirror {

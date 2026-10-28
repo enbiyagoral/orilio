@@ -20,7 +20,7 @@ struct OnboardingTests {
         #expect(model.onboarding != nil && model.state == .pinned)
         // The test geometry has no notch: the 760 × 480 panel floats 6 pt below the menu bar band.
         #expect(model.onboardingFloats)
-        #expect(model.mirrorPanel(for: .pinned) == CGSize(width: 760, height: 480 + model.geometry.topInset + 6))
+        #expect(model.customPanel(for: .pinned) == CGSize(width: 760, height: 480 + model.geometry.topInset + 6))
         while model.onboarding.map({ !$0.next() }) ?? false {} // Get started, Continue, Continue, Done
         model.finishOnboarding()
         #expect(!OnboardingModel.shouldShow(defaults)) // the second launch skips it

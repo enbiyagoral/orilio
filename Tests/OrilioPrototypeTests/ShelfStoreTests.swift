@@ -127,6 +127,7 @@ struct ShelfPersistenceTests {
         await settle { !shelf.items.isEmpty }
         let copy = try #require(shelf.items.first)
         #expect(copy.origin == .received)
+        shelf.undoWindow = .milliseconds(50) // the copy goes once Undo is no longer offered
         shelf.remove(copy)
         for _ in 0..<40 where FileManager.default.fileExists(atPath: copy.url.path) {
             try await Task.sleep(for: .milliseconds(25))
@@ -244,5 +245,100 @@ struct ShelfKeyboardTests {
         #expect(shelf.items.map(\.name) == ["keep"])
         try await Task.sleep(for: .milliseconds(150))
         #expect(FileManager.default.fileExists(atPath: drop.path))
+    }
+
+    @Test func aBookmarkThatNoLongerResolvesShowsTheMissingState() {
+        let record = ShelfStore.Record(id: UUID(), name: "gone.pdf", bookmark: Data("not a bookmark".utf8),
+                                       path: "/nonexistent/orilio/gone.pdf", contentType: "com.adobe.pdf", isFolder: false,
+                                       size: 10, addedAt: Date(), received: false)
+        let item = ShelfStore.resolve(record)
+        #expect(!item.isAvailable)
+        #expect(ShelfCardState.resolve([item], pending: 0) == .missing(item.id))
+    }
+
+    @Test func undoPutsRemovedItemsBackInTheirPlaces() async {
+        let box = Sandbox()
+        let shelf = box.shelf()
+        shelf.accept(.files([box.file("a"), box.file("b"), box.file("c"), box.file("d")]), sequence: 1)
+        await settle { shelf.items.count == 4 }
+        let before = shelf.items.map(\.name)
+        shelf.remove(shelf.items.filter { $0.name == before[1] || $0.name == before[3] })
+        #expect(shelf.items.count == 2)
+        #expect(shelf.toast?.undoable == true)
+        shelf.undoRemove()
+        #expect(shelf.items.map(\.name) == before)
+        #expect(shelf.toast == nil)
+    }
+
+    @Test func draggingOutRemovesUnlessOptionIsHeld() async {
+        let box = Sandbox()
+        let shelf = box.shelf()
+        let file = box.file("report.pdf")
+        shelf.accept(.files([file, box.file("other")]), sequence: 1)
+        await settle { shelf.items.count == 2 }
+        let report = shelf.items.first { $0.name == "report.pdf" }!.id
+        shelf.finishDragOut([report], delivered: true, keep: true) // ⌥ held
+        #expect(shelf.items.count == 2)
+        shelf.finishDragOut([report], delivered: false, keep: false) // dropped nowhere
+        #expect(shelf.items.count == 2)
+        shelf.finishDragOut([report], delivered: true, keep: false)
+        #expect(shelf.items.map(\.name) == ["other"])
+        #expect(FileManager.default.fileExists(atPath: file.path)) // the file itself never moves
+    }
+
+    @Test func spacePreviewsTheHoveredTileAndClosesThePreview() async {
+        let box = Sandbox()
+        let shelf = box.shelf()
+        shelf.accept(.files([box.file("a.txt")]), sequence: 1)
+        await settle { !shelf.items.isEmpty }
+        #expect(shelf.keyAction(keyCode: 49, command: false) == nil) // nothing hovered or selected
+        shelf.hovered = shelf.items[0].id
+        #expect(shelf.handleKey(keyCode: 49, command: false))
+        #expect(shelf.previewing == shelf.items[0].id)
+        shelf.hovered = nil
+        #expect(shelf.handleKey(keyCode: 49, command: false)) // Space again closes it
+        #expect(shelf.previewing == nil)
+    }
+
+    @Test func receivedCopiesNobodyPointsAtAreSweptAtLaunch() async throws {
+        let box = Sandbox()
+        let orphan = box.receivedDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: orphan, withIntermediateDirectories: true)
+        FileManager.default.createFile(atPath: orphan.appending(path: "Image.png").path, contents: Data(count: 4))
+        let user = box.file("mine.txt")
+        let shelf = box.shelf()
+        await shelf.restore()
+        for _ in 0..<40 where FileManager.default.fileExists(atPath: orphan.path) { try await Task.sleep(for: .milliseconds(25)) }
+        #expect(!FileManager.default.fileExists(atPath: orphan.path))
+        #expect(FileManager.default.fileExists(atPath: user.path))
+    }
+}
+
+struct ShelfCloudAndMetaTests {
+    @Test func iCloudStatusMapping() {
+        #expect(CloudState.from(isUbiquitous: true, status: .notDownloaded) == .cloudOnly)
+        #expect(CloudState.from(isUbiquitous: true, status: .current) == .local)
+        #expect(CloudState.from(isUbiquitous: true, status: .downloaded) == .local)
+        #expect(CloudState.from(isUbiquitous: false, status: nil) == .local)
+        #expect(CloudState.from(isUbiquitous: nil, status: .notDownloaded) == .local) // not in iCloud at all
+    }
+
+    @Test func metaLines() {
+        #expect(ShelfMeta.line(kind: "PDF", pixels: nil, size: 412_000, folder: "Downloads") == "PDF · 412 KB · from Downloads")
+        #expect(ShelfMeta.line(kind: "PNG", pixels: CGSize(width: 2880, height: 1800), size: 1_100_000, folder: "Desktop")
+                == "PNG · 2880 × 1800 · \(ByteCountFormatter.string(fromByteCount: 1_100_000, countStyle: .file))") // "1.1 MB", or "1,1 MB"
+    }
+
+    @Test func aDragIsRecognizedOnlyWhenTheDragPasteboardChanges() {
+        var watch = DragWatch()
+        var count = 7
+        #expect(watch.event(.leftMouseDown, changeCount: { count }, now: 0) == nil)
+        #expect(watch.event(.leftMouseDragged, changeCount: { count }, now: 1) == nil) // selecting text, resizing a window…
+        count = 8 // a drag session wrote the drag pasteboard
+        #expect(watch.event(.leftMouseDragged, changeCount: { count }, now: 1.01) == nil) // throttled
+        #expect(watch.event(.leftMouseDragged, changeCount: { count }, now: 1.2) == .started)
+        #expect(watch.event(.leftMouseDragged, changeCount: { count }, now: 1.4) == nil) // once per drag
+        #expect(watch.event(.leftMouseUp, changeCount: { count }, now: 2) == .ended)
+        #expect(watch.event(.leftMouseUp, changeCount: { count }, now: 3) == nil) // a plain click ends nothing
     }
 }

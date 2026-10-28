@@ -78,13 +78,14 @@ struct IslandView: View {
         let geometry = model.geometry
         let state = model.state
         let open = state.isOpen
+        let hint = model.dropHint && state == .collapsed
         let size = geometry.size(for: state, tall: model.showsTallPanel, collapsedWidth: model.liveCollapsedWidth,
-                                 panel: model.shownMirrorPanel)
+                                 panel: model.shownCustomPanel, dropHint: hint)
         let floats = model.onboardingFloats && open
         let ear = open && !floats ? IslandGeometry.earRadius : 0
         let radius = switch state {
-        case .collapsed: Metrics.collapsedRadius
-        case .dropTarget: Metrics.previewRadius
+        case .collapsed: hint ? 18 : Metrics.collapsedRadius // the M5 Moments design's drop hint
+        case .dropTarget: CGFloat(30) // the M5 Moments design
         case .expanded, .pinned: model.onboarding != nil ? OnboardingModel.radius : Metrics.openRadius
         }
         let shape = IslandShape(ear: ear, bottom: radius, floatTop: floats ? geometry.topInset + IslandModel.floatingGap : 0)
@@ -94,6 +95,8 @@ struct IslandView: View {
                 .fill(.black)
                 // The no-notch design's hairline edge: 0.5 pt of 22% white.
                 .overlay(shape.stroke(.white.opacity(floats ? 0.22 : 0), lineWidth: 0.5))
+                // A file drag somewhere on screen: a 1.5 pt mint edge ("Drop on Shelf").
+                .overlay(shape.stroke(accent(.action).opacity(hint ? 0.6 : 0), lineWidth: 3)) // the outer half falls outside the window
                 // The design's 0 24 60 rgba(0,0,0,.55), kept inside the window's shadow margin.
                 .shadow(color: .black.opacity(open ? 0.55 : 0), radius: 18, y: 14)
 
@@ -105,14 +108,21 @@ struct IslandView: View {
                         .padding(.horizontal, ear)
                         .transition(contentTransition)
                 case .dropTarget:
-                    DropTargetView(valid: model.dropIsValid, destination: model.dropGoesToScreenshots ? "Screenshots" : "Shelf")
+                    DropTargetView(valid: model.dropIsValid, count: model.dropCount,
+                                   destination: model.dropGoesToScreenshots ? "Screenshots" : "Shelf")
                         .padding(.top, geometry.topInset)
                         .padding(.horizontal, ear)
                         .transition(contentTransition)
                 case .collapsed:
                     let layout = model.earLayout
                     Group {
-                        if !layout.isIdle {
+                        if hint {
+                            Text("Drop on Shelf")
+                                .font(.system(size: 11.5, weight: .semibold))
+                                .foregroundStyle(accent(.action))
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                .padding(.top, 10)
+                        } else if !layout.isIdle {
                             CollapsedEars(layout: layout, model: model)
                         } else if !geometry.hasNotch, model.modules.isVisible(.music), model.modules.indicators.contains(.music) {
                             // Without a notch the pill is always there; it shows a paused track.
@@ -142,6 +152,7 @@ struct IslandView: View {
         .animation(shapeAnimation(collapsing: state == .collapsed), value: state)
         // One spring when the collapsed island widens or narrows for what it shows.
         .animation(Theme.current.spring(duration: 0.44, bounce: 0.15), value: state == .collapsed ? size.width : 0)
+        .animation(Theme.current.spring(duration: 0.3, bounce: 0.15), value: hint)
         // The Screenshots grid makes the open panel taller without a state change: grow and shrink
         // the same way (the window keeps its larger size until the shrink has finished).
         .animation(shapeAnimation(collapsing: !model.showsTallPanel), value: model.showsTallPanel)
@@ -255,6 +266,8 @@ private struct ExpandedContent: View {
                 case .music: MusicCard(media: model.media)
                 case .shelf: ShelfView(shelf: model.shelf, library: model.library, section: $model.shelfSection,
                                        draggedOut: { model.dismiss() })
+                    // Quick Look grows the island to 560 pt and back (see `IslandModel.customPanel`).
+                    .onChange(of: model.shelf.previewing) { model.relayout() }
                 case .mirror: EmptyView() // drawn without the hub (see `body`)
                 }
             }

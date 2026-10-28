@@ -134,7 +134,7 @@ struct MirrorModuleTests {
         model.tab = .notes
         model.openMirror()
         #expect(model.tab == .mirror && model.state == .pinned)
-        #expect(model.mirrorPanel(for: .pinned) != nil)
+        #expect(model.customPanel(for: .pinned) != nil)
         model.dismiss() // collapse: the camera stops and the island returns to Notes
         #expect(model.mirror.state == .off)
         #expect(model.tab == .notes)

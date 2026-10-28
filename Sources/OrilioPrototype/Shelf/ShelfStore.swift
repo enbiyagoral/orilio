@@ -72,7 +72,7 @@ actor ShelfStore {
         return ShelfItem(id: record.id, url: url, name: record.name, contentType: record.contentType.flatMap(UTType.init),
                          isFolder: record.isFolder, size: record.size, addedAt: record.addedAt,
                          origin: record.received ? .received : .reference, bookmark: bookmark,
-                         isAvailable: isAvailable(url))
+                         isAvailable: isAvailable(url), cloud: CloudState.of(url))
     }
 
     /// Present and not in the Trash. Bookmarks follow a file into the Trash, which isn't "available".

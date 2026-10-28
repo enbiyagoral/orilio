@@ -25,9 +25,11 @@ struct IslandGeometry: Equatable {
     static let fullWidth: CGFloat = 700
     static let headerHeight: CGFloat = 38
     static let contentHeight: CGFloat = 266
-    /// The collapsed island while a meeting is about to start.
-    static let dropTargetWidth: CGFloat = 360
-    static let dropTargetHeight: CGFloat = 92 // a 68pt drop zone + 12pt padding
+    /// A drag over the island (the M5 Moments design): a 126 pt drop zone and 14 pt padding.
+    static let dropTargetHeight: CGFloat = 140
+    /// A file drag anywhere on screen: the collapsed island glows and grows this much ("Drop on Shelf").
+    static let dropHintWidth: CGFloat = 240
+    static let dropHintGrowth: CGFloat = 12
     /// The Screenshots grid: about four rows of thumbnails, never taller than the usable screen.
     static let tallHeight: CGFloat = 412
 
@@ -50,9 +52,9 @@ struct IslandGeometry: Equatable {
         CGSize(width: panelWidth, height: max(topInset, Self.headerHeight) + (Self.contentHeight * panelWidth / Self.fullWidth).rounded())
     }
 
-    /// A drag over the island: enough room for a clear drop zone, no more.
+    /// A drag over the island: the panel's width, enough height for a clear drop zone, no more.
     var dropTarget: CGSize {
-        CGSize(width: max(Self.dropTargetWidth, collapsed.width), height: topInset + Self.dropTargetHeight)
+        CGSize(width: max(panelWidth, collapsed.width), height: topInset + Self.dropTargetHeight)
     }
 
     /// The full panel grown for the screenshot grid, capped so it never runs off the screen.
@@ -62,8 +64,11 @@ struct IslandGeometry: Equatable {
     }
 
     /// `panel` replaces the open size for a module with its own (the camera mirror).
-    func size(for state: IslandState, tall wantsTall: Bool = false, collapsedWidth: CGFloat? = nil, panel: CGSize? = nil) -> CGSize {
+    func size(for state: IslandState, tall wantsTall: Bool = false, collapsedWidth: CGFloat? = nil, panel: CGSize? = nil,
+              dropHint: Bool = false) -> CGSize {
         switch state {
+        case .collapsed where dropHint:
+            CGSize(width: max(collapsed.width, collapsedWidth ?? 0, Self.dropHintWidth), height: collapsed.height + Self.dropHintGrowth)
         case .collapsed: CGSize(width: max(collapsed.width, collapsedWidth ?? 0), height: collapsed.height)
         case .expanded, .pinned: panel ?? (wantsTall ? tall : full)
         case .dropTarget: dropTarget
@@ -71,8 +76,9 @@ struct IslandGeometry: Equatable {
     }
 
     /// Collapsed: exactly the island. Open: the island plus ears and shadow room.
-    func windowFrame(for state: IslandState, tall: Bool = false, collapsedWidth: CGFloat? = nil, panel: CGSize? = nil) -> CGRect {
-        var size = size(for: state, tall: tall, collapsedWidth: collapsedWidth, panel: panel)
+    func windowFrame(for state: IslandState, tall: Bool = false, collapsedWidth: CGFloat? = nil, panel: CGSize? = nil,
+                     dropHint: Bool = false) -> CGRect {
+        var size = size(for: state, tall: tall, collapsedWidth: collapsedWidth, panel: panel, dropHint: dropHint)
         if state.isOpen {
             size.width += 2 * (Self.earRadius + Self.shadowMargin)
             size.height += Self.shadowMargin
@@ -138,7 +144,7 @@ final class IslandPanel: NSPanel {
 final class IslandHostingView: NSHostingView<IslandView> {
     var onHover: ((Bool) -> Void)?
     /// Drag destination callbacks. Dragging never activates Orilio, so focus stays where it was.
-    var onDragEntered: ((_ valid: Bool) -> Void)?
+    var onDragEntered: ((_ valid: Bool, _ count: Int) -> Void)?
     var onDragExited: (() -> Void)?
     var onDrop: ((_ content: DropContent, _ sequence: Int) -> Bool)?
     private var hoverArea: NSTrackingArea?
@@ -173,7 +179,9 @@ final class IslandHostingView: NSHostingView<IslandView> {
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
         dragIsValid = DropContent.isSupported(sender.draggingPasteboard.types ?? [])
-        onDragEntered?(dragIsValid)
+        let count = sender.draggingPasteboard.pasteboardItems?.count ?? 1
+        if dragIsValid { sender.numberOfValidItemsForDrop = count } // the badge on the dragged files
+        onDragEntered?(dragIsValid, count)
         return operation(for: sender)
     }
 
@@ -245,11 +253,15 @@ final class IslandWindowController {
         let host = IslandHostingView(rootView: IslandView(model: model))
         host.sizingOptions = [] // the controller owns the frame; don't let SwiftUI resize the panel
         host.onHover = { [weak model] in model?.hover($0) }
-        host.onDragEntered = { [weak model] in model?.dragEntered(valid: $0) }
+        host.onDragEntered = { [weak model] in model?.dragEntered(valid: $0, count: $1) }
         host.onDragExited = { [weak model] in model?.dragExited() }
         host.onDrop = { [weak model] in model?.dropped($0, sequence: $1) ?? false }
         panel.contentView = host
-        panel.onEscape = { [weak model] in model?.dismiss() }
+        panel.onEscape = { [weak model] in
+            guard let model else { return }
+            // Esc first closes the Shelf's Quick Look, then the island.
+            if model.tab == .shelf, model.shelf.previewing != nil { model.shelf.closePreview() } else { model.dismiss() }
+        }
         panel.onKey = { [weak model] event in
             guard let model, model.state == .pinned else { return false }
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
@@ -291,8 +303,8 @@ final class IslandWindowController {
         var geometry = screen.geometry
         geometry.panelWidth = PreferencesStore.shared.value.panelSize.width
         if geometry != model.geometry { model.geometry = geometry }
-        panel.setFrame(geometry.windowFrame(for: model.state, tall: model.wantsTallPanel,
-                                            collapsedWidth: model.liveCollapsedWidth, panel: model.mirrorPanel(for: model.state)), display: true)
+        panel.setFrame(geometry.windowFrame(for: model.state, tall: model.wantsTallPanel, collapsedWidth: model.liveCollapsedWidth,
+                                            panel: model.customPanel(for: model.state), dropHint: model.dropHint), display: true)
     }
 
     /// To another display (pointer moved, a display was unplugged); the island's state goes with it.
@@ -393,7 +405,7 @@ final class IslandWindowController {
 
         // Sized for the state being entered (the model still reports the old one at this point).
         let target = model.geometry.windowFrame(for: state, tall: model.isTall(state), collapsedWidth: model.liveCollapsedWidth,
-                                                panel: model.mirrorPanel(for: state))
+                                                panel: model.customPanel(for: state), dropHint: model.dropHint)
         if target.width >= panel.frame.width, target.height >= panel.frame.height {
             panel.setFrame(target, display: true)
             panel.contentView?.layoutSubtreeIfNeeded() // settle the current island in the bigger window
@@ -411,7 +423,7 @@ final class IslandWindowController {
 
     /// The collapsed island widens for a live meeting and narrows again; follow it without a timer.
     private func followLiveWidth() {
-        withObservationTracking { _ = (model.liveCollapsedWidth, model.earLayout, model.showsLivesHereHint) } onChange: { [weak self] in
+        withObservationTracking { _ = (model.liveCollapsedWidth, model.earLayout, model.showsLivesHereHint, model.dropHint) } onChange: { [weak self] in
             Task { @MainActor in
                 guard let self else { return }
                 self.updateHint()
@@ -426,8 +438,8 @@ final class IslandWindowController {
     /// so the shrinking shape isn't cut off.
     private func resizeCollapsed() {
         widthTask?.cancel()
-        let target = model.geometry.windowFrame(for: .collapsed, collapsedWidth: model.liveCollapsedWidth)
-        guard target.width < panel.frame.width else { return reposition() }
+        let target = model.geometry.windowFrame(for: .collapsed, collapsedWidth: model.liveCollapsedWidth, dropHint: model.dropHint)
+        guard target.width < panel.frame.width || target.height < panel.frame.height else { return reposition() }
         let delay = Theme.current.reducesMotion ? 0 : 0.44
         widthTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(delay))

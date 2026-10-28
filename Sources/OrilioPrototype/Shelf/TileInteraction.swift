@@ -97,7 +97,8 @@ extension TileInteraction.Actions {
     /// The File Shelf's tile behavior.
     @MainActor
     static func shelf(_ item: ShelfItem, in shelf: ShelfModel, draggedOut: @escaping () -> Void) -> Self {
-        Self(
+        var dragged: [UUID] = []
+        return Self(
             select: { shelf.select(item.id, extending: $0) },
             open: { shelf.open(shelf.targets(for: item)) },
             menu: {
@@ -106,7 +107,7 @@ extension TileInteraction.Actions {
                 let available = targets.contains(where: \.isAvailable)
                 let menu = NSMenu()
                 menu.addItem(MenuAction("Open", enabled: available) { shelf.open(targets) })
-                menu.addItem(MenuAction("Quick Look", enabled: available) { QuickLook.show(targets) })
+                menu.addItem(MenuAction("Quick Look", enabled: available) { if let first = targets.first(where: \.isAvailable) { shelf.preview(first) } })
                 menu.addItem(MenuAction("Show in Finder", enabled: available) { shelf.reveal(targets) })
                 menu.addItem(MenuAction("Copy", enabled: available) { shelf.copy(targets) })
                 menu.addItem(.separator())
@@ -115,8 +116,17 @@ extension TileInteraction.Actions {
                 })
                 return menu
             },
-            dragURLs: { shelf.targets(for: item).filter(\.isAvailable).map(\.url) },
-            dragEnded: { if $0 { draggedOut() } })
+            dragURLs: {
+                let targets = shelf.targets(for: item).filter(\.isAvailable)
+                dragged = targets.map(\.id)
+                shelf.download(targets) // an iCloud-only file comes down while it travels
+                return targets.map(\.url)
+            },
+            dragEnded: { delivered in
+                // Dropped into another app: off the Shelf, unless ⌥ is held (the M5 Moments design).
+                shelf.finishDragOut(dragged, delivered: delivered, keep: NSEvent.modifierFlags.contains(.option))
+                if delivered { draggedOut() }
+            })
     }
 }
 
@@ -137,15 +147,11 @@ final class MenuAction: NSMenuItem {
     @objc private func runAction() { run() }
 }
 
-/// The system Quick Look panel for shelf items. The island panel hands control to `QuickLook.source`
+/// The system Quick Look panel for screenshots (Shelf files preview inside the island). The island panel hands control to `QuickLook.source`
 /// through the responder chain (see `IslandPanel`).
 @MainActor
 enum QuickLook {
     static let source = QuickLookSource()
-
-    static func show(_ items: [ShelfItem]) {
-        show(urls: items.filter(\.isAvailable).map(\.url))
-    }
 
     /// Previews files; with `toggle`, closes the panel instead if it is already showing.
     static func show(urls: [URL], toggle: Bool = false) {
@@ -164,10 +170,6 @@ enum QuickLook {
         } else {
             panel.makeKeyAndOrderFront(nil)
         }
-    }
-
-    static func toggle(_ items: [ShelfItem]) {
-        show(urls: items.filter(\.isAvailable).map(\.url), toggle: true)
     }
 }
 
