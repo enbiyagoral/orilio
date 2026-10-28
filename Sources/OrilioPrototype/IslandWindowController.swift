@@ -15,13 +15,18 @@ struct IslandGeometry: Equatable {
     var usableHeight: CGFloat = .greatestFiniteMagnitude
 
     static let pillWidth: CGFloat = 220     // fits a mini cover + a short title in the menu bar band
-    static let fullWidth: CGFloat = 540
-    static let fullHeight: CGFloat = 170    // 6 + 26pt header + 14 + 96pt cover + 18 + slack for the progress row
+    // The M3 hub design: a 700 × 304 panel whose 38 pt header row shares the notch's row (tabs to
+    // its left, pin and close to its right), with a 266 pt content area below.
+    static let fullWidth: CGFloat = 700
+    static let headerHeight: CGFloat = 38
+    static let contentHeight: CGFloat = 266
+    /// The collapsed island while a meeting is about to start.
+    static let meetingWidth: CGFloat = 412
     static let previewWidth: CGFloat = 360
     static let previewHeight: CGFloat = 64  // one row: 40pt cover + 12pt padding above and below
     static let dropTargetHeight: CGFloat = 92 // a 68pt drop zone + 12pt padding
     /// The Screenshots grid: about four rows of thumbnails, never taller than the usable screen.
-    static let tallHeight: CGFloat = 380
+    static let tallHeight: CGFloat = 412
 
     /// Concave "shoulders" that blend the open island into the top edge of the screen.
     static let earRadius: CGFloat = 10
@@ -44,7 +49,7 @@ struct IslandGeometry: Equatable {
 
     /// Click: the full controller.
     var full: CGSize {
-        CGSize(width: Self.fullWidth, height: topInset + Self.fullHeight)
+        CGSize(width: Self.fullWidth, height: max(topInset, Self.headerHeight) + Self.contentHeight)
     }
 
     /// A drag over the island: enough room for a clear drop zone, no more.
@@ -55,12 +60,12 @@ struct IslandGeometry: Equatable {
     /// The full panel grown for the screenshot grid, capped so it never runs off the screen.
     var tall: CGSize {
         let room = usableHeight + topInset - Self.shadowMargin * 2
-        return CGSize(width: Self.fullWidth, height: min(topInset + Self.tallHeight, max(full.height, room)))
+        return CGSize(width: Self.fullWidth, height: min(Self.tallHeight, max(full.height, room)))
     }
 
-    func size(for state: IslandState, tall wantsTall: Bool = false) -> CGSize {
+    func size(for state: IslandState, tall wantsTall: Bool = false, collapsedWidth: CGFloat? = nil) -> CGSize {
         switch state {
-        case .collapsed: collapsed
+        case .collapsed: CGSize(width: max(collapsed.width, collapsedWidth ?? 0), height: collapsed.height)
         case .expanded: preview
         case .pinned: wantsTall ? tall : full
         case .dropTarget: dropTarget
@@ -68,8 +73,8 @@ struct IslandGeometry: Equatable {
     }
 
     /// Collapsed: exactly the island. Open: the island plus ears and shadow room.
-    func windowFrame(for state: IslandState, tall: Bool = false) -> CGRect {
-        var size = size(for: state, tall: tall)
+    func windowFrame(for state: IslandState, tall: Bool = false, collapsedWidth: CGFloat? = nil) -> CGRect {
+        var size = size(for: state, tall: tall, collapsedWidth: collapsedWidth)
         if state.isOpen {
             size.width += 2 * (Self.earRadius + Self.shadowMargin)
             size.height += Self.shadowMargin
@@ -278,6 +283,7 @@ final class IslandWindowController {
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main, using: onChange)
 
         reposition()
+        followLiveWidth()
         panel.orderFrontRegardless()
     }
 
@@ -298,7 +304,8 @@ final class IslandWindowController {
         guard let screen = targetScreen else { return }
         let geometry = IslandGeometry.make(for: screen)
         if geometry != model.geometry { model.geometry = geometry }
-        panel.setFrame(geometry.windowFrame(for: model.state, tall: model.wantsTallPanel), display: true)
+        panel.setFrame(geometry.windowFrame(for: model.state, tall: model.wantsTallPanel,
+                                            collapsedWidth: model.liveCollapsedWidth), display: true)
     }
 
     private func apply(_ state: IslandState) {
@@ -316,7 +323,7 @@ final class IslandWindowController {
         }
 
         // Sized for the state being entered (the model still reports the old one at this point).
-        let target = model.geometry.windowFrame(for: state, tall: model.isTall(state))
+        let target = model.geometry.windowFrame(for: state, tall: model.isTall(state), collapsedWidth: model.liveCollapsedWidth)
         if target.width >= panel.frame.width, target.height >= panel.frame.height {
             panel.setFrame(target, display: true)
             panel.contentView?.layoutSubtreeIfNeeded() // settle the current island in the bigger window
@@ -328,6 +335,17 @@ final class IslandWindowController {
                 try? await Task.sleep(for: .seconds(delay))
                 guard let self, !Task.isCancelled, self.model.state == state else { return }
                 self.panel.setFrame(target, display: true)
+            }
+        }
+    }
+
+    /// The collapsed island widens for a live meeting and narrows again; follow it without a timer.
+    private func followLiveWidth() {
+        withObservationTracking { _ = model.liveCollapsedWidth } onChange: { [weak self] in
+            Task { @MainActor in
+                guard let self else { return }
+                if !self.model.state.isOpen { self.reposition() }
+                self.followLiveWidth()
             }
         }
     }
