@@ -1,4 +1,5 @@
 import AppKit
+import Quartz
 import SwiftUI
 
 /// Where the island sits on one screen, in AppKit screen coordinates (origin bottom-left).
@@ -95,10 +96,39 @@ struct IslandGeometry: Equatable {
 /// Only pinning activates it (see `IslandWindowController.apply`).
 final class IslandPanel: NSPanel {
     var onEscape: (() -> Void)?
+    /// Keys for the visible content (the shelf's Space, Delete, ⌘C). Returns true if handled.
+    var onKey: ((NSEvent) -> Bool)?
 
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
     override func cancelOperation(_ sender: Any?) { onEscape?() }
+
+    override func keyDown(with event: NSEvent) {
+        if onKey?(event) != true { super.keyDown(with: event) }
+    }
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if event.modifierFlags.contains(.command), onKey?(event) == true { return true }
+        return super.performKeyEquivalent(with: event)
+    }
+
+    // Quick Look finds its data source through the key window's responder chain. AppKit calls
+    // these on the main thread; the informal protocol just isn't annotated for it.
+    override func acceptsPreviewPanelControl(_ panel: QLPreviewPanel!) -> Bool { true }
+
+    override func beginPreviewPanelControl(_ panel: QLPreviewPanel!) {
+        MainActor.assumeIsolated {
+            panel.dataSource = QuickLook.source
+            panel.delegate = QuickLook.source
+        }
+    }
+
+    override func endPreviewPanelControl(_ panel: QLPreviewPanel!) {
+        MainActor.assumeIsolated {
+            panel.dataSource = nil
+            panel.delegate = nil
+        }
+    }
 }
 
 final class IslandHostingView: NSHostingView<IslandView> {
@@ -204,6 +234,11 @@ final class IslandWindowController {
         host.onDrop = { [weak model] in model?.dropped($0, sequence: $1) ?? false }
         panel.contentView = host
         panel.onEscape = { [weak model] in model?.dismiss() }
+        panel.onKey = { [weak model] event in
+            guard let model, model.state == .pinned, model.tab == .shelf else { return false }
+            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            return model.shelf.handleKey(keyCode: event.keyCode, command: flags == .command)
+        }
         model.onWillChangeState = { [weak self] in self?.apply($0) }
 
         let center = NotificationCenter.default

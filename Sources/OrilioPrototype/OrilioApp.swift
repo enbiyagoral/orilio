@@ -42,6 +42,7 @@ private struct MenuContent: View {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var controller: IslandWindowController?
     private var bridge: BridgeServer?
+    private var shelf: ShelfModel?
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         // No Dock icon, no app switcher entry. Works without an Info.plist (LSUIElement).
@@ -54,7 +55,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             providers.append(browser)
             bridge = server
         }
-        controller = IslandWindowController(model: IslandModel(providers: providers))
+        let shelf = ShelfModel(store: ShelfStore())
+        self.shelf = shelf
+        Task { await shelf.restore() }
+        controller = IslandWindowController(model: IslandModel(providers: providers, shelf: shelf))
+    }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        // Write any shelf change still waiting for its coalesced save, then quit.
+        guard let shelf else { return .terminateNow }
+        Task {
+            await shelf.saveNow()
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
     }
 
     func applicationWillTerminate(_ notification: Notification) {

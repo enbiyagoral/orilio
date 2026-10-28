@@ -12,13 +12,18 @@ struct ShelfItem: Identifiable, Equatable, Sendable {
     }
 
     let id: UUID
-    let url: URL
+    /// Where the item is now; updated when its bookmark finds it somewhere else.
+    var url: URL
     let name: String
     let contentType: UTType?
     let isFolder: Bool
     let size: Int64?
     let addedAt: Date
     let origin: Origin
+    /// Follows the file if it is moved or renamed.
+    var bookmark: Data?
+    /// False when the file was deleted, moved to the Trash or is on a volume that isn't mounted.
+    var isAvailable = true
 
     /// Reads the file's metadata. Touches the file system, so call it off the main actor.
     static func load(_ url: URL, origin: Origin, now: Date = Date()) -> ShelfItem? {
@@ -28,7 +33,7 @@ struct ShelfItem: Identifiable, Equatable, Sendable {
         return ShelfItem(id: UUID(), url: url, name: values.localizedName ?? url.lastPathComponent,
                          contentType: values.contentType, isFolder: isFolder,
                          size: isFolder ? nil : (values.totalFileSize ?? values.fileSize).map(Int64.init),
-                         addedAt: now, origin: origin)
+                         addedAt: now, origin: origin, bookmark: try? url.bookmarkData())
     }
 }
 
@@ -75,7 +80,7 @@ enum DropContent {
     }
 }
 
-/// The File Shelf's in-memory state. Persistence arrives in M2.2.
+/// The File Shelf. Saved by `ShelfStore` when one is given (the app does; tests usually don't).
 @MainActor @Observable
 final class ShelfModel {
     struct Pending: Identifiable, Equatable {
@@ -84,6 +89,8 @@ final class ShelfModel {
     }
 
     private(set) var items: [ShelfItem] = []
+    /// Selected tiles; dragging a selected tile drags all of them.
+    private(set) var selection = Set<UUID>()
     /// Imports still arriving (file promises, image data being written).
     private(set) var pending: [Pending] = []
     /// A short, actionable message about the last problem, cleared by the next success.
@@ -92,6 +99,10 @@ final class ShelfModel {
     /// Where received content is written: Application Support/Orilio/Shelf/Received.
     let receivedDirectory: URL
     @ObservationIgnored private var handledDrags = Set<Int>()
+    @ObservationIgnored private let store: ShelfStore?
+    @ObservationIgnored private var pendingSave: Task<Void, Never>?
+    /// Saves are coalesced: a burst of changes writes the file once.
+    static let saveDelay: Duration = .milliseconds(300)
     /// At most two promises are fulfilled at once, so a large drop doesn't saturate the disk.
     @ObservationIgnored private let promiseQueue: OperationQueue = {
         let queue = OperationQueue()
@@ -100,8 +111,107 @@ final class ShelfModel {
         return queue
     }()
 
-    init(receivedDirectory: URL = ShelfModel.defaultReceivedDirectory) {
+    init(receivedDirectory: URL = ShelfModel.defaultReceivedDirectory, store: ShelfStore? = nil) {
         self.receivedDirectory = receivedDirectory
+        self.store = store
+    }
+
+    /// Loads the saved shelf. Called once at launch; resolving bookmarks happens in the store's actor.
+    func restore() async {
+        guard let store else { return }
+        let saved = await store.load()
+        var seen = Set(items.map(\.id))
+        items.append(contentsOf: saved.filter { seen.insert($0.id).inserted })
+    }
+
+    /// Re-checks where each item is and whether it still exists, once, when the shelf is shown.
+    func refreshAvailability() {
+        let records = items.map(ShelfStore.record)
+        guard !records.isEmpty else { return }
+        Task.detached(priority: .utility) {
+            let resolved = records.map(ShelfStore.resolve)
+            await self.apply(resolved)
+        }
+    }
+
+    private func apply(_ resolved: [ShelfItem]) {
+        var changed = false
+        for fresh in resolved {
+            guard let index = items.firstIndex(where: { $0.id == fresh.id }) else { continue }
+            if items[index].url != fresh.url || items[index].isAvailable != fresh.isAvailable
+                || items[index].bookmark != fresh.bookmark {
+                items[index].url = fresh.url
+                items[index].isAvailable = fresh.isAvailable
+                items[index].bookmark = fresh.bookmark
+                changed = true
+            }
+        }
+        if changed { scheduleSave() }
+    }
+
+    // MARK: Selection
+
+    /// A plain click selects one tile; with ⌘ or ⇧ it adds or removes it.
+    func select(_ id: UUID, extending: Bool) {
+        if extending {
+            if selection.contains(id) { selection.remove(id) } else { selection.insert(id) }
+        } else {
+            selection = [id]
+        }
+    }
+
+    /// What an action on `item` applies to: the whole selection if the item is part of it.
+    func targets(for item: ShelfItem) -> [ShelfItem] {
+        selection.contains(item.id) ? items.filter { selection.contains($0.id) } : [item]
+    }
+
+    // MARK: Keyboard
+
+    enum KeyAction: Equatable {
+        case quickLook, remove, copy
+    }
+
+    /// The shelf's keys, decided explicitly (never by whichever control happens to have focus):
+    /// Space previews, Delete removes from the shelf, ⌘C copies. Nothing without a selection.
+    func keyAction(keyCode: UInt16, command: Bool) -> KeyAction? {
+        guard !selection.isEmpty else { return nil }
+        switch (keyCode, command) {
+        case (49, false): return .quickLook       // Space
+        case (51, false), (117, false): return .remove // Delete, Forward Delete
+        case (8, true): return .copy              // ⌘C
+        default: return nil
+        }
+    }
+
+    /// Runs a key on the selection. Returns false if the key isn't the shelf's.
+    func handleKey(keyCode: UInt16, command: Bool) -> Bool {
+        guard let action = keyAction(keyCode: keyCode, command: command) else { return false }
+        let selected = items.filter { selection.contains($0.id) }
+        switch action {
+        case .quickLook: QuickLook.toggle(selected)
+        case .remove: remove(selected)
+        case .copy: copy(selected)
+        }
+        return true
+    }
+
+    // MARK: Actions
+
+    func open(_ items: [ShelfItem]) {
+        for item in items where item.isAvailable { NSWorkspace.shared.open(item.url) }
+    }
+
+    func reveal(_ items: [ShelfItem]) {
+        let urls = items.filter(\.isAvailable).map(\.url)
+        if !urls.isEmpty { NSWorkspace.shared.activateFileViewerSelecting(urls) }
+    }
+
+    /// Puts the files on the clipboard, so Paste in Finder copies them (it never moves them).
+    func copy(_ items: [ShelfItem], to pasteboard: NSPasteboard = .general) {
+        let urls = items.filter(\.isAvailable).map { $0.url as NSURL }
+        guard !urls.isEmpty else { return }
+        pasteboard.clearContents()
+        pasteboard.writeObjects(urls)
     }
 
     static var defaultReceivedDirectory: URL {
@@ -127,9 +237,40 @@ final class ShelfModel {
         return true
     }
 
-    /// Takes the item off the shelf. The file itself is never touched.
-    func remove(_ item: ShelfItem) {
-        items.removeAll { $0.id == item.id }
+    /// Takes items off the shelf. The user's own files are never touched; a copy that Orilio
+    /// received for the shelf (from Mail, Photos, a browser) is Orilio's and is deleted with it.
+    func remove(_ removed: [ShelfItem]) {
+        let ids = Set(removed.map(\.id))
+        items.removeAll { ids.contains($0.id) }
+        selection.subtract(ids)
+        let ownFolders = removed.filter { $0.origin == .received }.map { $0.url.deletingLastPathComponent() }
+            .filter { $0.path.hasPrefix(receivedDirectory.path + "/") } // only inside Orilio's own folder
+        if !ownFolders.isEmpty {
+            Task.detached(priority: .utility) {
+                for folder in ownFolders { try? FileManager.default.removeItem(at: folder) }
+            }
+        }
+        scheduleSave()
+    }
+
+    func remove(_ item: ShelfItem) { remove([item]) }
+
+    private func scheduleSave() {
+        guard let store else { return }
+        pendingSave?.cancel()
+        pendingSave = Task { [weak self] in
+            try? await Task.sleep(for: Self.saveDelay)
+            guard !Task.isCancelled, let self else { return }
+            let snapshot = self.items
+            do { try await store.save(snapshot) } catch { self.problem = "The Shelf couldn't be saved" }
+        }
+    }
+
+    /// Writes pending changes now (used when the app quits).
+    func saveNow() async {
+        pendingSave?.cancel()
+        guard let store else { return }
+        try? await store.save(items)
     }
 
     func add(_ urls: [URL], origin: ShelfItem.Origin) {
@@ -149,6 +290,7 @@ final class ShelfModel {
         let new = loaded.filter { seen.insert($0.url).inserted }
         items.insert(contentsOf: new, at: 0) // newest first
         problem = missing > 0 ? (missing == 1 ? "One item couldn't be read" : "\(missing) items couldn't be read") : nil
+        if !new.isEmpty { scheduleSave() }
     }
 
     private func newReceivingFolder() -> URL? {
