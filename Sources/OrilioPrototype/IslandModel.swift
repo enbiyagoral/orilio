@@ -3,7 +3,7 @@ import Observation
 
 enum IslandState: Equatable {
     case collapsed
-    case expanded // hover: a one-row preview; closes when the pointer leaves
+    case expanded // hover: the full panel, without the keyboard; closes when the pointer leaves
     case pinned   // click: the full controller; stays until Esc, close or unpin
     case dropTarget // a drag is over the island: open just enough to take the drop
 
@@ -68,7 +68,7 @@ final class IslandModel {
     private(set) var showsTallPanel = false
 
     func isTall(_ state: IslandState) -> Bool {
-        state == .pinned && tab == .shelf && shelfSection == .screenshots
+        (state == .pinned || state == .expanded) && tab == .shelf && shelfSection == .screenshots
     }
     var geometry = IslandGeometry.fallback
     var hoverOpens = true
@@ -80,6 +80,7 @@ final class IslandModel {
     let clipboard: ClipboardModule
     let notes: NotesModule
     let focus: FocusModule
+    let modules: ModuleSettings
     /// Whether the drag over the island carries something the shelf can take.
     private(set) var dropIsValid = true
     /// Where a drop will go: the screenshot library if it is what's on screen, else the File Shelf.
@@ -95,7 +96,8 @@ final class IslandModel {
              defaults: UserDefaults(suiteName: "orilio.unused") ?? .standard),
          notes: NotesModule = NotesModule(store: NotesStore(
              directory: FileManager.default.temporaryDirectory.appending(path: "orilio-unused-notes"))),
-         focus: FocusModule = FocusModule(defaults: UserDefaults(suiteName: "orilio.unused") ?? .standard)) {
+         focus: FocusModule = FocusModule(defaults: UserDefaults(suiteName: "orilio.unused") ?? .standard),
+         modules: ModuleSettings = ModuleSettings(defaults: UserDefaults(suiteName: "orilio.unused") ?? .standard)) {
         let showDemo = UserDefaults.standard.bool(forKey: SettingsKeys.showDemoSource)
         demo = DemoMediaProvider(enabled: showDemo)
         media = MediaCoordinator(providers: providers + [demo])
@@ -105,6 +107,27 @@ final class IslandModel {
         self.clipboard = clipboard
         self.notes = notes
         self.focus = focus
+        self.modules = modules
+        if !modules.isVisible(tab) { tab = modules.visible[0] }
+        modules.onHide = { [weak self] in self?.moduleHidden($0) }
+    }
+
+    /// A hidden module stops its work, so nothing runs (or reads) for a module the user removed.
+    /// Nothing stored is deleted: showing it again brings it back as it was, turned off.
+    private func moduleHidden(_ module: IslandTab) {
+        switch module {
+        case .calendar: calendar.disable()
+        case .clipboard: if clipboard.status == .on { clipboard.pause() }
+        case .focus: focus.reset()
+        case .notes, .music, .shelf: break
+        }
+        if tab == module { tab = modules.visible[0] }
+    }
+
+    /// What the collapsed island shows (see `CollapsedLive.resolve` for the order).
+    var collapsedLive: CollapsedLive {
+        .resolve(focusActive: focus.isActive, meeting: meetingSoon, musicPlaying: media.current?.state == .playing,
+                 visible: modules.visibleSet, indicators: modules.indicators)
     }
 
     /// A meeting about to start, for the collapsed island (only when Calendar is on and readable).
@@ -113,11 +136,14 @@ final class IslandModel {
         return calendar.dayNow().soon()
     }
 
-    /// Wider than the notch only while something live is shown: a focus session (340 pt) wins over
-    /// a meeting about to start (412 pt), as in the design.
+    /// Wider than the notch only while something live is shown (the design's widths).
     var liveCollapsedWidth: CGFloat? {
-        if focus.isActive { return IslandGeometry.focusWidth }
-        return meetingSoon == nil ? nil : IslandGeometry.meetingWidth
+        switch collapsedLive {
+        case .focus: IslandGeometry.focusWidth
+        case .meeting: IslandGeometry.meetingWidth
+        case .music: IslandGeometry.musicWidth
+        case .none: nil
+        }
     }
 
     /// Same state, new size (the Screenshots grid wants more room): let the window follow.
@@ -152,21 +178,50 @@ final class IslandModel {
         pending?.cancel()
         pending = nil
         if inside, state == .collapsed, hoverOpens {
-            schedule(.expanded, after: Self.openDelay)
+            schedule(.expanded, after: Self.openDelay, choosingTab: true)
         } else if !inside, state == .expanded {
             schedule(.collapsed, after: Self.closeDelay)
         }
     }
 
     /// A click anywhere on the island (outside its buttons) opens the full controller.
-    func tap() { set(.pinned) }
-    func togglePin() { set(state == .pinned ? .expanded : .pinned) }
+    /// A click on the collapsed island opens the module of what it shows, else the default one.
+    func tap() {
+        if !state.isOpen { chooseOpeningTab() }
+        set(.pinned)
+    }
+
+    /// A click inside the hover panel: keep it open, on the module it shows.
+    func keepOpen() {
+        guard state == .expanded else { return }
+        pinnedByClick = Date()
+        set(.pinned)
+    }
+
+    @ObservationIgnored private var pinnedByClick: Date?
+
+    /// The next or previous visible module, wrapping around.
+    func selectAdjacentTab(_ offset: Int) {
+        let visible = modules.visible
+        guard let index = visible.firstIndex(of: tab) else { tab = visible[0]; return }
+        tab = visible[(index + offset + visible.count) % visible.count]
+    }
+
+    private func chooseOpeningTab() { tab = collapsedLive.tab ?? modules.defaultTab ?? tab }
+    func togglePin() {
+        // The click on the pin button already pinned the hover panel (`keepOpen`); it means "pin".
+        if let pinned = pinnedByClick, Date().timeIntervalSince(pinned) < 0.6 {
+            pinnedByClick = nil
+            return
+        }
+        set(state == .pinned ? .expanded : .pinned)
+    }
     func dismiss() { set(.collapsed) }
 
     // MARK: Dragging onto the island
 
     func dragEntered(valid: Bool) {
-        dropIsValid = valid
+        dropIsValid = valid && modules.isVisible(.shelf) // a hidden Shelf takes nothing
         guard state != .dropTarget else { return }
         stateBeforeDrag = state
         dropGoesToScreenshots = state == .pinned && tab == .shelf && shelfSection == .screenshots
@@ -211,13 +266,14 @@ final class IslandModel {
         showsTallPanel = isTall(new)
     }
 
-    private func schedule(_ target: IslandState, after delay: Duration) {
+    private func schedule(_ target: IslandState, after delay: Duration, choosingTab: Bool = false) {
         pending = Task { [weak self] in
             try? await Task.sleep(for: delay)
             guard !Task.isCancelled, let self else { return }
             if target == .collapsed, self.isPointerBusy() {
                 self.schedule(target, after: delay) // check again once the user lets go
             } else {
+                if choosingTab { self.chooseOpeningTab() }
                 self.set(target)
             }
         }

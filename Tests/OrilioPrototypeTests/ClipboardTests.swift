@@ -219,6 +219,19 @@ struct ClipboardModuleTests {
         #expect(h.module.status == .on)
     }
 
+    @Test func pauseOutlivesARestart() async {
+        let h = Harness()
+        await h.module.enable()
+        h.module.pause()
+        let again = ClipboardModule(store: ClipboardStore(directory: h.directory), pasteboard: h.board,
+                                    defaults: h.defaults, frontmostApp: { (nil, nil) }, now: { h.clock.now })
+        await again.start()
+        h.board.copy("after restart")
+        again.check()
+        #expect(again.status == .paused)
+        #expect(again.items.isEmpty)
+    }
+
     @Test func deniedAccessIsBlocked() async {
         let h = Harness()
         h.board.readPermission = .denied

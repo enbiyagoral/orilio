@@ -18,6 +18,9 @@ final class ScreenshotLibrary {
 
     let store: ScreenshotStore
     let capture: ScreenshotCaptureService
+    /// New system screenshots come in on their own (opt-in, `ScreenshotWatcher`).
+    private(set) var addsSystemScreenshots = false
+    @ObservationIgnored private var watcher: ScreenshotWatcher?
     /// At most this many imports run at once, so a large drop doesn't saturate the disk.
     static let importConcurrency = 2
 
@@ -37,6 +40,22 @@ final class ScreenshotLibrary {
     }
 
     func imageURL(for item: ScreenshotItem) -> URL { store.imageURL(for: item) }
+
+    /// Starts the watcher if the user turned it on before.
+    func startWatchingIfEnabled(_ defaults: UserDefaults = .standard) {
+        if defaults.bool(forKey: ScreenshotWatcher.enabledKey) { setAddsSystemScreenshots(true, defaults) }
+    }
+
+    func setAddsSystemScreenshots(_ on: Bool, _ defaults: UserDefaults = .standard) {
+        defaults.set(on, forKey: ScreenshotWatcher.enabledKey)
+        addsSystemScreenshots = on
+        if on {
+            if watcher == nil { watcher = ScreenshotWatcher { [weak self] in self?.importFiles($0) } }
+            watcher?.start()
+        } else {
+            watcher?.stop()
+        }
+    }
 
     /// Is there an original outside the library that removing this item leaves in place?
     func hasExternalOriginal(_ item: ScreenshotItem) -> Bool {

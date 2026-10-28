@@ -134,7 +134,8 @@ final class ClipboardModule {
         guard isEnabled else { status = .off; return }
         items = await store.load()
         prune()
-        resume()
+        // A pause outlives a restart; only the user resumes.
+        if defaults.bool(forKey: ClipboardKeys.paused) { status = .paused } else { resume() }
     }
 
     /// Turning history on starts from now: whatever is on the clipboard already is not recorded.

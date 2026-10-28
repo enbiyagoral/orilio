@@ -1,0 +1,128 @@
+import Foundation
+import Observation
+
+/// What the collapsed island may show besides the notch itself.
+enum CollapsedIndicator: String, CaseIterable, Identifiable {
+    case focus, meeting, music
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .focus: "Focus timer"
+        case .meeting: "Meeting about to start"
+        case .music: "Music playing"
+        }
+    }
+}
+
+/// The one live thing the collapsed island shows. Pure; the order is the M3.5 spec's (#14):
+/// a meeting within 10 minutes, then a focus session, then music, then nothing.
+/// Open states (a drag, the panel, editing) come before all of these: the collapsed island isn't
+/// drawn then, and nothing here ever switches an open module.
+enum CollapsedLive: Equatable {
+    case focus
+    case meeting(CalendarEvent)
+    case music
+    case none
+
+    static func resolve(focusActive: Bool, meeting: CalendarEvent?, musicPlaying: Bool,
+                        visible: Set<IslandTab>, indicators: Set<CollapsedIndicator>) -> CollapsedLive {
+        if let meeting, visible.contains(.calendar), indicators.contains(.meeting) { return .meeting(meeting) }
+        if focusActive, visible.contains(.focus), indicators.contains(.focus) { return .focus }
+        if musicPlaying, visible.contains(.music), indicators.contains(.music) { return .music }
+        return .none
+    }
+
+    /// The module a click on the collapsed island opens.
+    var tab: IslandTab? {
+        switch self {
+        case .focus: .focus
+        case .meeting: .calendar
+        case .music: .music
+        case .none: nil
+        }
+    }
+}
+
+enum ModuleKeys {
+    static let order = "modules.order"
+    static let hidden = "modules.hidden"
+    static let defaultTab = "modules.default" // a tab's key, or absent for "last used"
+    static let hiddenIndicators = "modules.hiddenIndicators"
+}
+
+extension IslandTab {
+    /// Stable identifier for preferences (the raw value is the display name).
+    var key: String { String(describing: self) }
+    init?(key: String) {
+        guard let tab = Self.allCases.first(where: { $0.key == key }) else { return nil }
+        self = tab
+    }
+}
+
+/// Which modules the island shows, in which order, which one it opens to, and which live states
+/// the collapsed island may show. Stored in `UserDefaults` (`modules.*`).
+@MainActor @Observable
+final class ModuleSettings {
+    private(set) var order: [IslandTab]
+    private(set) var hidden: Set<IslandTab>
+    /// nil: open to the module used last.
+    private(set) var defaultTab: IslandTab?
+    private(set) var indicators: Set<CollapsedIndicator>
+
+    @ObservationIgnored private let defaults: UserDefaults
+    /// Called when a module is hidden, so it can stop its work (and give up what it reads).
+    @ObservationIgnored var onHide: ((IslandTab) -> Void)?
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        let saved = (defaults.stringArray(forKey: ModuleKeys.order) ?? []).compactMap(IslandTab.init(key:))
+        // Saved order first; modules added in a later version go at their design position's end.
+        order = saved + IslandTab.allCases.filter { !saved.contains($0) }
+        let hidden = Set((defaults.stringArray(forKey: ModuleKeys.hidden) ?? []).compactMap(IslandTab.init(key:)))
+        self.hidden = hidden.count == IslandTab.allCases.count ? [] : hidden
+        defaultTab = defaults.string(forKey: ModuleKeys.defaultTab).flatMap(IslandTab.init(key:))
+        let off = Set((defaults.stringArray(forKey: ModuleKeys.hiddenIndicators) ?? []).compactMap(CollapsedIndicator.init(rawValue:)))
+        indicators = Set(CollapsedIndicator.allCases).subtracting(off)
+    }
+
+    var visible: [IslandTab] { order.filter { !hidden.contains($0) } }
+    var visibleSet: Set<IslandTab> { Set(visible) }
+
+    func isVisible(_ tab: IslandTab) -> Bool { !hidden.contains(tab) }
+
+    /// At least one module always stays.
+    func setVisible(_ tab: IslandTab, _ on: Bool) {
+        if on {
+            hidden.remove(tab)
+        } else {
+            guard visible.count > 1, !hidden.contains(tab) else { return }
+            hidden.insert(tab)
+            if defaultTab == tab { setDefault(nil) }
+            onHide?(tab)
+        }
+        defaults.set(hidden.map(\.key).sorted(), forKey: ModuleKeys.hidden)
+    }
+
+    func move(_ tab: IslandTab, by offset: Int) {
+        guard let index = order.firstIndex(of: tab), order.indices.contains(index + offset) else { return }
+        order.swapAt(index, index + offset)
+        defaults.set(order.map(\.key), forKey: ModuleKeys.order)
+    }
+
+    func setDefault(_ tab: IslandTab?) {
+        defaultTab = tab
+        if let tab { defaults.set(tab.key, forKey: ModuleKeys.defaultTab) } else { defaults.removeObject(forKey: ModuleKeys.defaultTab) }
+    }
+
+    func setIndicator(_ indicator: CollapsedIndicator, _ on: Bool) {
+        if on { indicators.insert(indicator) } else { indicators.remove(indicator) }
+        let off = CollapsedIndicator.allCases.filter { !indicators.contains($0) }
+        defaults.set(off.map(\.rawValue), forKey: ModuleKeys.hiddenIndicators)
+    }
+
+    func resetOrder() {
+        order = IslandTab.allCases
+        defaults.removeObject(forKey: ModuleKeys.order)
+    }
+}

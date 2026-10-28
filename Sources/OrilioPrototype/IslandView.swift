@@ -77,8 +77,8 @@ struct IslandView: View {
         let ear = open ? IslandGeometry.earRadius : 0
         let radius = switch state {
         case .collapsed: Metrics.collapsedRadius
-        case .expanded, .dropTarget: Metrics.previewRadius
-        case .pinned: Metrics.openRadius
+        case .dropTarget: Metrics.previewRadius
+        case .expanded, .pinned: Metrics.openRadius
         }
         let shape = IslandShape(ear: ear, bottom: radius)
 
@@ -90,14 +90,9 @@ struct IslandView: View {
 
             ZStack(alignment: .top) {
                 switch state {
-                case .pinned:
+                case .pinned, .expanded:
                     // The header shares the notch's row, so content starts at the very top.
                     ExpandedContent(model: model)
-                        .padding(.horizontal, ear)
-                        .transition(contentTransition)
-                case .expanded:
-                    PreviewContent(media: model.media)
-                        .padding(.top, geometry.topInset)
                         .padding(.horizontal, ear)
                         .transition(contentTransition)
                 case .dropTarget:
@@ -106,16 +101,22 @@ struct IslandView: View {
                         .padding(.horizontal, ear)
                         .transition(contentTransition)
                 case .collapsed:
-                    if model.focus.isActive {
-                        FocusPill(module: model.focus)
-                            .transition(.opacity.animation(.easeOut(duration: 0.15)))
-                    } else if let meeting = model.meetingSoon {
-                        TimelineView(.everyMinute) { context in MeetingPill(event: meeting, now: context.date) }
-                            .transition(.opacity.animation(.easeOut(duration: 0.15)))
-                    } else if !geometry.hasNotch {
-                        CompactPill(media: model.media)
-                            .transition(.opacity.animation(.easeOut(duration: 0.15)))
+                    Group {
+                        switch model.collapsedLive {
+                        case .focus:
+                            FocusPill(module: model.focus)
+                        case .meeting(let meeting):
+                            TimelineView(.everyMinute) { context in MeetingPill(event: meeting, now: context.date) }
+                        case .music:
+                            if let session = model.media.current { MusicPill(session: session) }
+                        case .none:
+                            // Without a notch the pill is always there; it shows a paused track.
+                            if !geometry.hasNotch, model.modules.isVisible(.music), model.modules.indicators.contains(.music) {
+                                CompactPill(media: model.media)
+                            }
+                        }
                     }
+                    .transition(.opacity.animation(.easeOut(duration: 0.15)))
                 }
             }
             .clipShape(shape)
@@ -176,6 +177,29 @@ private struct CompactPill: View {
     }
 }
 
+/// The collapsed island while music plays (the M3 hub design's 236 pt state): the cover left of
+/// the notch, four warm bars right of it.
+private struct MusicPill: View {
+    let session: MediaSessionSnapshot
+    static let barColor = NSColor(red: 0.969, green: 0.71, blue: 0.431, alpha: 1) // #F7B56E
+
+    var body: some View {
+        HStack {
+            Artwork(seed: session.title, url: session.artworkURL, size: 20, radius: 6)
+            Spacer(minLength: 12)
+            if session.kind == .video {
+                ActivityIndicator(session: session)
+            } else {
+                EqualizerView(mode: EqualizerView.Mode(session), color: Self.barColor, style: .wave)
+            }
+        }
+        .padding(.horizontal, 14)
+        .frame(maxHeight: .infinity)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Now playing: \(session.title). Open island")
+    }
+}
+
 /// Music gets the moving bars; video gets a still glyph, since the picture itself is the activity.
 private struct ActivityIndicator: View {
     let session: MediaSessionSnapshot
@@ -194,42 +218,6 @@ private struct ActivityIndicator: View {
     }
 }
 
-/// The hover state: enough to see what's playing and pause it, without opening the full panel.
-private struct PreviewContent: View {
-    let media: MediaCoordinator
-    @State private var feedback = ControlFeedback()
-
-    var body: some View {
-        HStack(spacing: Metrics.previewPadding) {
-            if let session = media.current {
-                Artwork(seed: session.title, url: session.artworkURL, size: 40, radius: Metrics.previewInnerRadius)
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(session.title)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(.white)
-                    Text(session.artist ?? session.sourceName)
-                        .font(.system(size: 11))
-                        .foregroundStyle(.white.opacity(Metrics.secondaryText))
-                }
-                .lineLimit(1)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentTransition(.opacity)
-                ActivityIndicator(session: session, expectedPlaying: feedback.expectedPlaying)
-                PlayPauseButton(session: session, media: media, feedback: $feedback, diameter: 28)
-            } else {
-                Text("Nothing playing")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.white.opacity(Metrics.secondaryText))
-                    .frame(maxWidth: .infinity)
-            }
-        }
-        .padding(.horizontal, Metrics.previewPadding + 4)
-        .frame(maxHeight: .infinity)
-        .animation(.easeInOut(duration: 0.2), value: media.current?.title)
-    }
-}
-
 private struct ExpandedContent: View {
     @Bindable var model: IslandModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -239,7 +227,7 @@ private struct ExpandedContent: View {
             // 38 pt header: tabs left of the notch, pin and close right of it (M3 hub design).
             HStack(spacing: 2) {
                 HStack(spacing: 2) {
-                    ForEach(IslandTab.allCases) { tab in
+                    ForEach(model.modules.visible) { tab in
                         ModuleTab(tab: tab, selected: model.tab == tab, live: isLive(tab)) { model.tab = tab }
                     }
                 }
@@ -266,9 +254,8 @@ private struct ExpandedContent: View {
             }
             .id(model.tab)
             .transition(.reveal(reduceMotion))
-            .padding(.top, 10)
-            .padding(.horizontal, 20)
-            .padding(.bottom, 20)
+            // Music lays out its own padding around a full-width glow.
+            .padding(model.tab == .music ? EdgeInsets() : EdgeInsets(top: 10, leading: 20, bottom: 20, trailing: 20))
             .frame(maxHeight: .infinity, alignment: .top)
         }
         .animation(reduceMotion ? nil : .spring(duration: 0.3, bounce: 0.1), value: model.tab)
@@ -312,6 +299,8 @@ private struct ModuleTab: View {
         .buttonStyle(PressableStyle())
         .help(tab.rawValue)
         .accessibilityLabel(tab.rawValue)
+        .accessibilityValue(live ? "Active" : "")
+        .accessibilityHint("Control-Tab moves between modules")
         .accessibilityAddTraits(selected ? [.isSelected, .isButton] : .isButton)
     }
 }
@@ -404,68 +393,80 @@ private struct NowPlaying: View {
     var body: some View {
         let caps = session.capabilities
         let denied = media.statuses[session.providerID] == .permissionDenied
-        HStack(spacing: Metrics.padding) {
-            Artwork(seed: session.title, url: session.artworkURL, size: 96, radius: Metrics.innerRadius)
-                .overlay {
-                    if session.artworkURL == nil {
-                        Image(systemName: "music.note").font(.system(size: 32)).foregroundStyle(.black.opacity(0.4))
+        // The M3 hub design: a 150 pt cover (radius 24) over its own blurred glow, a 22 pt title,
+        // a 5 pt progress bar and centered white controls.
+        HStack(spacing: 24) {
+            ZStack {
+                Artwork(seed: session.title, url: session.artworkURL, size: 126, radius: 26)
+                    .blur(radius: 26)
+                    .opacity(0.75)
+                Artwork(seed: session.title, url: session.artworkURL, size: 150, radius: 24)
+                    .overlay {
+                        if session.artworkURL == nil {
+                            Image(systemName: "music.note").font(.system(size: 44)).foregroundStyle(.black.opacity(0.4))
+                        }
                     }
-                }
-                .shadow(color: .black.opacity(0.4), radius: 10, y: 6)
-                .accessibilityHidden(true)
+            }
+            .frame(width: 150, height: 150)
+            .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 0) {
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 8) {
-                        Text(session.title.isEmpty ? "Unknown title" : session.title)
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                        ActivityIndicator(session: session, expectedPlaying: feedback.expectedPlaying)
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .top, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 8) {
+                            Text(session.title.isEmpty ? "Unknown title" : session.title)
+                                .font(.system(size: 22, weight: .semibold))
+                                .tracking(-0.44)
+                                .foregroundStyle(.white)
+                                .truncationMode(.tail)
+                            ActivityIndicator(session: session, expectedPlaying: feedback.expectedPlaying)
+                        }
+                        if let failure = feedback.failure {
+                            Label(failure, systemImage: "exclamationmark.circle.fill")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(.orange)
+                                .transition(.opacity)
+                        } else {
+                            Text(subtitle)
+                                .font(.system(size: 14))
+                                .foregroundStyle(.white.opacity(Metrics.secondaryText))
+                        }
                     }
-                    if let failure = feedback.failure {
-                        Label(failure, systemImage: "exclamationmark.circle.fill")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(.orange)
-                            .transition(.opacity)
-                    } else {
-                        Text(subtitle)
-                            .font(.system(size: 12))
-                            .foregroundStyle(.white.opacity(Metrics.secondaryText))
-                    }
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .id(session.title)
+                    // Next slides in from the right, previous from the left.
+                    .transition(reduceMotion ? .opacity : .push(from: step > 0 ? .trailing : .leading))
+                    .clipped()
+                    SourceBadge(session: session, media: media)
                 }
-                .lineLimit(1)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .id(session.title)
-                // Next slides in from the right, previous from the left.
-                .transition(reduceMotion ? .opacity : .push(from: step > 0 ? .trailing : .leading))
-                .clipped()
 
                 ProgressRow(session: session,
                             onSeek: caps.contains(.seek) ? { run(.seek, .seek(to: $0)) } : nil)
-                    .padding(.top, 10)
 
                 HStack(spacing: 22) {
                     if denied && !caps.contains(.playPause) {
                         PermissionLink(text: "Allow control of \(session.sourceName)")
                     } else {
                         // Unsupported controls stay in place, dimmed, so the layout doesn't jump between sources.
-                        IconButton(symbol: "backward.fill", label: "Previous track") { run(.skip, .previous, step: -1) }
+                        IconButton(symbol: "backward.fill", label: "Previous track", glyph: 20, frame: 44) { run(.skip, .previous, step: -1) }
                             .disabled(!caps.contains(.previous) || feedback.inFlight.contains(.skip))
                             .keyboardShortcut(.leftArrow, modifiers: .command)
-                        PlayPauseButton(session: session, media: media, feedback: $feedback, diameter: 34)
+                        PlayPauseButton(session: session, media: media, feedback: $feedback, diameter: 48, filled: false)
                             .keyboardShortcut(.space, modifiers: [])
-                        IconButton(symbol: "forward.fill", label: "Next track") { run(.skip, .next, step: 1) }
+                        IconButton(symbol: "forward.fill", label: "Next track", glyph: 20, frame: 44) { run(.skip, .next, step: 1) }
                             .disabled(!caps.contains(.next) || feedback.inFlight.contains(.skip))
                             .keyboardShortcut(.rightArrow, modifiers: .command)
                     }
-                    Spacer(minLength: 0)
-                    SourceBadge(session: session, media: media)
                 }
-                .padding(.top, 6)
+                .frame(maxWidth: .infinity)
             }
         }
+        .padding(EdgeInsets(top: 18, leading: 26, bottom: 20, trailing: 32))
+        .frame(maxHeight: .infinity)
+        // A warm glow behind the cover (the design's radial gradient).
+        .background(RadialGradient(colors: [Color(red: 0.969, green: 0.71, blue: 0.431).opacity(0.18), .clear],
+                                   center: UnitPoint(x: 0.14, y: 0.5), startRadius: 0, endRadius: 260))
         .frame(maxWidth: .infinity, alignment: .leading)
         // Animate what the user can see change, not every heartbeat that refreshes the snapshot.
         .animation(reduceMotion ? nil : .spring(duration: 0.4, bounce: 0.1), value: session.title)
@@ -474,8 +475,8 @@ private struct NowPlaying: View {
     }
 
     private var subtitle: String {
-        let parts = [session.artist, session.album].compactMap { $0 }.filter { !$0.isEmpty }
-        return parts.isEmpty ? "Unknown artist" : parts.joined(separator: " — ")
+        let artist = [session.artist, session.album].compactMap { $0 }.first { !$0.isEmpty } ?? "Unknown artist"
+        return "\(artist) · \(session.sourceName)"
     }
 
     private func run(_ action: ControlFeedback.Action, _ command: MediaCommand, step: Int = 0) {
@@ -514,6 +515,8 @@ private struct PlayPauseButton: View {
     let media: MediaCoordinator
     @Binding var feedback: ControlFeedback
     let diameter: CGFloat
+    /// A mint disc with a black glyph; otherwise a white glyph alone (the full Music panel).
+    var filled = true
 
     var body: some View {
         let playing = feedback.isPlaying(actual: session.state == .playing)
@@ -522,11 +525,12 @@ private struct PlayPauseButton: View {
             perform(.togglePlayPause, action: .playPause, on: session, media: media, feedback: $feedback)
         } label: {
             Image(systemName: playing ? "pause.fill" : "play.fill")
-                .font(.system(size: diameter * 0.44, weight: .bold))
+                .font(.system(size: diameter * (filled ? 0.44 : 0.52), weight: .bold))
                 .contentTransition(.symbolEffect(.replace.downUp))
-                .foregroundStyle(.black)
+                .foregroundStyle(filled ? .black : .white)
                 .frame(width: diameter, height: diameter)
-                .background(mint, in: Circle())
+                .background(filled ? mint : .clear, in: Circle())
+                .contentShape(Circle())
         }
         .buttonStyle(PressableStyle())
         .disabled(!session.capabilities.contains(.playPause))
@@ -553,9 +557,8 @@ private struct ProgressRow: View {
                 let shown = scrub.map { $0 * duration } ?? min(now, duration)
                 row(shown: shown, duration: duration)
             }
-            .tint(mint)
-            .font(.system(size: 10).monospacedDigit())
-            .foregroundStyle(.white.opacity(Metrics.secondaryText))
+            .font(.system(size: 11).monospacedDigit())
+            .foregroundStyle(.white.opacity(0.55))
             .onChange(of: session.positionDate) { scrub = nil }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Position")
@@ -571,9 +574,18 @@ private struct ProgressRow: View {
         }
     }
 
+    /// The design's row: elapsed, a 5 pt white bar on a 16% track, time left.
     private func row(shown: TimeInterval, duration: TimeInterval) -> some View {
-        VStack(spacing: 4) {
-            ProgressView(value: shown, total: duration)
+        HStack(spacing: 10) {
+            Text(clock(shown))
+            Capsule()
+                .fill(.white.opacity(0.16))
+                .frame(height: 5)
+                .overlay(alignment: .leading) {
+                    GeometryReader { geometry in
+                        Capsule().fill(.white).frame(width: geometry.size.width * min(max(shown / duration, 0), 1))
+                    }
+                }
                 .overlay {
                     if let onSeek {
                         GeometryReader { geometry in
@@ -591,14 +603,10 @@ private struct ProgressRow: View {
                                         }
                                     })
                         }
-                        .frame(height: 14) // a comfortable hit area around the 4pt bar
+                        .frame(height: 14) // a comfortable hit area around the 5 pt bar
                     }
                 }
-            HStack {
-                Text(clock(shown))
-                Spacer()
-                Text(clock(duration))
-            }
+            Text("-" + clock(max(duration - shown, 0)))
         }
     }
 
@@ -723,15 +731,17 @@ private struct PermissionLink: View {
 struct IconButton: View {
     let symbol: String
     let label: String
+    var glyph: CGFloat = 13
+    var frame: CGFloat = 26
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: 13, weight: .semibold))
+                .font(.system(size: glyph, weight: .semibold))
                 .contentTransition(.symbolEffect(.replace))
-                .foregroundStyle(.white.opacity(0.85))
-                .frame(width: 26, height: 26) // consistent hit area regardless of glyph width
+                .foregroundStyle(.white.opacity(glyph > 13 ? 1 : 0.85))
+                .frame(width: frame, height: frame) // consistent hit area regardless of glyph width
                 .contentShape(Rectangle())
         }
         .buttonStyle(PressableStyle())
