@@ -162,22 +162,3 @@ private struct Mute: FocusNotifier {
     func schedule(at date: Date, minutes: Int) async {}
     func cancel() async {}
 }
-
-@MainActor
-struct LegacyDefaultsTests {
-    @Test func settingsComeAlongOnceWithoutOverwriting() {
-        let old = "orilio.legacy.\(UUID().uuidString)", new = "orilio.new.\(UUID().uuidString)"
-        let oldDefaults = UserDefaults(suiteName: old)!
-        oldDefaults.set("all", forKey: "displays.placement")
-        oldDefaults.set(true, forKey: "calendar.enabled")
-        let defaults = UserDefaults(suiteName: new)!
-        defaults.set("pointer", forKey: "displays.placement") // already set under the new identifier
-        LegacyDefaults.migrate(from: old, into: defaults)
-        #expect(defaults.bool(forKey: "calendar.enabled"))
-        #expect(defaults.string(forKey: "displays.placement") == "pointer")
-        oldDefaults.set(false, forKey: "calendar.enabled")
-        defaults.removeObject(forKey: "calendar.enabled")
-        LegacyDefaults.migrate(from: old, into: defaults) // only once
-        #expect(defaults.object(forKey: "calendar.enabled") == nil)
-    }
-}

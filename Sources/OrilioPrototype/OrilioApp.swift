@@ -10,7 +10,6 @@ enum Entry {
     static func main() {
         // Chrome starts this same executable as Orilio's native messaging host.
         NativeMessagingHost.runIfLaunchedByChrome()
-        LegacyDefaults.migrate() // before anything reads a preference
         OrilioApp.main()
     }
 }
@@ -262,21 +261,5 @@ enum SettingsWindow {
         NSApp.activate()
         window?.makeKeyAndOrderFront(nil)
         window?.orderFrontRegardless()
-    }
-}
-
-/// Orilio's settings moved with its bundle identifier (now `com.enbiyagoral.orilio`). On the first
-/// launch under the new one, everything saved under the old identifier is copied over once;
-/// nothing already set is overwritten.
-enum LegacyDefaults {
-    static let oldDomain = "com.deaconcornsoft.orilio.prototype"
-    static let doneKey = "migratedFromOldBundleIdentifier"
-
-    static func migrate(from domain: String = oldDomain, into defaults: UserDefaults = .standard) {
-        guard !defaults.bool(forKey: doneKey) else { return }
-        for (key, value) in defaults.persistentDomain(forName: domain) ?? [:] where defaults.object(forKey: key) == nil {
-            defaults.set(value, forKey: key)
-        }
-        defaults.set(true, forKey: doneKey)
     }
 }

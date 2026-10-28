@@ -17,7 +17,7 @@ FEED_URL="${ORILIO_FEED_URL:-https://PLACEHOLDER.invalid/appcast.xml}"
 PUBLIC_KEY="${ORILIO_PUBLIC_ED_KEY:-PLACEHOLDER_SPARKLE_PUBLIC_ED_KEY}"
 # Send Feedback: the address Mail fills in, and the GitHub "new issue" page (empty: the button is hidden).
 FEEDBACK_EMAIL="${ORILIO_FEEDBACK_EMAIL:-}"
-ISSUES_URL="${ORILIO_ISSUES_URL:-}"
+ISSUES_URL="${ORILIO_ISSUES_URL-https://github.com/enbiyagoral/orilio/issues/new}"
 swift build -c "$CONFIG"
 APP="build/Orilio.app"
 rm -rf "$APP"

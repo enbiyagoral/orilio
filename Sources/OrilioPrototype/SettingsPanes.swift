@@ -807,6 +807,7 @@ struct AboutPane: View {
                 .font(.system(size: 11.5)).foregroundStyle(Design.secondary).frame(maxWidth: 440).fixedSize(horizontal: false, vertical: true)
             Text("Free, for everyone. No account, no ads, no tracking.").font(.system(size: 15)).foregroundStyle(Design.ink.opacity(0.85))
             HStack(spacing: 8) {
+                PaneButton(title: "GitHub") { NSWorkspace.shared.open(LicenseSheet.source) }
                 PaneButton(title: "Send feedback") { FeedbackWindow.show() }
                 PaneButton(title: "Acknowledgements") { acknowledgements = true }
                 PaneButton(title: "View License") { license = true }

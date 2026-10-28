@@ -34,8 +34,6 @@ echo "$BROWSERS" | while IFS= read -r browser; do
   # a real profile always has "Local State".
   [ -f "$dir/Local State" ] || continue
   manifest="$dir/NativeMessagingHosts/$NAME.json"
-  # The host's earlier name; its manifest goes so the browser doesn't keep a dead entry.
-  rm -f "$dir/NativeMessagingHosts/com.deaconcornsoft.orilio.json"
   if [ "${1:-}" = "--uninstall" ]; then
     [ -f "$manifest" ] && rm -f "$manifest" && echo "Removed: $browser"
     continue
