@@ -43,6 +43,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var controller: IslandWindowController?
     private var bridge: BridgeServer?
     private var shelf: ShelfModel?
+    private var clipboard: ClipboardModule?
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         // No Dock icon, no app switcher entry. Works without an Info.plist (LSUIElement).
@@ -61,17 +62,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let calendar = CalendarModule()
         AppModules.calendar = calendar
         calendar.start() // reads state only if the user turned Calendar on before; never prompts here
+        let clipboard = ClipboardModule()
+        self.clipboard = clipboard
+        AppModules.clipboard = clipboard
+        Task { await clipboard.start() } // monitors only if the user turned history on before
         let library = ScreenshotLibrary()
         Task { await library.load() } // metadata only; thumbnails load as cells appear
         controller = IslandWindowController(model: IslandModel(providers: providers, shelf: shelf, library: library,
-                                                               calendar: calendar))
+                                                               calendar: calendar, clipboard: clipboard))
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        // Write any shelf change still waiting for its coalesced save, then quit.
+        // Write any shelf or clipboard change still waiting for its coalesced save, then quit.
         guard let shelf else { return .terminateNow }
         Task {
             await shelf.saveNow()
+            await clipboard?.saveNow()
             sender.reply(toApplicationShouldTerminate: true)
         }
         return .terminateLater

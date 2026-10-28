@@ -318,4 +318,5 @@ struct NoReminders: ReminderScheduler {
 @MainActor
 enum AppModules {
     static var calendar: CalendarModule?
+    static var clipboard: ClipboardModule?
 }

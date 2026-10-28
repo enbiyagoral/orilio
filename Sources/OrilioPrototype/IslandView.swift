@@ -252,6 +252,7 @@ private struct ExpandedContent: View {
             ZStack {
                 switch model.tab {
                 case .calendar: CalendarPanel(module: model.calendar)
+                case .clipboard: ClipboardPanel(module: model.clipboard, library: model.library)
                 case .music: MusicCard(media: model.media)
                 case .shelf: ShelfView(shelf: model.shelf, library: model.library, section: $model.shelfSection,
                                        draggedOut: { model.dismiss() })
@@ -272,7 +273,7 @@ private struct ExpandedContent: View {
         switch tab {
         case .calendar: return model.meetingSoon != nil
         case .music: return model.media.current?.state == .playing
-        case .shelf: return false
+        case .clipboard, .shelf: return false
         }
     }
 }
