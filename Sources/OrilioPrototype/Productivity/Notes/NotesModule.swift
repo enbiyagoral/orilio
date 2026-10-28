@@ -102,6 +102,9 @@ final class NotesModule {
     // MARK: Tasks
 
     var visibleTasks: [TaskItem] { NotesPolicy.ordered(tasks) }
+    /// The task the keyboard is on (↑↓, ⏎ marks it done, ⌘⌫ deletes it).
+    var selectedTaskID: UUID?
+    func moveTaskSelection(by step: Int) { selectedTaskID = ListCursor.moved(selectedTaskID, in: visibleTasks.map(\.id), by: step) }
     var doneText: String { "\(tasks.filter(\.done).count) of \(tasks.count) done" }
 
     func addTask(_ title: String) {

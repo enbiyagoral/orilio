@@ -80,6 +80,8 @@ private struct ClipboardHistory: View {
                 .background(Design.field, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 // Typing needs Orilio to be the active app.
                 .onChange(of: searching) { if searching { NSApp.activate() } }
+                // ⌘F, or a letter typed in the list (the M5 Keyboard design).
+                .onChange(of: module.searchRequest) { searching = true }
                 status
             }
             let items = module.visibleItems
@@ -93,9 +95,9 @@ private struct ClipboardHistory: View {
                 TimelineView(.everyMinute) { context in
                     ScrollView {
                         LazyVStack(spacing: 2) {
-                            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                                ClipRow(item: item, index: index, now: context.date, copied: module.copiedID == item.id,
-                                        module: module, library: library)
+                            ForEach(items) { item in
+                                ClipRow(item: item, now: context.date, copied: module.copiedID == item.id,
+                                        selected: module.selectedID == item.id, module: module, library: library)
                             }
                         }
                     }
@@ -126,9 +128,9 @@ private struct ClipboardHistory: View {
 
 private struct ClipRow: View {
     let item: ClipItem
-    let index: Int
     let now: Date
     let copied: Bool
+    var selected = false
     let module: ClipboardModule
     let library: ScreenshotLibrary
 
@@ -147,14 +149,13 @@ private struct ClipRow: View {
                 Text(copied ? "Copied" : ClipboardPolicy.age(of: item.copiedAt, at: now))
                     .font(.system(size: 11.5))
                     .foregroundStyle(copied ? accent(.rest) : .white.opacity(0.5))
-                Text(index < 9 ? "⌘\(index + 1)" : "")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.white.opacity(0.4))
-                    .frame(width: 24, alignment: .trailing)
             }
             .padding(.horizontal, 10)
             .frame(height: 38)
-            .background(copied ? accent(.rest).opacity(0.12) : .clear, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+            .background(copied ? accent(.rest).opacity(0.12) : selected ? .white.opacity(0.12) : .clear,
+                        in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+            // The keyboard's row: 1.5 pt of 85% white (the M5 Keyboard design).
+            .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).strokeBorder(.white.opacity(selected ? 0.85 : 0), lineWidth: 1.5))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

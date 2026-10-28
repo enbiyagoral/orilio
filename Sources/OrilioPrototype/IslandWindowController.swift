@@ -225,6 +225,7 @@ final class IslandWindowController {
     /// need no permission; it exists only while pinned.
     private var outsideClickMonitor: Any?
     private var insideClickMonitor: Any?
+    private var keyMonitor: Any?
     private var widthTask: Task<Void, Never>?
     private var hint: NSPanel?
     /// Where the last outside press started, to tell a click from the start of a drag.
@@ -263,26 +264,42 @@ final class IslandWindowController {
             if model.tab == .shelf, model.shelf.previewing != nil { model.shelf.closePreview() } else { model.dismiss() }
         }
         panel.onKey = { [weak model] event in
-            guard let model, model.state == .pinned else { return false }
-            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-            // ⌃⇥ and ⌃⇧⇥ move between modules, as between tabs anywhere on the Mac.
-            if event.keyCode == 48, flags.contains(.control) {
-                model.selectAdjacentTab(flags.contains(.shift) ? -1 : 1)
-                return true
-            }
-            if model.tab == .clipboard { return model.clipboard.handleKey(keyCode: event.keyCode, command: flags == .command) }
-            guard model.tab == .shelf else { return false }
+            // What the island's router leaves: the Shelf's ⌘C, the Screenshots grid's keys.
+            guard let model, model.state == .pinned, model.tab == .shelf else { return false }
+            let command = event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command
             switch model.shelfSection {
-            case .files: return model.shelf.handleKey(keyCode: event.keyCode, command: flags == .command)
-            case .screenshots: return model.library.handleKey(keyCode: event.keyCode, command: flags == .command)
+            case .files: return model.shelf.handleKey(keyCode: event.keyCode, command: command)
+            case .screenshots: return model.library.handleKey(keyCode: event.keyCode, command: command)
             }
+        }
+        // The island's keys (the M5 Keyboard design), seen before the focused control so ↑↓ and ⏎
+        // also work from the clipboard's search field. Local: only events already sent to Orilio's
+        // own panel, which receives keys only while it is key (a click or a shortcut, never hover).
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { [weak self] event in
+            let window = event.windowNumber
+            let flags = event.modifierFlags.intersection([.command, .shift, .control, .option])
+            let key = event.type == .keyDown ? KeyPress(event) : nil
+            let consumed = MainActor.assumeIsolated { () -> Bool in
+                guard let self, window == self.panel.windowNumber else { return false }
+                guard let key else {
+                    self.model.modifiersChanged(commandOnly: flags == .command)
+                    return false
+                }
+                if self.model.onboarding != nil { return false } // the first-run flow keeps its own keys
+                let editing: IslandKeyRouter.Editing = self.panel.firstResponder is NSTextView
+                    ? (self.model.tab == .clipboard ? .search : .text) : .none
+                return self.model.handleKey(key, editing: editing)
+            }
+            return consumed ? nil : event
         }
         model.onWillChangeState = { [weak self] in self?.apply($0) }
         // A click anywhere in the hover panel keeps it: the user is now working in it (typing in a
         // note must not end when the pointer drifts off). The click itself still goes through.
         insideClickMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
             MainActor.assumeIsolated {
-                if let self, event.window === self.panel, self.model.state == .expanded { self.model.keepOpen() }
+                guard let self, event.window === self.panel else { return }
+                self.model.pointerUsed() // the focus ring and hint bar are for keyboard use
+                if self.model.state == .expanded { self.model.keepOpen() }
             }
             return event
         }
@@ -379,6 +396,8 @@ final class IslandWindowController {
         watchOutsideClicks(false)
         if let insideClickMonitor { NSEvent.removeMonitor(insideClickMonitor) }
         insideClickMonitor = nil
+        if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
+        keyMonitor = nil
         observers.forEach(NotificationCenter.default.removeObserver)
         observers = []
         model.onWillChangeState = nil

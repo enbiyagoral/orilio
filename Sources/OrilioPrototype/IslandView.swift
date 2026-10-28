@@ -243,8 +243,9 @@ private struct ExpandedContent: View {
             // 38 pt header: tabs left of the notch, pin and close right of it (M3 hub design).
             HStack(spacing: 2) {
                 HStack(spacing: 2) {
-                    ForEach(model.modules.visible) { tab in
-                        ModuleTab(tab: tab, selected: model.tab == tab, live: isLive(tab)) { model.tab = tab }
+                    ForEach(Array(model.modules.visible.enumerated()), id: \.element) { index, tab in
+                        ModuleTab(tab: tab, selected: model.tab == tab, live: isLive(tab),
+                                  badge: model.showsModuleBadges && index < 6 ? index + 1 : nil) { model.tab = tab }
                     }
                 }
                 .accessibilityElement(children: .contain)
@@ -276,7 +277,15 @@ private struct ExpandedContent: View {
             // Music lays out its own padding around a full-width glow.
             .padding(model.tab == .music ? EdgeInsets() : EdgeInsets(top: 10, leading: 20, bottom: 20, trailing: 20))
             .frame(maxHeight: .infinity, alignment: .top)
+            // Holding ⌘: the content dims so the tab numbers read first.
+            .opacity(model.showsModuleBadges ? 0.45 : 1)
         }
+        .overlay(alignment: .bottom) {
+            if model.keyboardOpened { KeyHintBar(tab: model.tab).transition(.opacity) }
+        }
+        .environment(\.keyboardFocusVisible, model.keyboardOpened)
+        .animation(.easeOut(duration: 0.15), value: model.showsModuleBadges)
+        .animation(.easeOut(duration: 0.15), value: model.keyboardOpened)
         .animation(Theme.current.spring(duration: 0.3, bounce: 0.1), value: model.tab)
     }
 
@@ -297,6 +306,8 @@ private struct ModuleTab: View {
     let tab: IslandTab
     let selected: Bool
     let live: Bool
+    /// ⌘ held: the tab's number under it (the M5 Keyboard design's 20 pt white badge).
+    var badge: Int? = nil
     let action: () -> Void
 
     var body: some View {
@@ -316,6 +327,20 @@ private struct ModuleTab: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(PressableStyle())
+        .overlay(alignment: .top) {
+            if let badge {
+                Text("\(badge)")
+                    .font(.system(size: 11.5, weight: .bold))
+                    .foregroundStyle(.black)
+                    .frame(width: 20, height: 20)
+                    .background(.white, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .shadow(color: .black.opacity(0.5), radius: 5, y: 4)
+                    .offset(y: 22)
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
+            }
+        }
+        .zIndex(badge == nil ? 0 : 1)
         .help(tab.rawValue)
         .accessibilityLabel(tab.rawValue)
         .accessibilityValue(live ? "Active" : "")
@@ -628,6 +653,7 @@ private struct PlayPauseButton: View {
                 .contentShape(Circle())
         }
         .buttonStyle(PressableStyle())
+        .keyboardFocusRing(true, radius: diameter / 2) // ⏎ plays or pauses
         .disabled(!session.capabilities.contains(.playPause))
         .accessibilityLabel(playing ? "Pause" : "Play")
     }
@@ -872,8 +898,12 @@ private struct CollapsedEars: View {
             // Minute steps are enough for "in N min"; the start itself is a calendar refresh boundary.
             // The schedule's date is the minute's start, so the countdown reads the clock itself.
             TimelineView(.everyMinute) { context in MeetingEarView(event: event, side: side, now: max(context.date, Date()), model: model) }
-        case .focus?:
-            if side == .leading { FocusEar(module: model.focus) }
+        case .focus(let kind)?:
+            if side == .leading {
+                FocusEar(module: model.focus, kind: kind)
+            } else if kind == .onBreak {
+                Text("break").font(.system(size: 11.5)).foregroundStyle(.white.opacity(0.55))
+            }
         case .transient(let transient)?:
             TransientEar(transient: transient, side: side)
         case .nowPlaying(let session)?:
@@ -923,8 +953,38 @@ private struct MeetingEarView: View {
 /// A small ring and the time; redrawn once a second, and only while the session runs.
 private struct FocusEar: View {
     let module: FocusModule
+    let kind: FocusEarKind
+    /// The M5 Moments design's break blue.
+    static let breakBlue = Color(red: 0x8D / 255, green: 0xBB / 255, blue: 1)
 
     var body: some View {
+        switch kind {
+        case .running: running
+        case .onBreak: onBreak
+        case .done(let label):
+            HStack(spacing: 6) {
+                Image(systemName: "checkmark.circle.fill").font(.system(size: 12))
+                Text(label)
+            }
+            .foregroundStyle(accent(.live))
+            .accessibilityElement(children: .combine)
+        }
+    }
+
+    private var onBreak: some View {
+        TimelineView(.animation(minimumInterval: 1)) { context in
+            let remaining = module.breakRemaining(at: context.date)
+            HStack(spacing: 6) {
+                Image(systemName: "cup.and.saucer.fill").font(.system(size: 11))
+                Text(FocusSession.text(remaining)).monospacedDigit()
+            }
+            .foregroundStyle(Self.breakBlue)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Break, \(FocusSession.text(remaining)) left")
+        }
+    }
+
+    private var running: some View {
         TimelineView(.animation(minimumInterval: 1, paused: !module.isRunning)) { context in
             let now = module.isRunning ? context.date : module.now()
             let remaining = module.remaining(at: now)

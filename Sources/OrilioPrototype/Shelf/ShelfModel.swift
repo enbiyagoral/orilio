@@ -217,6 +217,12 @@ final class ShelfModel {
         }
     }
 
+    /// ↑↓←→ between tiles: the selection becomes the one tile moved to.
+    func moveSelection(by step: Int) {
+        let current = items.first { selection.contains($0.id) }?.id
+        selection = ListCursor.moved(current, in: items.map(\.id), by: step).map { [$0] } ?? []
+    }
+
     /// The header's Select: everything, or nothing if everything already is.
     func toggleSelectAll() {
         selection = selection.count == items.count ? [] : Set(items.map(\.id))

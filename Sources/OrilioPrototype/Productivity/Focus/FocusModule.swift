@@ -90,6 +90,7 @@ struct LocalFocusNotifier: FocusNotifier {
 
 enum FocusKeys {
     static let session = "focus.session"
+    static let breakSession = "focus.break"
     static let minutes = "focus.minutes"
     static let notify = "focus.notify"
     static let completedDay = "focus.completedDay"
@@ -121,6 +122,28 @@ final class FocusModule {
 
     func dismissEndedNotice() { endedWhileAsleep = nil }
 
+    /// A break between sessions (the M5 Moments design): 5 minutes, 15 after every fourth session.
+    private(set) var breakSession: FocusSession?
+    /// What just ended and waits for the user: the card in the island, "Session done" in the ear.
+    /// No break starts by itself.
+    private(set) var finished: Finished?
+
+    enum Finished: Equatable {
+        /// "25 minutes, done · Session 2 of 4": 5 min break · Keep going.
+        case session(number: Int, minutes: Int)
+        /// "Break's over · Ready for session 3 of 4?": Start 25 min · Done for now.
+        case breakOver(next: Int)
+    }
+
+    static let cycle = 4
+    static func breakMinutes(after number: Int) -> Int { number % cycle == 0 ? 15 : 5 }
+    /// 1…4: where today's last completed session falls in its round of four.
+    static func cycleNumber(completed: Int) -> Int { (max(1, completed) - 1) % cycle + 1 }
+
+    var isOnBreak: Bool { breakSession != nil }
+    /// Something to show in the collapsed island's leading ear.
+    var showsInEar: Bool { isActive || isOnBreak || finished != nil }
+
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let notifier: any FocusNotifier
     @ObservationIgnored let now: @MainActor () -> Date
@@ -136,6 +159,7 @@ final class FocusModule {
         minutes = (defaults.object(forKey: FocusKeys.minutes) as? Int) ?? 25
         notify = defaults.bool(forKey: FocusKeys.notify)
         session = defaults.data(forKey: FocusKeys.session).flatMap { try? JSONDecoder().decode(FocusSession.self, from: $0) }
+        breakSession = defaults.data(forKey: FocusKeys.breakSession).flatMap { try? JSONDecoder().decode(FocusSession.self, from: $0) }
         completedToday = countForToday()
     }
 
@@ -146,7 +170,7 @@ final class FocusModule {
             MainActor.assumeIsolated { self?.check() }
         }
         check()
-        if session?.isRunning == true { armTimer() }
+        armTimer()
     }
 
     var isActive: Bool { session != nil }
@@ -154,8 +178,37 @@ final class FocusModule {
 
     func remaining(at date: Date) -> TimeInterval { session?.remaining(at: date) ?? Double(minutes * 60) }
     func fraction(at date: Date) -> Double { session?.fraction(at: date) ?? 1 }
+    func breakRemaining(at date: Date) -> TimeInterval { breakSession?.remaining(at: date) ?? 0 }
 
     var stateText: String { isRunning ? "focusing" : isActive ? "paused" : "ready" }
+
+    // MARK: Breaks
+
+    /// "5 min break" on the session-done card.
+    func startBreak() {
+        guard case .session(let number, _) = finished else { return }
+        finished = nil
+        breakSession = .start(Double(Self.breakMinutes(after: number) * 60), at: now())
+        saveBreak()
+        armTimer()
+    }
+
+    /// "Keep going": the next session right away, no break.
+    func keepGoing() {
+        finished = nil
+        begin()
+    }
+
+    /// "Done for now", or the card ignored and closed: back to ready.
+    func doneForNow() { finished = nil }
+
+    /// Ends a break early.
+    func endBreak() {
+        guard breakSession != nil else { return }
+        breakSession = nil
+        saveBreak()
+        armTimer()
+    }
 
     // MARK: Controls
 
@@ -178,6 +231,8 @@ final class FocusModule {
 
     func begin() {
         endedWhileAsleep = nil
+        finished = nil
+        if breakSession != nil { endBreak() }
         guard session == nil else { return }
         update(.start(Double(minutes * 60), at: now()))
     }
@@ -215,17 +270,34 @@ final class FocusModule {
     /// Completes the session if its deadline has passed. Safe to call any number of times: the
     /// session is cleared by the first call, so it completes exactly once.
     func check() {
+        checkBreak()
         guard let session, session.isRunning, session.remaining(at: now()) <= 0 else { return }
+        var asleep = false
         if let deadline = session.endsAt, FocusCardState.endedWhileAsleep(deadline: deadline, noticedAt: now()) {
             endedWhileAsleep = deadline
+            asleep = true
         }
         self.session = nil
         save()
         timer?.invalidate()
         timer = nil
         recordCompletion()
-        if endedWhileAsleep == nil { notifier.chime() }
+        // Noticed on time: the island opens with the card (see `IslandPositioner`). Ended while the
+        // Mac slept: the quiet "Session ended at" state instead, no chime.
+        guard !asleep else { return }
+        finished = .session(number: Self.cycleNumber(completed: completedToday), minutes: Int(session.duration / 60))
+        notifier.chime()
         // The system delivers the pending notification at the deadline; nothing more to post.
+    }
+
+    private func checkBreak() {
+        guard let breakSession, let endsAt = breakSession.endsAt, breakSession.remaining(at: now()) <= 0 else { return }
+        self.breakSession = nil
+        saveBreak()
+        armTimer()
+        guard !FocusCardState.endedWhileAsleep(deadline: endsAt, noticedAt: now()) else { return }
+        finished = .breakOver(next: completedToday % Self.cycle + 1)
+        notifier.chime()
     }
 
     // MARK: Internals
@@ -244,10 +316,11 @@ final class FocusModule {
     /// Waits for notification changes still in flight (tests).
     func settle() async { await notificationWork?.value }
 
+    /// One timer, at the next deadline (a session's or a break's); none while nothing runs.
     private func armTimer() {
         timer?.invalidate()
         timer = nil
-        guard let endsAt = session?.endsAt else { return }
+        guard let endsAt = session?.endsAt ?? breakSession?.endsAt else { return }
         let timer = Timer(fire: endsAt, interval: 0, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated { self?.check() }
         }
@@ -274,6 +347,14 @@ final class FocusModule {
             defaults.set(data, forKey: FocusKeys.session)
         } else {
             defaults.removeObject(forKey: FocusKeys.session)
+        }
+    }
+
+    private func saveBreak() {
+        if let breakSession, let data = try? JSONEncoder().encode(breakSession) {
+            defaults.set(data, forKey: FocusKeys.breakSession)
+        } else {
+            defaults.removeObject(forKey: FocusKeys.breakSession)
         }
     }
 

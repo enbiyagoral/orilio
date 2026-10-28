@@ -43,6 +43,7 @@ final class IslandPositioner {
         settings = DisplaySettings(.standard)
         observe()
         update()
+        followFocusEnd()
     }
 
     // MARK: Placement
@@ -105,7 +106,7 @@ final class IslandPositioner {
         let open = islands.values.filter { $0.model.state.isOpen }
         guard open.isEmpty else { return open.forEach { $0.model.dismiss() } }
         let display = ScreenResolver.display(at: NSEvent.mouseLocation, in: screens)
-        (islands.values.first { $0.screen.id == display } ?? islands.values.first)?.model.tap()
+        (islands.values.first { $0.screen.id == display } ?? islands.values.first)?.model.openFromKeyboard()
     }
 
     /// A shortcut that opens a module: the island on the pointer's display opens to it.
@@ -114,7 +115,7 @@ final class IslandPositioner {
         guard let model = (islands.values.first { $0.screen.id == display } ?? islands.values.first)?.model,
               model.modules.isVisible(tab) else { return }
         model.tab = tab
-        model.set(.pinned)
+        model.openFromKeyboard()
     }
 
     /// Whether the display under the pointer shows a fullscreen app (the startup hello stays away then).
@@ -125,6 +126,7 @@ final class IslandPositioner {
     // MARK: Fullscreen
 
     private func recheckFullscreen() {
+        defer { deliverFocusEnd() } // a card that waited for the fullscreen app to go
         let found = FullscreenDetector.displays(in: screens)
         guard found != fullscreenDisplays else { return }
         fullscreenDisplays = found
@@ -142,6 +144,38 @@ final class IslandPositioner {
             guard !Task.isCancelled else { return }
             self?.recheckFullscreen()
         }
+    }
+
+    // MARK: Focus end
+
+    /// The session-done card waits while the pointer's display hides the island for a fullscreen
+    /// app, or a meeting is showing; it opens as soon as neither holds.
+    private var focusEndWaiting = false
+    private var lastFinished: FocusModule.Finished?
+
+    private func followFocusEnd() {
+        withObservationTracking { _ = (primary.focus.finished, primary.meetingSoon) } onChange: { [weak self] in
+            Task { @MainActor in
+                guard let self else { return }
+                let finished = self.primary.focus.finished
+                if finished != self.lastFinished {
+                    self.lastFinished = finished
+                    self.focusEndWaiting = finished != nil
+                }
+                self.deliverFocusEnd()
+                self.followFocusEnd()
+            }
+        }
+    }
+
+    private func deliverFocusEnd() {
+        guard focusEndWaiting, primary.focus.finished != nil else { return focusEndWaiting = false }
+        let display = ScreenResolver.display(at: NSEvent.mouseLocation, in: screens)
+        guard let island = islands.values.first(where: { $0.screen.id == display }) ?? islands.values.first,
+              FocusEndPolicy.canOpen(fullscreen: island.fullscreen, meetingShowing: island.model.meetingSoon != nil,
+                                     islandOpenElsewhere: island.model.state.isOpen && island.model.tab != .focus) else { return }
+        focusEndWaiting = false
+        island.model.presentFocusEnd()
     }
 
     // MARK: Drags from other apps
@@ -325,5 +359,12 @@ struct DragWatch {
         default:
             return nil
         }
+    }
+}
+
+/// When the focus card may open the island by itself. Pure.
+enum FocusEndPolicy {
+    static func canOpen(fullscreen: DisplaySettings.Fullscreen?, meetingShowing: Bool, islandOpenElsewhere: Bool) -> Bool {
+        fullscreen != .hide && !meetingShowing && !islandOpenElsewhere
     }
 }

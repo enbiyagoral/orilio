@@ -98,6 +98,18 @@ final class ClipboardModule {
     private(set) var readPermission: ClipboardReadPermission = .allowed
     private(set) var copiedID: UUID?
     var query = ""
+    /// The row the keyboard is on (↑↓, ⏎ copies it).
+    var selectedID: UUID?
+    /// Bumped to put the cursor in the search field (⌘F, or typing a letter in the list).
+    private(set) var searchRequest = 0
+
+    func requestSearch(typing text: String = "") {
+        query += text
+        searchRequest += 1
+    }
+
+    func moveSelection(by step: Int) { selectedID = ListCursor.moved(selectedID, in: visibleItems.map(\.id), by: step) }
+    var selectedItem: ClipItem? { visibleItems.first { $0.id == selectedID } }
 
     @ObservationIgnored private let store: ClipboardStore
     @ObservationIgnored private let pasteboard: any PasteboardAccess
@@ -363,15 +375,6 @@ final class ClipboardModule {
 
     func setRetention(days: Int) { defaults.set(days, forKey: ClipboardKeys.retentionDays); prune(); scheduleSave() }
     func setMaxItems(_ count: Int) { defaults.set(count, forKey: ClipboardKeys.maxItems); prune(); scheduleSave() }
-
-    /// ⌘1 … ⌘9 copy the nth visible entry.
-    func handleKey(keyCode: UInt16, command: Bool) -> Bool {
-        let digits: [UInt16: Int] = [18: 1, 19: 2, 20: 3, 21: 4, 23: 5, 22: 6, 26: 7, 28: 8, 25: 9]
-        guard command, let n = digits[keyCode], visibleItems.indices.contains(n - 1) else { return false }
-        let item = visibleItems[n - 1]
-        Task { await copy(item) }
-        return true
-    }
 
     private func prune() {
         let days = retentionDays

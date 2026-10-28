@@ -199,6 +199,11 @@ private struct DebugMenu: View {
             Button(island.focus.isActive ? "Stop focus" : "Start focus") {
                 island.focus.isActive ? island.focus.reset() : island.focus.begin()
             }
+            Button("Start a 1-minute focus session") {
+                island.focus.reset()
+                island.focus.setMinutes(1)
+                island.focus.begin()
+            }
             Button("Fire \u{201C}Copied\u{201D}") {
                 island.live.flash(Transient(title: "Copied", detail: "kubectl rollout restart deploy/api", monospaced: true, module: .clipboard))
             }

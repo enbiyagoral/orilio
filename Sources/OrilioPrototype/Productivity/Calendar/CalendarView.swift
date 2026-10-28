@@ -174,6 +174,7 @@ private struct NextCard: View {
                                 .themeGlow(.action, radius: 12, opacity: 0.4)
                         }
                         .buttonStyle(PressableStyle())
+                        .keyboardFocusRing(true, radius: 14) // ⏎ joins
                         .accessibilityHint("Opens the \(event.meeting!.provider.rawValue) link in your browser or the meeting app")
                     } else {
                         Button { module.openInCalendar(event) } label: {

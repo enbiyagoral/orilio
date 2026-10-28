@@ -219,7 +219,7 @@ final class IslandModel {
     /// from the modules' observable state, so it changes only when they do.
     var earLayout: EarLayout {
         let playing = media.current.flatMap { $0.state == .playing ? $0 : nil }
-        return LiveActivityResolver.layout(meeting: meetingSoon, focusActive: focus.isActive, transient: live.transient,
+        return LiveActivityResolver.layout(meeting: meetingSoon, focus: FocusEarKind(focus), transient: live.transient,
                                            nowPlaying: playing, visible: modules.visibleSet, indicators: modules.indicators)
     }
 
@@ -282,6 +282,7 @@ final class IslandModel {
     func hover(_ inside: Bool) {
         pending?.cancel()
         pending = nil
+        if inside { autoClose?.cancel() } // the user came to look: the focus card stays
         if inside, showsLivesHereHint {
             hintTask?.cancel()
             showsLivesHereHint = false // the hint goes on the first hover
@@ -300,8 +301,149 @@ final class IslandModel {
         set(.pinned)
     }
 
+    // MARK: Keyboard (the M5 Keyboard design)
+
+    /// Opened with the shortcut: the panel takes the keyboard, the main action wears a focus ring
+    /// and the hint bar shows. A click inside ends it; hover never sets it.
+    private(set) var keyboardOpened = false
+    /// ⌘ held for 400 ms: the module tabs show their numbers.
+    private(set) var showsModuleBadges = false
+    @ObservationIgnored private var commandHold = CommandHold()
+    @ObservationIgnored private var badgeTask: Task<Void, Never>?
+
+    func openFromKeyboard() {
+        tap()
+        keyboardOpened = true
+    }
+
+    func pointerUsed() { if keyboardOpened { keyboardOpened = false } }
+
+    /// The modifier keys changed while the island is key.
+    func modifiersChanged(commandOnly: Bool) {
+        commandHold.changed(commandOnly: commandOnly, at: ProcessInfo.processInfo.systemUptime)
+        badgeTask?.cancel()
+        guard commandOnly else { return showsModuleBadges = false }
+        badgeTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(CommandHold.delay))
+            guard !Task.isCancelled, let self else { return }
+            self.showsModuleBadges = self.commandHold.showsBadges(at: ProcessInfo.processInfo.systemUptime)
+        }
+    }
+
+    /// A key while the island is key. Returns false when it isn't the island's.
+    func handleKey(_ key: KeyPress, editing: IslandKeyRouter.Editing) -> Bool {
+        commandHold.cancel() // ⌘ plus a key is a shortcut, not a hold
+        badgeTask?.cancel()
+        showsModuleBadges = false
+        guard state == .pinned, let action = IslandKeyRouter.route(key, tab: tab, editing: editing) else { return false }
+        return perform(action)
+    }
+
+    @discardableResult
+    func perform(_ action: IslandKeyAction) -> Bool {
+        switch action {
+        case .module(let index):
+            let visible = modules.visible
+            guard visible.indices.contains(index) else { return false }
+            tab = visible[index]
+        case .adjacentModule(let step):
+            selectAdjacentTab(step)
+        case .move(let step):
+            switch tab {
+            case .clipboard: clipboard.moveSelection(by: step)
+            case .shelf: shelf.moveSelection(by: step)
+            case .notes: notes.moveTaskSelection(by: step)
+            default: return false
+            }
+        case .primary:
+            return performPrimary()
+        case .preview:
+            return shelf.handleKey(keyCode: 49, command: false)
+        case .pinItem:
+            guard let item = clipboard.selectedItem else { return false }
+            clipboard.togglePin(item)
+        case .deleteItem:
+            switch tab {
+            case .clipboard:
+                guard let item = clipboard.selectedItem else { return false }
+                clipboard.moveSelection(by: 1)
+                if clipboard.selectedID == item.id { clipboard.moveSelection(by: -1) }
+                clipboard.remove(item)
+            case .shelf: return shelf.handleKey(keyCode: 51, command: false)
+            case .notes:
+                guard let task = notes.visibleTasks.first(where: { $0.id == notes.selectedTaskID }) else { return false }
+                notes.deleteTask(task)
+            default: return false
+            }
+        case .search: clipboard.requestSearch()
+        case .type(let text): clipboard.requestSearch(typing: text)
+        case .settings: SettingsWindow.show()
+        case .togglePin: togglePin()
+        case .close:
+            if tab == .shelf, shelf.previewing != nil { shelf.closePreview() } else { dismiss() }
+        case .closeAndUnpin: dismiss()
+        }
+        return true
+    }
+
+    /// ⏎: the module's main action.
+    private func performPrimary() -> Bool {
+        switch tab {
+        case .calendar:
+            let day = calendar.dayNow()
+            guard let event = meetingSoon ?? day.timed.first(where: { $0.meeting != nil && $0.end > day.now }) else { return false }
+            join(event)
+        case .focus:
+            switch focus.finished {
+            case .session?: focus.startBreak()
+            case .breakOver?: focus.begin()
+            case nil: focus.toggle()
+            }
+        case .music:
+            guard let current = media.current else { return false }
+            Task { try? await media.send(.togglePlayPause, to: current.sourceID) }
+        case .clipboard:
+            guard let item = clipboard.selectedItem ?? clipboard.visibleItems.first else { return false }
+            Task { await clipboard.copy(item) }
+        case .shelf:
+            let selected = shelf.items.filter { shelf.selection.contains($0.id) }
+            guard !selected.isEmpty else { return false }
+            shelf.open(selected)
+        case .notes:
+            guard let task = notes.visibleTasks.first(where: { $0.id == notes.selectedTaskID }) else { return false }
+            notes.toggle(task)
+        case .mirror:
+            return false
+        }
+        return true
+    }
+
+    // MARK: Focus end
+
+    /// The one time Focus interrupts: the island opens by itself on the session-done (or
+    /// break-over) card without taking the keyboard, and closes after 8 s if ignored.
+    func presentFocusEnd() {
+        guard modules.isVisible(.focus), onboarding == nil else { return }
+        tab = .focus
+        if !state.isOpen {
+            pinTakesFocus = false
+            set(.pinned)
+            pinTakesFocus = true
+        }
+        autoClose?.cancel()
+        autoClose = Task { [weak self] in
+            try? await Task.sleep(for: Self.focusEndShown)
+            guard !Task.isCancelled, let self, self.state == .pinned, self.tab == .focus else { return }
+            self.set(.collapsed) // the card goes; the ear keeps "Session done" until the user acts
+        }
+    }
+
+    static let focusEndShown: Duration = .seconds(8)
+    @ObservationIgnored private var autoClose: Task<Void, Never>?
+
     /// A click inside the hover panel: keep it open, on the module it shows.
     func keepOpen() {
+        autoClose?.cancel()
         guard state == .expanded else { return }
         pinnedByClick = Date()
         set(.pinned)
@@ -392,7 +534,11 @@ final class IslandModel {
         // Window first, state second: the panel must already be its new size when SwiftUI
         // starts animating, or one frame renders the island offset from the top edge.
         onWillChangeState?(new)
-        if !new.isOpen { shelf.closePreview() } // Quick Look closes with the island
+        if !new.isOpen {
+            shelf.closePreview() // Quick Look closes with the island
+            keyboardOpened = false
+            showsModuleBadges = false
+        }
         if !state.isOpen, new.isOpen {
             media.refreshAll()
             if modules.store.value.haptics { NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now) }

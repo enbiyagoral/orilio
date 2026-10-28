@@ -20,7 +20,7 @@ private let copied = Transient(title: "Copied", detail: "kubectl rollout restart
 
 private func layout(meeting: CalendarEvent? = nil, focus: Bool = false, transient: Transient? = nil, music: Bool = false,
                     visible: Set<IslandTab> = all, indicators: Set<CollapsedIndicator> = every) -> EarLayout {
-    LiveActivityResolver.layout(meeting: meeting, focusActive: focus, transient: transient, nowPlaying: music ? song : nil,
+    LiveActivityResolver.layout(meeting: meeting, focus: focus ? .running : nil, transient: transient, nowPlaying: music ? song : nil,
                                 visible: visible, indicators: indicators)
 }
 

@@ -310,6 +310,9 @@ private struct TaskRow: View {
         }
         .padding(.horizontal, 8)
         .frame(minHeight: 40)
+        .background(module.selectedTaskID == task.id ? .white.opacity(0.12) : .clear, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous)
+            .strokeBorder(.white.opacity(module.selectedTaskID == task.id ? 0.85 : 0), lineWidth: 1.5))
         .contextMenu {
             Button("Rename") { editing = task.id }
             Menu("Due") {

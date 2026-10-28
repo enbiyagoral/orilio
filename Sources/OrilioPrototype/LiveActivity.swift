@@ -18,11 +18,25 @@ struct Transient: Equatable {
     let module: IslandTab
 }
 
+/// What the focus ear shows: the ring and time, a break (blue, "break" on the right when music
+/// leaves it free), or what just ended and waits for the user.
+enum FocusEarKind: Equatable {
+    case running, onBreak, done(String)
+
+    @MainActor init?(_ focus: FocusModule) {
+        switch focus.finished {
+        case .session?: self = .done("Session done")
+        case .breakOver?: self = .done("Break over")
+        case nil: if focus.isOnBreak { self = .onBreak } else if focus.isActive { self = .running } else { return nil }
+        }
+    }
+}
+
 /// One thing claiming one or both ears of the collapsed island.
 struct LiveActivity: Equatable, Identifiable {
     enum Payload: Equatable {
         case meeting(CalendarEvent)
-        case focus
+        case focus(FocusEarKind)
         case transient(Transient)
         case nowPlaying(MediaSessionSnapshot)
     }
@@ -85,7 +99,7 @@ struct EarLayout: Equatable {
 ///
 /// Hidden modules and indicators the user turned off never claim the notch.
 enum LiveActivityResolver {
-    static func layout(meeting: CalendarEvent?, focusActive: Bool, transient: Transient?,
+    static func layout(meeting: CalendarEvent?, focus: FocusEarKind?, transient: Transient?,
                        nowPlaying: MediaSessionSnapshot?, visible: Set<IslandTab>,
                        indicators: Set<CollapsedIndicator>) -> EarLayout {
         func allowed(_ module: IslandTab, _ indicator: CollapsedIndicator?) -> Bool {
@@ -100,8 +114,9 @@ enum LiveActivityResolver {
             return EarLayout(leading: activity, trailing: activity)
         }
         let music = nowPlaying.flatMap { allowed(.music, .music) ? LiveActivity(payload: .nowPlaying($0)) : nil }
-        if focusActive, allowed(.focus, .focus) {
-            return EarLayout(leading: LiveActivity(payload: .focus), trailing: music)
+        if let focus, allowed(.focus, .focus) {
+            let activity = LiveActivity(payload: .focus(focus))
+            return EarLayout(leading: activity, trailing: music ?? (focus == .onBreak ? activity : nil))
         }
         return EarLayout(leading: music, trailing: music)
     }
@@ -143,8 +158,12 @@ extension EarLayout {
         case (.meeting(let event), .trailing):
             return MeetingEar.showsJoin(event, now: now) ? 4 + text("Join", size: 11.5, weight: .bold) + 20
                 : text(CalendarDay.countdown(to: event.start, from: now))
+        case (.focus(.done(let label)), .leading):
+            return 14 + 6 + text(label)
         case (.focus, .leading):
             return 14 + 6 + text("88:88")
+        case (.focus(.onBreak), .trailing):
+            return text("break", size: 11.5, weight: .regular)
         case (.focus, .trailing):
             return 0
         case (.transient(let transient), .leading):

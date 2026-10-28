@@ -320,17 +320,18 @@ struct ClipboardModuleTests {
         #expect(await h.store.load().isEmpty)
     }
 
-    @Test func searchAndShortcuts() async {
+    @Test func searchAndKeyboardSelection() async {
         let h = Harness()
         await h.module.enable()
         h.board.copy("alpha"); h.module.check(); h.clock.now.addTimeInterval(1)
         h.board.copy("beta"); h.module.check()
         h.module.query = "alp"
         #expect(h.module.visibleItems.map(\.text) == ["alpha"])
-        #expect(h.module.handleKey(keyCode: 18, command: true)) // ⌘1
-        #expect(!h.module.handleKey(keyCode: 19, command: true)) // ⌘2: nothing there
-        #expect(!h.module.handleKey(keyCode: 18, command: false))
-        await settle { h.board.text == "alpha" }
-        #expect(h.board.text == "alpha")
+        h.module.moveSelection(by: 1) // ↓ from nothing: the first row
+        #expect(h.module.selectedItem?.text == "alpha")
+        h.module.moveSelection(by: 1) // held at the end
+        #expect(h.module.selectedItem?.text == "alpha")
+        h.module.requestSearch(typing: "h")
+        #expect(h.module.query == "alph")
     }
 }
