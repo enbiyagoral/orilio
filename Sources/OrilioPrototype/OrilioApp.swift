@@ -58,7 +58,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let shelf = ShelfModel(store: ShelfStore())
         self.shelf = shelf
         Task { await shelf.restore() }
-        controller = IslandWindowController(model: IslandModel(providers: providers, shelf: shelf))
+        let library = ScreenshotLibrary()
+        Task { await library.load() } // metadata only; thumbnails load as cells appear
+        controller = IslandWindowController(model: IslandModel(providers: providers, shelf: shelf, library: library))
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
