@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Orilio — a calm control surface for the Mac notch.
+// Copyright (C) 2026 Enbiya Goral and Orilio contributors
+
 import Foundation
 
 /// Music tabs in Chrome (YouTube Music, Spotify, SoundCloud, including installed web apps),

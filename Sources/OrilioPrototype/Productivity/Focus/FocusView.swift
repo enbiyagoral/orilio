@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Orilio — a calm control surface for the Mac notch.
+// Copyright (C) 2026 Enbiya Goral and Orilio contributors
+
 import SwiftUI
 
 // Values follow the M3 hub design: a 176 pt ring (radius 76, 10 pt stroke), 32 pt preset chips

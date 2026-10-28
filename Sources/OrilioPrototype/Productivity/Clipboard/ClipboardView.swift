@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Orilio — a calm control surface for the Mac notch.
+// Copyright (C) 2026 Enbiya Goral and Orilio contributors
+
 import AppKit
 import SwiftUI
 
@@ -103,6 +107,7 @@ private struct ClipboardHistory: View {
                     }
                     .scrollIndicators(.never)
                     .scrollDisabled(items.count <= 5)
+                    .bottomFade(items.count > 5)
                 }
             }
         }
@@ -171,8 +176,18 @@ private struct ClipRow: View {
                 module.status == .paused ? module.resume() : module.pause()
             }
         }
-        .accessibilityLabel("\(item.kind.rawValue): \(item.preview)")
+        // The full text, however long (capped: a 10,000-character tooltip helps no one).
+        .help(Self.full(item))
+        .accessibilityLabel("\(item.kind.rawValue): \(Self.full(item))")
         .accessibilityHint(copied ? "Copied" : "Copies it to the clipboard")
+    }
+}
+
+extension ClipRow {
+    static let fullTextLimit = 2_000
+    static func full(_ item: ClipItem) -> String {
+        guard let text = item.text else { return item.preview }
+        return text.count > fullTextLimit ? String(text.prefix(fullTextLimit)) + "…" : text
     }
 }
 

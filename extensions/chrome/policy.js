@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Orilio — a calm control surface for the Mac notch.
+// Copyright (C) 2026 Enbiya Goral and Orilio contributors
+
 // Pure decisions shared by the content script and the service worker. No DOM or Chrome APIs,
 // so they can be tested with Node (Tests/Extension).
 

@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Orilio — a calm control surface for the Mac notch.
+// Copyright (C) 2026 Enbiya Goral and Orilio contributors
+
 import AppKit
 import Network
 import SwiftUI
@@ -107,7 +111,13 @@ private struct CalendarToday: View {
                 } else if day.events.count <= Self.rowsThatFit {
                     rows
                 } else {
-                    ScrollView(.vertical, showsIndicators: false) { rows }
+                    // More than fit: the list scrolls with a soft fade, and a pill counts what's still to come below.
+                    let below = day.events.dropFirst(Self.rowsThatFit).filter { !$0.hasEnded(at: day.now) }.count
+                    ScrollView(.vertical, showsIndicators: false) { rows.padding(.bottom, 28) }
+                        .bottomFade(true)
+                        .overlay(alignment: .bottom) {
+                            if below > 0 { CountPill(text: "+\(below) later today").padding(.bottom, 4).allowsHitTesting(false) }
+                        }
                 }
             }
             .frame(maxWidth: .infinity)
@@ -118,9 +128,10 @@ private struct CalendarToday: View {
     static let rowsThatFit = 5
 
     private var rows: some View {
-        VStack(spacing: 4) {
+        let overlapping = day.overlapping
+        return VStack(spacing: 4) {
             ForEach(day.events) { event in
-                EventRow(event: event, isNext: event.id == day.featured?.id, now: day.now)
+                EventRow(event: event, isNext: event.id == day.featured?.id, overlaps: overlapping.contains(event.id), now: day.now)
                     .onTapGesture { module.openInCalendar(event) }
             }
         }
@@ -148,12 +159,14 @@ private struct NextCard: View {
                 Text(event?.title ?? "You're free")
                     .font(.system(size: 22, weight: .semibold))
                     .tracking(-0.44)
-                    .lineLimit(2)
+                    .lineLimit(2) // then an ellipsis; the full title is in the tooltip and for VoiceOver
+                    .help(event?.title ?? "")
                 if let event {
                     Text(timeLine(event))
                         .font(.system(size: 13))
                         .foregroundStyle(.white.opacity(0.62))
                         .lineLimit(1)
+                        .help(timeLine(event))
                     Attendees(event: event).padding(.top, 4)
                 } else {
                     Text("No more meetings today.")
@@ -275,6 +288,7 @@ private struct ReminderMenu: View {
 private struct EventRow: View {
     let event: CalendarEvent
     let isNext: Bool
+    var overlaps = false
     let now: Date
 
     var body: some View {
@@ -289,6 +303,15 @@ private struct EventRow: View {
                 .lineLimit(1)
                 .truncationMode(.tail)
                 .frame(maxWidth: .infinity, alignment: .leading)
+            if overlaps {
+                Text("Overlaps")
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .foregroundStyle(SettingsDesign.amber)
+                    .padding(.horizontal, 7)
+                    .frame(height: 20)
+                    .background(SettingsDesign.amber.opacity(0.16), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .fixedSize()
+            }
             Text(source)
                 .font(.system(size: 11))
                 .foregroundStyle(.white.opacity(0.5))
@@ -299,9 +322,9 @@ private struct EventRow: View {
         .background(isNext ? Color.white.opacity(0.08) : .clear, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .opacity(event.hasEnded(at: now) ? 0.45 : 1)
         .contentShape(Rectangle())
-        .help("Open in Calendar")
+        .help("\(event.title) · Open in Calendar") // the full title, however long
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(event.title), \(event.isAllDay ? "all day" : event.start.formatted(date: .omitted, time: .shortened)), \(event.calendarTitle)")
+        .accessibilityLabel("\(event.title), \(event.isAllDay ? "all day" : event.start.formatted(date: .omitted, time: .shortened)), \(event.calendarTitle)\(overlaps ? ", overlaps another event" : "")")
         .accessibilityAddTraits(.isButton)
     }
 

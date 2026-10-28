@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Orilio — a calm control surface for the Mac notch.
+// Copyright (C) 2026 Enbiya Goral and Orilio contributors
+
 import AppKit
 import SwiftUI
 
@@ -21,6 +25,30 @@ enum Metrics {
 
 /// Notch-like silhouette: concave ears at the top corners melt it into the screen edge,
 /// rounded bottom corners. Both radii animate, so the shape morphs instead of cross-fading.
+extension View {
+    /// A list that runs on below: its last 64 pt fade to transparent (the M5 dense design).
+    func bottomFade(_ on: Bool, height: CGFloat = 64) -> some View {
+        mask {
+            VStack(spacing: 0) {
+                Rectangle()
+                LinearGradient(colors: [.black, on ? .clear : .black], startPoint: .top, endPoint: .bottom).frame(height: height)
+            }
+        }
+    }
+}
+
+/// "+3 later today", "+9": what a list holds below the fold (12% white, 24 pt).
+struct CountPill: View {
+    let text: String
+    var body: some View {
+        Text(text).font(.system(size: 11.5, weight: .semibold))
+            .padding(.horizontal, 10)
+            .frame(height: 24)
+            .background(.white.opacity(0.12), in: Capsule())
+            .accessibilityLabel(text)
+    }
+}
+
 extension EnvironmentValues {
     /// Under a notch, or floating (see `IslandGeometry.layout`).
     @Entry var islandLayout = IslandLayout.notch

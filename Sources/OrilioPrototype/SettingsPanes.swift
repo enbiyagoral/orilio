@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Orilio — a calm control surface for the Mac notch.
+// Copyright (C) 2026 Enbiya Goral and Orilio contributors
+
 import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
@@ -788,6 +792,7 @@ private struct FailureCard: View {
 
 struct AboutPane: View {
     @State private var acknowledgements = false
+    @State private var license = false
 
     static var version: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "–" }
     static var build: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "–" }
@@ -797,10 +802,14 @@ struct AboutPane: View {
             AppIcon()
             Text("Orilio").font(.system(size: 30, weight: .semibold)).tracking(-0.9)
             Text("Version \(Self.version) (\(Self.build))").font(.system(size: 13)).foregroundStyle(Design.muted(0.55))
+            // The GPL's "appropriate legal notice" (§0, §5d).
+            Text("Copyright © 2026 Enbiya Goral and Orilio contributors.\nOrilio comes with ABSOLUTELY NO WARRANTY. It is free software, and you are welcome to redistribute it under the GNU GPL v3 or later.")
+                .font(.system(size: 11.5)).foregroundStyle(Design.secondary).frame(maxWidth: 440).fixedSize(horizontal: false, vertical: true)
             Text("Free, for everyone. No account, no ads, no tracking.").font(.system(size: 15)).foregroundStyle(Design.ink.opacity(0.85))
             HStack(spacing: 8) {
                 PaneButton(title: "Send feedback") { FeedbackWindow.show() }
                 PaneButton(title: "Acknowledgements") { acknowledgements = true }
+                PaneButton(title: "View License") { license = true }
             }
             .padding(.top, 6)
             Text("Made by Enbiya Goral").font(.system(size: 12)).foregroundStyle(Design.muted(0.4)).padding(.top, 10)
@@ -808,6 +817,7 @@ struct AboutPane: View {
         .multilineTextAlignment(.center)
         .frame(maxWidth: .infinity, minHeight: 760 - 53 - 48)
         .sheet(isPresented: $acknowledgements) { Acknowledgements() }
+        .sheet(isPresented: $license) { LicenseSheet() }
     }
 }
 
@@ -829,21 +839,61 @@ private struct AppIcon: View {
     }
 }
 
+/// The GPL as bundled with the app: scrollable, monospaced, selectable.
+private struct LicenseSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    static let source = URL(string: "https://github.com/enbiyagoral/orilio")!
+
+    private var text: String {
+        Bundle.main.url(forResource: "LICENSE", withExtension: nil).flatMap { try? String(contentsOf: $0, encoding: .utf8) }
+            ?? "The license text isn't in this build. It is the GNU General Public License, version 3: https://www.gnu.org/licenses/gpl-3.0.txt"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("GNU General Public License v3").font(.system(size: 15, weight: .semibold))
+            ScrollView {
+                Text(text)
+                    .font(.system(size: 11.5, design: .monospaced))
+                    .foregroundStyle(Design.muted(0.8))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(14)
+            }
+            .frame(height: 420)
+            .background(Design.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Design.cardStroke, lineWidth: 1))
+            HStack {
+                Link("Source code: github.com/enbiyagoral/orilio", destination: Self.source)
+                    .font(.system(size: 12.5)).foregroundStyle(Design.accentText)
+                Spacer()
+                PaneButton(title: "Done") { dismiss() }.keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(24)
+        .frame(width: 620)
+        .foregroundStyle(Design.ink)
+        .background(Design.window)
+    }
+}
+
 private struct Acknowledgements: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Acknowledgements").font(.system(size: 15, weight: .semibold))
-            Text("Orilio is built only on Apple’s frameworks. Some of its icons follow Lucide’s geometry.")
-                .font(.system(size: 13)).foregroundStyle(Design.secondary)
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Lucide · ISC License").font(.system(size: 13, weight: .semibold))
-                Text(Self.lucide).font(.system(size: 11.5)).foregroundStyle(Design.muted(0.7)).fixedSize(horizontal: false, vertical: true)
+            Text("Orilio is free software under the GNU General Public License, version 3 or later. It updates itself with Sparkle, and some of its icons follow Lucide’s geometry.")
+                .font(.system(size: 13)).foregroundStyle(Design.secondary).fixedSize(horizontal: false, vertical: true)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    license("Orilio · GNU General Public License v3 or later",
+                            "Copyright (C) 2026 Enbiya Goral and Orilio contributors. The full text is in Settings › About › View License. The \u{201C}Orilio\u{201D} name and app icon are not covered by the license.")
+                    license("Sparkle · MIT License", Self.sparkle)
+                    license("Lucide · ISC License", Self.lucide)
+                }
             }
-            .padding(14)
-            .background(Design.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Design.cardStroke, lineWidth: 1))
+            .frame(maxHeight: 360)
             HStack {
                 Spacer()
                 PaneButton(title: "Done") { dismiss() }.keyboardShortcut(.defaultAction)
@@ -854,6 +904,29 @@ private struct Acknowledgements: View {
         .foregroundStyle(Design.ink)
         .background(Design.window)
     }
+
+    private func license(_ title: String, _ text: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title).font(.system(size: 13, weight: .semibold))
+            Text(text).font(.system(size: 11.5)).foregroundStyle(Design.muted(0.7)).fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Design.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Design.cardStroke, lineWidth: 1))
+    }
+
+    static let sparkle = """
+    Copyright (c) 2006-2013 Andy Matuschak. Copyright (c) 2009-2013 Elgato Systems GmbH.     Copyright (c) 2011-2014 Kornel Lesiński. Copyright (c) 2015-2017 Mayur Pawashe. Copyright (c) 2014 C.W. Betts.     Copyright (c) 2014 Petroules Corporation. Copyright (c) 2014 Big Nerd Ranch. All rights reserved.
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated     documentation files (the "Software"), to deal in the Software without restriction, including without limitation     the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and     to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all copies or substantial portions of     the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO     THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE     AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF     CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER     DEALINGS IN THE SOFTWARE.
+
+    Sparkle’s full license, with the licenses of the code it includes, is in     Orilio.app/Contents/Resources/Sparkle-LICENSE.txt.
+    """
 
     static let lucide = """
     Copyright (c) for portions of Lucide are held by Cole Bemis 2013-2022 as part of Feather (MIT). \

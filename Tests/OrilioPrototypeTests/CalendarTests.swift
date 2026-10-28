@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Orilio — a calm control surface for the Mac notch.
+// Copyright (C) 2026 Enbiya Goral and Orilio contributors
+
 import Foundation
 import Testing
 @testable import OrilioPrototype
@@ -53,6 +57,13 @@ struct MeetingLinkTests {
 // MARK: - Interpreting the day
 
 struct CalendarDayTests {
+    @Test func overlapsAreSharedTimeNotBackToBack() {
+        let day = CalendarDay(events: [event("A", startsIn: 0, lasting: 60), event("B", startsIn: 30), event("C", startsIn: 60),
+                                       event("D", startsIn: 120), event("All", startsIn: 0, lasting: 1_440, allDay: true)], now: noon)
+        // A and B share 30 minutes; C starts as A ends; all-day events never count.
+        #expect(day.overlapping == ["A@0.0", "B@30.0"])
+    }
+
     @Test func currentNextAndFeatured() {
         let day = CalendarDay(events: [event("Standup", startsIn: -120), event("Review", startsIn: -10, lasting: 30),
                                        event("1:1", startsIn: 45), event("Holiday", startsIn: -720, lasting: 1_440, allDay: true)],

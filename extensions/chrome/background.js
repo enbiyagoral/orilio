@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Orilio — a calm control surface for the Mac notch.
+// Copyright (C) 2026 Enbiya Goral and Orilio contributors
+
 // Relays between music tabs (YouTube Music, Spotify, SoundCloud) and Orilio's native messaging host.
 // The host is started by Chrome only while at least one music tab is connected,
 // so the service worker can sleep when there is nothing to report.

@@ -1,4 +1,8 @@
 #!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Orilio — a calm control surface for the Mac notch.
+# Copyright (C) 2026 Enbiya Goral and Orilio contributors
+
 # Registers Orilio as the native messaging host for the Orilio extension in every installed
 # Chromium-based browser (Chrome, Chrome Beta/Canary, Chromium, Brave, Edge, Vivaldi, Arc).
 # Usage: scripts/install-chrome-host.sh [path/to/Orilio.app]   (default: build/Orilio.app)

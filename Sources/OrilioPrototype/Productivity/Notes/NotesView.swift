@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Orilio — a calm control surface for the Mac notch.
+// Copyright (C) 2026 Enbiya Goral and Orilio contributors
+
 import AppKit
 import SwiftUI
 
@@ -194,6 +198,7 @@ private struct TaskList: View {
     @Bindable var module: NotesModule
     @State private var draft = ""
     @State private var editing: UUID?
+    @State private var showsCompleted = false
     @FocusState private var adding: Bool
 
     var body: some View {
@@ -219,19 +224,51 @@ private struct TaskList: View {
             } else {
             // Due labels say "Today" or "Tomorrow", so they follow the date.
             TimelineView(.everyMinute) { context in
+                let tasks = module.visibleTasks
+                let open = tasks.filter { !$0.done }, done = tasks.filter(\.done)
                 List {
-                    ForEach(module.visibleTasks) { task in
+                    // Open tasks first (they're first in `visibleTasks`, so the move positions match).
+                    ForEach(open) { task in
                         TaskRow(task: task, now: context.date, module: module, editing: $editing)
                             .listRowInsets(EdgeInsets())
                             .listRowSeparator(.hidden)
                             .listRowBackground(Color.clear)
-                            .moveDisabled(task.done)
                     }
                     .onMove { module.moveTasks(from: $0, to: $1) }
+                    if showsCompleted {
+                        ForEach(done) { task in
+                            TaskRow(task: task, now: context.date, module: module, editing: $editing)
+                                .listRowInsets(EdgeInsets())
+                                .listRowSeparator(.hidden)
+                                .listRowBackground(Color.clear)
+                        }
+                    }
                 }
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
+                .bottomFade(open.count + (showsCompleted ? done.count : 0) > 4)
                 .environment(\.defaultMinListRowHeight, 40)
+                // Finished tasks fold into one row under the list (the M5 dense design); opening it adds
+                // them below the open ones in the list, so the open tasks stay where they are.
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    if !done.isEmpty {
+                        Button { showsCompleted.toggle() } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "chevron.right").font(.system(size: 10, weight: .bold))
+                                    .rotationEffect(.degrees(showsCompleted ? 90 : 0))
+                                Text("\(done.count) completed")
+                                Spacer()
+                            }
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.6))
+                            .padding(.horizontal, 8)
+                            .frame(height: 30)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityValue(showsCompleted ? "Shown" : "Hidden")
+                    }
+                }
             }
             }
 
@@ -300,6 +337,7 @@ private struct TaskRow: View {
                     .lineLimit(2)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
+                    .help(task.title)
                     .onTapGesture(count: 2) { editing = task.id }
             }
             if let due = NotesPolicy.dueText(task.due, now: now), !task.done {

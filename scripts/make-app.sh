@@ -1,4 +1,8 @@
 #!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Orilio — a calm control surface for the Mac notch.
+# Copyright (C) 2026 Enbiya Goral and Orilio contributors
+
 # Wraps the SwiftPM build into Orilio.app so macOS treats it as a real agent app
 # (LSUIElement: no Dock icon; a bundle is also needed for reliable activation and a stable defaults domain).
 set -eu
@@ -21,7 +25,8 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Frameworks" "$APP/Contents/Resourc
 BIN="$(swift build -c "$CONFIG" --show-bin-path)"
 cp "$BIN/OrilioPrototype" "$APP/Contents/MacOS/"
 ditto "$BIN/Sparkle.framework" "$APP/Contents/Frameworks/Sparkle.framework" # keeps its symlinks and helpers
-cp Resources/WhatsNew.json "$APP/Contents/Resources/"
+cp Resources/WhatsNew.json LICENSE "$APP/Contents/Resources/" # LICENSE: the GPL's text, shown in Settings › About
+cp .build/artifacts/sparkle/Sparkle/LICENSE "$APP/Contents/Resources/Sparkle-LICENSE.txt" # MIT, plus what Sparkle includes
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

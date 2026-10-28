@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Orilio — a calm control surface for the Mac notch.
+// Copyright (C) 2026 Enbiya Goral and Orilio contributors
+
 import AppKit
 import QuickLookThumbnailing
 import SwiftUI
@@ -179,6 +183,9 @@ private struct FilesStrip: View {
     let shelf: ShelfModel
     let screenshotsComeIn: Bool
     let draggedOut: () -> Void
+    /// Dense: the last tile counts what's hidden ("+9"); clicking it shows everything, scrolling.
+    @State private var showsAll = false
+    static let denseTiles = 12
 
     /// Past this many, the M5 dense design: six smaller tiles a row, two rows visible, the rest scroll.
     static let denseAfter = 10
@@ -205,19 +212,23 @@ private struct FilesStrip: View {
                 ScrollView {
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: dense ? 8 : 10), count: dense ? 6 : 5),
                               spacing: dense ? 8 : 10) {
-                        ForEach(shelf.pending) { PendingTile(pending: $0, dense: dense) }
-                        ForEach(shelf.items) { item in
+                        let folded = dense && !showsAll && count > Self.denseTiles
+                        let shown = folded ? Self.denseTiles - 1 - min(shelf.pending.count, Self.denseTiles - 1) : shelf.items.count
+                        ForEach(shelf.pending.prefix(Self.denseTiles - 1)) { PendingTile(pending: $0, dense: dense) }
+                        ForEach(shelf.items.prefix(shown)) { item in
                             ShelfTile(item: item, shelf: shelf, dense: dense, draggedOut: draggedOut)
                                 .transition(.scale(scale: 0.9).combined(with: .opacity))
+                        }
+                        if folded {
+                            MoreTile(count: count - (Self.denseTiles - 1)) { showsAll = true }
                         }
                     }
                     .animation(.spring(duration: 0.3, bounce: 0), value: shelf.items)
                 }
                 .scrollIndicators(.never)
-                .scrollDisabled(count <= (dense ? 12 : 5))
-                // A soft fade where the list runs on below.
-                .mask(LinearGradient(stops: [.init(color: .black, location: 0.8), .init(color: .black.opacity(count > (dense ? 12 : 5) ? 0 : 1), location: 1)],
-                                     startPoint: .top, endPoint: .bottom))
+                .scrollDisabled(count <= (dense ? Self.denseTiles : 5) || (dense && !showsAll))
+                // A soft fade where the list runs on below (once everything is shown, or past five tiles).
+                .bottomFade(dense ? showsAll : count > 5)
                 if !dense { DropHint() }
             }
         }
@@ -339,6 +350,30 @@ private struct TileActions: View {
         .buttonStyle(PressableStyle())
         .help(label)
         .accessibilityLabel(label)
+    }
+}
+
+/// The M5 dense design's last tile: how many more there are.
+private struct MoreTile: View {
+    let count: Int
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text("+\(count)").font(.system(size: 14, weight: .semibold))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                Text("\(count) more").font(.system(size: 10.5)).foregroundStyle(.white.opacity(0.8)).lineLimit(1)
+            }
+            .padding(6)
+            .frame(height: 92)
+            .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(PressableStyle())
+        .help("Show all files")
+        .accessibilityLabel("\(count) more files. Show all")
     }
 }
 

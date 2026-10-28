@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Orilio — a calm control surface for the Mac notch.
+// Copyright (C) 2026 Enbiya Goral and Orilio contributors
+
 // Runs in the page's own JavaScript world, before the site's code (manifest: world MAIN, document_start).
 // Its only job: remember the Media Session action handlers the site registers, and invoke one when
 // Orilio's content script asks. This is the same path the keyboard's media keys take, aimed at this

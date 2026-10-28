@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Orilio — a calm control surface for the Mac notch.
+// Copyright (C) 2026 Enbiya Goral and Orilio contributors
+
 import Foundation
 
 /// Adds screenshots taken with the system shortcuts (⇧⌘3, ⇧⌘4, ⇧⌘5) to the library as they are

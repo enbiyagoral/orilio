@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Orilio — a calm control surface for the Mac notch.
+// Copyright (C) 2026 Enbiya Goral and Orilio contributors
+
 import Foundation
 
 /// One event, copied out of EventKit into a plain value so views never touch the event store.
@@ -122,6 +126,20 @@ struct CalendarDay: Equatable, Sendable {
     }
 
     var calendarCount: Int { Set(events.map(\.calendarID)).count }
+
+    /// Timed events that share time with another one (the amber "Overlaps" tag). Back-to-back isn't an overlap.
+    var overlapping: Set<String> {
+        let timed = self.timed.sorted { $0.start < $1.start }
+        var ids = Set<String>()
+        for (i, a) in timed.enumerated() {
+            for b in timed[(i + 1)...] {
+                guard b.start < a.end else { break }
+                ids.insert(a.id)
+                ids.insert(b.id)
+            }
+        }
+        return ids
+    }
 
     /// "in 4 min", "in 1 h 20 min", "now".
     static func countdown(to date: Date, from now: Date) -> String {
