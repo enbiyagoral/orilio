@@ -301,6 +301,11 @@ private struct ExpandedContent: View {
                     Text(model.geometry.displayName).font(.system(size: 11)).foregroundStyle(.white.opacity(0.5))
                         .lineLimit(1).padding(.trailing, 6)
                 }
+                HeaderButton(symbol: "gearshape", label: "Settings (⌘,)", active: false) {
+                    // Settings first, so closing the island doesn't hand the keyboard back to the other app.
+                    SettingsWindow.show()
+                    model.dismiss()
+                }
                 HeaderButton(symbol: model.state == .pinned ? "pin.fill" : "pin", label: "Keep island open",
                              active: model.state == .pinned) { model.togglePin() }
                 HeaderButton(symbol: "xmark", label: "Close island (Esc)", active: false) { model.dismiss() }
