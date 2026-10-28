@@ -99,10 +99,17 @@ final class IslandModel {
              directory: FileManager.default.temporaryDirectory.appending(path: "orilio-unused-notes"))),
          focus: FocusModule = FocusModule(defaults: UserDefaults(suiteName: "orilio.unused") ?? .standard),
          modules: ModuleSettings = ModuleSettings(defaults: UserDefaults(suiteName: "orilio.unused") ?? .standard),
-         live: LiveActivityCoordinator = LiveActivityCoordinator()) {
-        let showDemo = UserDefaults.standard.bool(forKey: SettingsKeys.showDemoSource)
-        demo = DemoMediaProvider(enabled: showDemo)
-        media = MediaCoordinator(providers: providers + [demo])
+         live: LiveActivityCoordinator = LiveActivityCoordinator(),
+         sharing other: IslandModel? = nil) {
+        // Another display's island shows the same music; only its open state is its own.
+        if let other {
+            demo = other.demo
+            media = other.media
+        } else {
+            let showDemo = UserDefaults.standard.bool(forKey: SettingsKeys.showDemoSource)
+            demo = DemoMediaProvider(enabled: showDemo)
+            media = MediaCoordinator(providers: providers + [demo])
+        }
         self.shelf = shelf
         self.library = library
         self.calendar = calendar
@@ -112,7 +119,7 @@ final class IslandModel {
         self.modules = modules
         self.live = live
         if !modules.isVisible(tab) { tab = modules.visible[0] }
-        modules.onHide = { [weak self] in self?.moduleHidden($0) }
+        modules.whenHidden { [weak self] in self?.moduleHidden($0) }
     }
 
     /// A hidden module stops its work, so nothing runs (or reads) for a module the user removed.

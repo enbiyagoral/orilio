@@ -13,6 +13,8 @@ struct IslandGeometry: Equatable {
     var screenTop: CGFloat
     /// Height of the screen's usable area (below the menu bar, above the Dock).
     var usableHeight: CGFloat = .greatestFiniteMagnitude
+    /// Pixels per point; positions snap to this display's pixel grid (1x and 2x screens mix).
+    var scale: CGFloat = 2
 
     static let pillWidth: CGFloat = 220     // fits a mini cover + a short title in the menu bar band
     // The M3 hub design: a 700 × 304 panel whose 38 pt header row shares the notch's row (tabs to
@@ -71,33 +73,22 @@ struct IslandGeometry: Equatable {
             size.width += 2 * (Self.earRadius + Self.shadowMargin)
             size.height += Self.shadowMargin
         }
-        return CGRect(x: (centerX - size.width / 2).rounded(), y: screenTop - size.height,
-                      width: size.width, height: size.height)
+        let x = ((centerX - size.width / 2) * scale).rounded() / scale
+        return CGRect(x: x, y: screenTop - size.height, width: size.width, height: size.height)
     }
 
     /// `auxLeftWidth`/`auxRightWidth` are the menu bar areas either side of the notch
     /// (`NSScreen.auxiliaryTopLeftArea`/`…RightArea`); the notch is what lies between them.
     static func make(screenFrame: CGRect, safeAreaTop: CGFloat,
                      auxLeftWidth: CGFloat?, auxRightWidth: CGFloat?,
-                     menuBarHeight: CGFloat) -> IslandGeometry {
+                     menuBarHeight: CGFloat, scale: CGFloat = 2) -> IslandGeometry {
         if safeAreaTop > 0, let left = auxLeftWidth, let right = auxRightWidth {
             let notch = screenFrame.width - left - right
             return IslandGeometry(topInset: safeAreaTop, notchWidth: notch,
-                                  centerX: screenFrame.minX + left + notch / 2, screenTop: screenFrame.maxY)
+                                  centerX: screenFrame.minX + left + notch / 2, screenTop: screenFrame.maxY, scale: scale)
         }
         return IslandGeometry(topInset: menuBarHeight, notchWidth: 0,
-                              centerX: screenFrame.midX, screenTop: screenFrame.maxY)
-    }
-
-    static func make(for screen: NSScreen) -> IslandGeometry {
-        let band = screen.frame.maxY - screen.visibleFrame.maxY
-        var geometry = make(screenFrame: screen.frame, safeAreaTop: screen.safeAreaInsets.top,
-                            auxLeftWidth: screen.auxiliaryTopLeftArea?.width,
-                            auxRightWidth: screen.auxiliaryTopRightArea?.width,
-                            // band is 0 when the menu bar auto-hides
-                            menuBarHeight: band > 0 ? band : NSStatusBar.system.thickness)
-        geometry.usableHeight = screen.visibleFrame.height
-        return geometry
+                              centerX: screenFrame.midX, screenTop: screenFrame.maxY, scale: scale)
     }
 }
 
@@ -215,7 +206,7 @@ final class IslandHostingView: NSHostingView<IslandView> {
 
 @MainActor
 final class IslandWindowController {
-    private let model: IslandModel
+    let model: IslandModel
     private let panel: IslandPanel
     private var shrinkTask: Task<Void, Never>?
     /// Watches for clicks outside the island while the full controller is open. Mouse monitors
@@ -226,8 +217,17 @@ final class IslandWindowController {
     /// Where the last outside press started, to tell a click from the start of a drag.
     private var outsidePress: NSPoint?
 
-    init(model: IslandModel) {
+    /// The display this island is on (assigned by `IslandPositioner`).
+    private(set) var screen: ScreenInfo
+    /// Set while the display shows a fullscreen app; nil otherwise.
+    private(set) var fullscreen: DisplaySettings.Fullscreen?
+    /// "Reveal from the top edge": the pointer has brought the island in.
+    private var revealed = false
+    private var observers: [NSObjectProtocol] = []
+
+    init(model: IslandModel, screen: ScreenInfo, allSpaces: Bool) {
         self.model = model
+        self.screen = screen
         panel = IslandPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel],
                             backing: .buffered, defer: false)
         panel.isOpaque = false
@@ -235,9 +235,7 @@ final class IslandWindowController {
         panel.hasShadow = false
         panel.isMovable = false
         panel.hidesOnDeactivate = false
-        // Just above the menu bar (.mainMenu) so the island can sit inside its band.
-        panel.level = .statusBar
-        panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
+        IslandWindowPolicy.apply(to: panel, allSpaces: allSpaces)
 
         let host = IslandHostingView(rootView: IslandView(model: model))
         host.sizingOptions = [] // the controller owns the frame; don't let SwiftUI resize the panel
@@ -272,57 +270,107 @@ final class IslandWindowController {
             return event
         }
 
-        let center = NotificationCenter.default
-        // On the next turn of the run loop, never inline: AppKit posts defaults changes from inside
-        // SwiftUI's text layout (a framework registering its defaults), and resizing the window
-        // there re-enters the layout and aborts.
-        let onChange: @Sendable (Notification) -> Void = { [weak self] _ in
-            Task { @MainActor in self?.reposition() }
-        }
-        center.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main, using: onChange)
-        center.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main, using: onChange)
         // Another app came forward (including the source the user just jumped to): put the controller away.
-        center.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { [weak model] _ in
+        observers.append(NotificationCenter.default.addObserver(forName: NSApplication.didResignActiveNotification,
+                                                                object: nil, queue: .main) { [weak model] _ in
             MainActor.assumeIsolated { if model?.state == .pinned { model?.dismiss() } }
-        }
-        // Wake and unlock: sessions missed their heartbeats while the Mac was away.
-        let recover: @Sendable (Notification) -> Void = { [weak model] _ in
-            MainActor.assumeIsolated { model?.media.systemDidWake() }
-        }
-        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main, using: recover)
-        DistributedNotificationCenter.default().addObserver(forName: Notification.Name("com.apple.screenIsUnlocked"),
-                                                            object: nil, queue: .main, using: recover)
-        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main, using: onChange)
+        })
 
         reposition()
         followLiveWidth()
         panel.orderFrontRegardless()
     }
 
-    private var targetScreen: NSScreen? {
-        let defaults = UserDefaults.standard
-        if defaults.bool(forKey: SettingsKeys.preferNotchedDisplay),
-           let notched = NSScreen.screens.first(where: { $0.safeAreaInsets.top > 0 }) {
-            return notched
-        }
-        return NSScreen.screens.first // the primary (menu bar) screen
-    }
-
+    /// Places the island on its display. Never activates the app, so the user's focus stays put.
     func reposition() {
-        let defaults = UserDefaults.standard
-        model.hoverOpens = defaults.object(forKey: SettingsKeys.openOnHover) as? Bool ?? true
-        let showDemo = defaults.bool(forKey: SettingsKeys.showDemoSource)
-        Task { [demo = model.demo] in await demo.setEnabled(showDemo) }
-        guard let screen = targetScreen else { return }
-        let geometry = IslandGeometry.make(for: screen)
+        let geometry = screen.geometry
         if geometry != model.geometry { model.geometry = geometry }
         panel.setFrame(geometry.windowFrame(for: model.state, tall: model.wantsTallPanel,
                                             collapsedWidth: model.liveCollapsedWidth), display: true)
     }
 
+    /// To another display (pointer moved, a display was unplugged); the island's state goes with it.
+    func move(to screen: ScreenInfo) {
+        guard screen != self.screen else { return }
+        self.screen = screen
+        revealed = false
+        reposition()
+    }
+
+    func setSpaces(all: Bool) { IslandWindowPolicy.apply(to: panel, allSpaces: all) }
+
+    /// The display started or stopped showing a fullscreen app.
+    func setFullscreen(_ mode: DisplaySettings.Fullscreen?) {
+        guard mode != fullscreen else { return }
+        fullscreen = mode
+        revealed = false
+        refreshVisibility()
+    }
+
+    /// The pointer rested at the top edge of a fullscreen display: slide the island in.
+    func reveal() {
+        guard fullscreen == .reveal, !revealed else { return }
+        revealed = true
+        refreshVisibility(sliding: true)
+    }
+
+    /// The pointer left the top of the display: hide again, unless the user opened the island.
+    func conceal() {
+        guard revealed, !model.state.isOpen else { return }
+        revealed = false
+        refreshVisibility()
+    }
+
+    var isRevealedOrOpen: Bool { revealed || model.state.isOpen }
+
+    /// Fullscreen "Hide" waits with everything except a meeting starting now; "Reveal" shows the
+    /// island while the pointer brought it in (or while it is open).
+    private var shouldShow: Bool {
+        let meetingNow: Bool = {
+            guard case .meeting(let event)? = model.earLayout.primary?.payload else { return false }
+            return MeetingEar.started(event, now: Date())
+        }()
+        switch fullscreen {
+        case nil, .show?: return true
+        case .hide?: return meetingNow || model.state.isOpen
+        case .reveal?: return revealed || model.state.isOpen || meetingNow
+        }
+    }
+
+    private func refreshVisibility(sliding: Bool = false) {
+        let show = shouldShow
+        guard show != panel.isVisible else { return }
+        if !show { return panel.orderOut(nil) }
+        reposition()
+        guard sliding, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { return panel.orderFrontRegardless() }
+        // Slide down from above the top edge.
+        let target = panel.frame
+        panel.setFrame(target.offsetBy(dx: 0, dy: target.height), display: false)
+        panel.orderFrontRegardless()
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.25
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            panel.animator().setFrame(target, display: true)
+        }
+    }
+
+    /// Takes the window down for good (its display went away, or the setting changed).
+    func close() {
+        widthTask?.cancel()
+        shrinkTask?.cancel()
+        watchOutsideClicks(false)
+        if let insideClickMonitor { NSEvent.removeMonitor(insideClickMonitor) }
+        insideClickMonitor = nil
+        observers.forEach(NotificationCenter.default.removeObserver)
+        observers = []
+        model.onWillChangeState = nil
+        panel.orderOut(nil)
+    }
+
     private func apply(_ state: IslandState) {
         shrinkTask?.cancel()
         watchOutsideClicks(state == .pinned)
+        Task { @MainActor [weak self] in self?.refreshVisibility() } // once the new state is set
 
         if state == .pinned, model.pinTakesFocus {
             // Pinning is an explicit click, so taking the keyboard (for Esc) is intended.
@@ -353,10 +401,11 @@ final class IslandWindowController {
 
     /// The collapsed island widens for a live meeting and narrows again; follow it without a timer.
     private func followLiveWidth() {
-        withObservationTracking { _ = model.liveCollapsedWidth } onChange: { [weak self] in
+        withObservationTracking { _ = (model.liveCollapsedWidth, model.earLayout) } onChange: { [weak self] in
             Task { @MainActor in
                 guard let self else { return }
                 if !self.model.state.isOpen { self.resizeCollapsed() }
+                self.refreshVisibility() // a meeting starting now shows even over a fullscreen app
                 self.followLiveWidth()
             }
         }
@@ -407,5 +456,23 @@ final class IslandWindowController {
     /// A press and release within a few points is a click; more is a drag.
     static func isClick(from start: NSPoint, to end: NSPoint) -> Bool {
         hypot(end.x - start.x, end.y - start.y) <= 4
+    }
+}
+
+/// The island window's level and Space behavior, decided in one place.
+@MainActor
+enum IslandWindowPolicy {
+    static func apply(to panel: NSPanel, allSpaces: Bool) {
+        // Just above the menu bar (.mainMenu), so the island can sit inside its band, and below
+        // system alerts and the screen saver.
+        panel.level = .statusBar
+        var behavior: NSWindow.CollectionBehavior = [
+            .stationary,          // stays put while Spaces slide and in Mission Control
+            .fullScreenAuxiliary, // may appear over a fullscreen app (the fullscreen setting decides when)
+            .ignoresCycle,        // never a stop for ⌘` or window cycling
+        ]
+        // On every Space, and beside Stage Manager's strip; otherwise it stays on the Space it opened on.
+        if allSpaces { behavior.insert(.canJoinAllSpaces) }
+        panel.collectionBehavior = behavior
     }
 }

@@ -2,16 +2,15 @@ import SwiftUI
 
 struct SettingsView: View {
     @AppStorage(SettingsKeys.openOnHover) private var openOnHover = true
-    @AppStorage(SettingsKeys.preferNotchedDisplay) private var preferNotchedDisplay = false
     @AppStorage(SettingsKeys.showDemoSource) private var showDemoSource = false
 
     var body: some View {
         Form {
             Section {
                 Toggle("Open the island on hover", isOn: $openOnHover)
-                Toggle("Show on the built-in notched display when connected", isOn: $preferNotchedDisplay)
                 Toggle("Show the Demo media source", isOn: $showDemoSource)
             }
+            DisplaysSettings()
             if let modules = AppModules.modules {
                 ModulesSettings(modules: modules)
             }
@@ -163,6 +162,31 @@ private struct ModulesSettings: View {
                                                       set: { modules.setIndicator(indicator, $0) }))
             }
             Text("Only one shows at a time: a meeting about to start first, then a focus session, then music.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+/// Which displays show the island, and how it behaves over fullscreen apps and Spaces.
+private struct DisplaysSettings: View {
+    @AppStorage(DisplaySettings.Keys.placement) private var placement = DisplaySettings().placement.rawValue
+    @AppStorage(DisplaySettings.Keys.fullscreen) private var fullscreen = DisplaySettings().fullscreen.rawValue
+    @AppStorage(DisplaySettings.Keys.allSpaces) private var allSpaces = true
+    @AppStorage(DisplaySettings.Keys.externalWhenLidClosed) private var external = true
+
+    var body: some View {
+        Section("Displays") {
+            Picker("Show the island on", selection: $placement) {
+                ForEach(DisplaySettings.Placement.allCases) { Text($0.title).tag($0.rawValue) }
+            }
+            Picker("In fullscreen apps", selection: $fullscreen) {
+                ForEach(DisplaySettings.Fullscreen.allCases) { Text($0.title).tag($0.rawValue) }
+            }
+            Toggle("Show on every Space and alongside Stage Manager", isOn: $allSpaces)
+            Toggle("Move to the main external display when the lid is closed", isOn: $external)
+                .disabled(placement != DisplaySettings.Placement.builtIn.rawValue)
+            Text("Over a fullscreen app, a meeting starting now always shows. Displays without a notch get the floating pill.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }
