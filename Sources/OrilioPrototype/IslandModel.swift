@@ -81,6 +81,7 @@ final class IslandModel {
     let notes: NotesModule
     let focus: FocusModule
     let modules: ModuleSettings
+    let live: LiveActivityCoordinator
     /// Whether the drag over the island carries something the shelf can take.
     private(set) var dropIsValid = true
     /// Where a drop will go: the screenshot library if it is what's on screen, else the File Shelf.
@@ -97,7 +98,8 @@ final class IslandModel {
          notes: NotesModule = NotesModule(store: NotesStore(
              directory: FileManager.default.temporaryDirectory.appending(path: "orilio-unused-notes"))),
          focus: FocusModule = FocusModule(defaults: UserDefaults(suiteName: "orilio.unused") ?? .standard),
-         modules: ModuleSettings = ModuleSettings(defaults: UserDefaults(suiteName: "orilio.unused") ?? .standard)) {
+         modules: ModuleSettings = ModuleSettings(defaults: UserDefaults(suiteName: "orilio.unused") ?? .standard),
+         live: LiveActivityCoordinator = LiveActivityCoordinator()) {
         let showDemo = UserDefaults.standard.bool(forKey: SettingsKeys.showDemoSource)
         demo = DemoMediaProvider(enabled: showDemo)
         media = MediaCoordinator(providers: providers + [demo])
@@ -108,6 +110,7 @@ final class IslandModel {
         self.notes = notes
         self.focus = focus
         self.modules = modules
+        self.live = live
         if !modules.isVisible(tab) { tab = modules.visible[0] }
         modules.onHide = { [weak self] in self?.moduleHidden($0) }
     }
@@ -124,26 +127,31 @@ final class IslandModel {
         if tab == module { tab = modules.visible[0] }
     }
 
-    /// What the collapsed island shows (see `CollapsedLive.resolve` for the order).
-    var collapsedLive: CollapsedLive {
-        .resolve(focusActive: focus.isActive, meeting: meetingSoon, musicPlaying: media.current?.state == .playing,
-                 visible: modules.visibleSet, indicators: modules.indicators)
+    /// What the collapsed island's ears show (see `LiveActivityResolver` for the order). Derived
+    /// from the modules' observable state, so it changes only when they do.
+    var earLayout: EarLayout {
+        let playing = media.current.flatMap { $0.state == .playing ? $0 : nil }
+        return LiveActivityResolver.layout(meeting: meetingSoon, focusActive: focus.isActive, transient: live.transient,
+                                           nowPlaying: playing, visible: modules.visibleSet, indicators: modules.indicators)
     }
 
-    /// A meeting about to start, for the collapsed island (only when Calendar is on and readable).
+    /// A meeting about to start, for the collapsed island (only when Calendar is on and readable),
+    /// or the debug stand-in.
     var meetingSoon: CalendarEvent? {
+        if let mock = live.mockMeeting, let soon = CalendarDay(events: [mock], now: Date()).soon() { return soon }
         guard calendar.status == .ready else { return nil }
         return calendar.dayNow().soon()
     }
 
-    /// Wider than the notch only while something live is shown (the design's widths).
+    /// The notch plus two ears sized for their content, or nil when idle (the notch alone).
     var liveCollapsedWidth: CGFloat? {
-        switch collapsedLive {
-        case .focus: IslandGeometry.focusWidth
-        case .meeting: IslandGeometry.meetingWidth
-        case .music: IslandGeometry.musicWidth
-        case .none: nil
-        }
+        earLayout.collapsedWidth(notch: geometry.notchWidth, pill: IslandGeometry.pillWidth, now: Date())
+    }
+
+    /// The trailing ear's Join. The debug stand-in has nowhere to go.
+    func join(_ event: CalendarEvent) {
+        guard event.id != live.mockMeeting?.id else { return }
+        calendar.join(event)
     }
 
     /// Same state, new size (the Screenshots grid wants more room): let the window follow.
@@ -207,7 +215,15 @@ final class IslandModel {
         tab = visible[(index + offset + visible.count) % visible.count]
     }
 
-    private func chooseOpeningTab() { tab = collapsedLive.tab ?? modules.defaultTab ?? tab }
+    /// Hover and clicks open to the module that is live, else the default one.
+    private func chooseOpeningTab() { tab = earLayout.primary?.module ?? modules.defaultTab ?? tab }
+
+    /// A click on one ear of the collapsed island opens that ear's module.
+    func tapEar(_ side: EarSide) {
+        guard !state.isOpen else { return tap() }
+        tab = earLayout.activity(at: side)?.module ?? modules.defaultTab ?? tab
+        set(.pinned)
+    }
     func togglePin() {
         // The click on the pin button already pinned the hover panel (`keepOpen`); it means "pin".
         if let pinned = pinnedByClick, Date().timeIntervalSince(pinned) < 0.6 {

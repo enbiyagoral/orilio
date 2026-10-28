@@ -21,9 +21,6 @@ struct IslandGeometry: Equatable {
     static let headerHeight: CGFloat = 38
     static let contentHeight: CGFloat = 266
     /// The collapsed island while a meeting is about to start.
-    static let meetingWidth: CGFloat = 412
-    static let focusWidth: CGFloat = 340
-    static let musicWidth: CGFloat = 236
     static let dropTargetWidth: CGFloat = 360
     static let dropTargetHeight: CGFloat = 92 // a 68pt drop zone + 12pt padding
     /// The Screenshots grid: about four rows of thumbnails, never taller than the usable screen.
@@ -225,6 +222,7 @@ final class IslandWindowController {
     /// need no permission; it exists only while pinned.
     private var outsideClickMonitor: Any?
     private var insideClickMonitor: Any?
+    private var widthTask: Task<Void, Never>?
     /// Where the last outside press started, to tell a click from the start of a drag.
     private var outsidePress: NSPoint?
 
@@ -275,8 +273,11 @@ final class IslandWindowController {
         }
 
         let center = NotificationCenter.default
+        // On the next turn of the run loop, never inline: AppKit posts defaults changes from inside
+        // SwiftUI's text layout (a framework registering its defaults), and resizing the window
+        // there re-enters the layout and aborts.
         let onChange: @Sendable (Notification) -> Void = { [weak self] _ in
-            MainActor.assumeIsolated { self?.reposition() }
+            Task { @MainActor in self?.reposition() }
         }
         center.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main, using: onChange)
         center.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main, using: onChange)
@@ -355,9 +356,23 @@ final class IslandWindowController {
         withObservationTracking { _ = model.liveCollapsedWidth } onChange: { [weak self] in
             Task { @MainActor in
                 guard let self else { return }
-                if !self.model.state.isOpen { self.reposition() }
+                if !self.model.state.isOpen { self.resizeCollapsed() }
                 self.followLiveWidth()
             }
+        }
+    }
+
+    /// Wider at once (the shape springs out inside the window); narrower only after the spring,
+    /// so the shrinking shape isn't cut off.
+    private func resizeCollapsed() {
+        widthTask?.cancel()
+        let target = model.geometry.windowFrame(for: .collapsed, collapsedWidth: model.liveCollapsedWidth)
+        guard target.width < panel.frame.width else { return reposition() }
+        let delay = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : 0.44
+        widthTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(delay))
+            guard let self, !Task.isCancelled, !self.model.state.isOpen else { return }
+            self.reposition()
         }
     }
 

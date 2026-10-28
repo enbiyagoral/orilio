@@ -9,32 +9,6 @@ private let meeting = CalendarEvent(id: "m", eventIdentifier: nil, title: "Desig
                                     isAllDay: false, calendarID: "work", calendarTitle: "Work", sourceTitle: "Google",
                                     color: .fallback, attendeeNames: [], meeting: nil)
 
-struct CollapsedLiveTests {
-    private let all = Set(IslandTab.allCases)
-    private let every = Set(CollapsedIndicator.allCases)
-
-    @Test func priorityIsMeetingThenFocusThenMusic() {
-        #expect(CollapsedLive.resolve(focusActive: true, meeting: meeting, musicPlaying: true, visible: all, indicators: every) == .meeting(meeting))
-        #expect(CollapsedLive.resolve(focusActive: true, meeting: nil, musicPlaying: true, visible: all, indicators: every) == .focus)
-        #expect(CollapsedLive.resolve(focusActive: false, meeting: nil, musicPlaying: true, visible: all, indicators: every) == .music)
-        #expect(CollapsedLive.resolve(focusActive: false, meeting: nil, musicPlaying: false, visible: all, indicators: every) == .none)
-    }
-
-    @Test func hiddenModulesAndIndicatorsAreSkipped() {
-        let noCalendar = all.subtracting([.calendar])
-        #expect(CollapsedLive.resolve(focusActive: true, meeting: meeting, musicPlaying: true, visible: noCalendar, indicators: every) == .focus)
-        #expect(CollapsedLive.resolve(focusActive: true, meeting: meeting, musicPlaying: true, visible: all, indicators: [.music]) == .music)
-        #expect(CollapsedLive.resolve(focusActive: true, meeting: meeting, musicPlaying: true, visible: all, indicators: []) == .none)
-    }
-
-    @Test func clickOpensTheModuleOfWhatIsShown() {
-        #expect(CollapsedLive.focus.tab == .focus)
-        #expect(CollapsedLive.meeting(meeting).tab == .calendar)
-        #expect(CollapsedLive.music.tab == .music)
-        #expect(CollapsedLive.none.tab == nil)
-    }
-}
-
 @MainActor
 struct ModuleSettingsTests {
     @Test func defaultsFollowTheDesign() {
@@ -96,7 +70,7 @@ struct ModuleIntegrationTests {
         #expect(!focus.isActive) // the session ended with its module
         #expect(model.tab != .focus)
         #expect(model.notes.currentText == "kept")
-        #expect(model.collapsedLive == .none)
+        #expect(model.earLayout.isIdle)
     }
 
     @Test func clickingTheCollapsedIslandOpensTheLiveModule() {
@@ -142,7 +116,7 @@ struct ModuleIntegrationTests {
         let (model, focus, modules) = island()
         #expect(model.liveCollapsedWidth == nil)
         focus.begin()
-        #expect(model.liveCollapsedWidth == IslandGeometry.focusWidth)
+        #expect(model.liveCollapsedWidth != nil)
         modules.setIndicator(.focus, false)
         #expect(model.liveCollapsedWidth == nil)
     }

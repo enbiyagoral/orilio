@@ -230,7 +230,8 @@ struct CalendarModuleTests {
         await module.enable()
         let island = IslandModel(calendar: module)
         #expect(island.meetingSoon?.title == "Design review")
-        #expect(island.liveCollapsedWidth == IslandGeometry.meetingWidth)
+        #expect(island.earLayout.primary?.kind == .meeting)
+        #expect(island.liveCollapsedWidth != nil)
 
         await source.set(events: [event("Later", startsIn: 45)])
         await module.reload()

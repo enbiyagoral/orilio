@@ -101,21 +101,16 @@ struct IslandView: View {
                         .padding(.horizontal, ear)
                         .transition(contentTransition)
                 case .collapsed:
+                    let layout = model.earLayout
                     Group {
-                        switch model.collapsedLive {
-                        case .focus:
-                            FocusPill(module: model.focus)
-                        case .meeting(let meeting):
-                            TimelineView(.everyMinute) { context in MeetingPill(event: meeting, now: context.date) }
-                        case .music:
-                            if let session = model.media.current { MusicPill(session: session) }
-                        case .none:
+                        if !layout.isIdle {
+                            CollapsedEars(layout: layout, model: model)
+                        } else if !geometry.hasNotch, model.modules.isVisible(.music), model.modules.indicators.contains(.music) {
                             // Without a notch the pill is always there; it shows a paused track.
-                            if !geometry.hasNotch, model.modules.isVisible(.music), model.modules.indicators.contains(.music) {
-                                CompactPill(media: model.media)
-                            }
+                            CompactPill(media: model.media)
                         }
                     }
+                    // Content cross-fades; the width springs (see `.animation` below).
                     .transition(.opacity.animation(.easeOut(duration: 0.15)))
                 }
             }
@@ -123,12 +118,21 @@ struct IslandView: View {
         }
         .frame(width: size.width + 2 * ear, height: size.height)
         .contentShape(shape)
-        // Clicking the pill or the preview (outside its buttons) opens the full controller.
-        .onTapGesture { if state != .pinned { model.tap() } }
+        // A click on an ear opens that ear's module; elsewhere (outside buttons) the live one.
+        .onTapGesture(coordinateSpace: .local) { location in
+            guard state != .pinned else { return }
+            if state == .collapsed {
+                model.tapEar(location.x < (size.width + 2 * ear) / 2 ? .leading : .trailing)
+            } else {
+                model.tap()
+            }
+        }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Orilio island")
         .accessibilityAction(named: "Open controls") { model.tap() }
         .animation(shapeAnimation(collapsing: state == .collapsed), value: state)
+        // One spring when the collapsed island widens or narrows for what it shows.
+        .animation(reduceMotion ? nil : .spring(duration: 0.44, bounce: 0.15), value: state == .collapsed ? size.width : 0)
         // The Screenshots grid makes the open panel taller without a state change: grow and shrink
         // the same way (the window keeps its larger size until the shrink has finished).
         .animation(shapeAnimation(collapsing: !model.showsTallPanel), value: model.showsTallPanel)
@@ -174,29 +178,6 @@ private struct CompactPill: View {
         }
         .padding(.horizontal, 12)
         .frame(maxHeight: .infinity)
-    }
-}
-
-/// The collapsed island while music plays (the M3 hub design's 236 pt state): the cover left of
-/// the notch, four warm bars right of it.
-private struct MusicPill: View {
-    let session: MediaSessionSnapshot
-    static let barColor = NSColor(red: 0.969, green: 0.71, blue: 0.431, alpha: 1) // #F7B56E
-
-    var body: some View {
-        HStack {
-            Artwork(seed: session.title, url: session.artworkURL, size: 20, radius: 6)
-            Spacer(minLength: 12)
-            if session.kind == .video {
-                ActivityIndicator(session: session)
-            } else {
-                EqualizerView(mode: EqualizerView.Mode(session), color: Self.barColor, style: .wave)
-            }
-        }
-        .padding(.horizontal, 14)
-        .frame(maxHeight: .infinity)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Now playing: \(session.title). Open island")
     }
 }
 
@@ -780,5 +761,144 @@ struct TabButtonStyle: ButtonStyle {
             }
             .contentShape(Capsule())
             .opacity(configuration.isPressed ? 0.7 : 1)
+    }
+}
+
+/// The collapsed island's two ears: leading left of the notch, trailing right of it.
+private struct CollapsedEars: View {
+    let layout: EarLayout
+    let model: IslandModel
+
+    var body: some View {
+        HStack(spacing: 0) {
+            part(layout.leading, .leading)
+            Spacer(minLength: EarLayout.notchGap)
+            part(layout.trailing, .trailing)
+        }
+        .font(.system(size: 12, weight: .semibold))
+        .padding(.horizontal, EarLayout.padding)
+        .frame(maxHeight: .infinity)
+        .accessibilityElement(children: .contain)
+    }
+
+    @ViewBuilder private func part(_ activity: LiveActivity?, _ side: EarSide) -> some View {
+        switch activity?.payload {
+        case .meeting(let event)?:
+            // Minute steps are enough for "in N min"; the start itself is a calendar refresh boundary.
+            // The schedule's date is the minute's start, so the countdown reads the clock itself.
+            TimelineView(.everyMinute) { context in MeetingEarView(event: event, side: side, now: max(context.date, Date()), model: model) }
+        case .focus?:
+            if side == .leading { FocusEar(module: model.focus) }
+        case .transient(let transient)?:
+            TransientEar(transient: transient, side: side)
+        case .nowPlaying(let session)?:
+            MusicEar(session: session, side: side)
+        case nil:
+            EmptyView()
+        }
+    }
+}
+
+private struct MeetingEarView: View {
+    let event: CalendarEvent
+    let side: EarSide
+    let now: Date
+    let model: IslandModel
+
+    var body: some View {
+        if side == .leading {
+            HStack(spacing: 7) {
+                Circle().fill(event.color.color).frame(width: 7, height: 7)
+                Text(MeetingEar.title(event, now: now)).lineLimit(1)
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("\(event.title), \(CalendarDay.countdown(to: event.start, from: now))")
+        } else if MeetingEar.showsJoin(event, now: now) {
+            Button { model.join(event) } label: {
+                Text("Join")
+                    .font(.system(size: 11.5, weight: .bold))
+                    .foregroundStyle(Color(red: 0, green: 0.078, blue: 0.051)) // #00140D
+                    .padding(.horizontal, 10)
+                    .frame(height: 22)
+                    .background(mint, in: Capsule())
+                    .shadow(color: mint.opacity(0.5), radius: 7)
+            }
+            .buttonStyle(PressableStyle())
+            .padding(.trailing, -8) // the design's 6 pt right inset for the pill
+            .accessibilityLabel("Join \(event.title)")
+        } else {
+            Text(CalendarDay.countdown(to: event.start, from: now))
+                .foregroundStyle(mint)
+                .shadow(color: mint.opacity(0.55), radius: 5)
+                .accessibilityHidden(true)
+        }
+    }
+}
+
+/// A small ring and the time; redrawn once a second, and only while the session runs.
+private struct FocusEar: View {
+    let module: FocusModule
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1, paused: !module.isRunning)) { context in
+            let now = module.isRunning ? context.date : module.now()
+            let remaining = module.remaining(at: now)
+            HStack(spacing: 6) {
+                ZStack {
+                    Circle().stroke(.white.opacity(0.2), lineWidth: 2.4)
+                    Circle()
+                        .trim(from: 0, to: module.fraction(at: now))
+                        .stroke(mint, style: StrokeStyle(lineWidth: 2.4, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                }
+                .frame(width: 12, height: 12)
+                Text(FocusSession.text(remaining)).monospacedDigit()
+            }
+            .foregroundStyle(mint.opacity(module.isRunning ? 1 : 0.55))
+            .shadow(color: mint.opacity(module.isRunning ? 0.5 : 0), radius: 5)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Focus timer \(FocusSession.text(remaining))\(module.isRunning ? "" : ", paused")")
+        }
+    }
+}
+
+private struct TransientEar: View {
+    let transient: Transient
+    let side: EarSide
+
+    var body: some View {
+        if side == .leading {
+            HStack(spacing: 7) {
+                Image(systemName: transient.symbol).font(.system(size: 11, weight: .heavy)).foregroundStyle(mint)
+                Text(transient.title).lineLimit(1)
+            }
+            .accessibilityElement(children: .combine)
+        } else if let detail = transient.detail {
+            Text(detail)
+                .font(.system(size: 12, design: transient.monospaced ? .monospaced : .default))
+                .foregroundStyle(.white.opacity(0.6))
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: 96, alignment: .trailing)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
+/// The cover on the left, four warm bars on the right (the design's #F7B56E).
+private struct MusicEar: View {
+    let session: MediaSessionSnapshot
+    let side: EarSide
+    static let barColor = NSColor(red: 0.969, green: 0.71, blue: 0.431, alpha: 1)
+
+    var body: some View {
+        if side == .leading {
+            Artwork(seed: session.title, url: session.artworkURL, size: 20, radius: 6)
+                .accessibilityLabel("Now playing: \(session.title)")
+        } else if session.kind == .video {
+            ActivityIndicator(session: session)
+        } else {
+            EqualizerView(mode: EqualizerView.Mode(session), color: Self.barColor, style: .wave)
+        }
     }
 }
