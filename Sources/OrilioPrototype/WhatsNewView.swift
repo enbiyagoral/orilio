@@ -14,8 +14,8 @@ struct WhatsNewView: View {
                                                   light: NSColor(srgbRed: 10 / 255, green: 132 / 255, blue: 1, alpha: 0.12))
     private static let blueInk = Design.adaptive(dark: Design.ns(0x8DBBFF), light: Design.ns(0x0A64D8))
     private static let neutralTile = Design.adaptive(dark: .white.withAlphaComponent(0.08), light: .black.withAlphaComponent(0.05))
-    private static let continueFill = Design.adaptive(dark: Design.ns(0x2BFFB8), light: Design.ns(0x1D1D1F))
-    private static let continueInk = Design.adaptive(dark: Design.ns(0x00140D), light: .white)
+    private static let continueFill = Design.primaryFill
+    private static let continueInk = Design.primaryText
 
     var body: some View {
         VStack(spacing: 0) {

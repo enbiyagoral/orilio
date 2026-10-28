@@ -120,7 +120,7 @@ struct GeneralPane: View {
                             .controlSize(.small)
                             .frame(width: 180)
                             .accessibilityLabel("Hover delay")
-                        Text("\(p.hoverDelay) ms").font(.system(size: 12)).foregroundStyle(Design.ink.opacity(0.7))
+                        Text("\(p.hoverDelay) ms").font(.system(size: 12)).foregroundStyle(Design.muted(0.7))
                             .frame(width: 48, alignment: .leading)
                     }
                 }
@@ -182,7 +182,7 @@ private struct PopUpButton<Value: Hashable>: View {
         Button(action: popUp) {
             HStack(spacing: 6) {
                 Text(options.first { $0.0 == selection }?.1 ?? "").font(.system(size: 13))
-                Image(systemName: "chevron.up.chevron.down").font(.system(size: 8.5, weight: .bold)).foregroundStyle(Design.ink.opacity(0.6))
+                Image(systemName: "chevron.up.chevron.down").font(.system(size: 8.5, weight: .bold)).foregroundStyle(Design.muted(0.6))
             }
             .padding(.horizontal, 10)
             .frame(height: 30)
@@ -260,7 +260,7 @@ private struct CalendarPaneContent: View {
                             Text(group.account.uppercased())
                                 .font(.system(size: 11, weight: .semibold))
                                 .tracking(0.66)
-                                .foregroundStyle(Design.ink.opacity(0.45))
+                                .foregroundStyle(Design.muted(0.45))
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(EdgeInsets(top: 10, leading: 16, bottom: 4, trailing: 16))
                             ForEach(group.calendars) { calendar in CalendarRow(module: module, calendar: calendar) }
@@ -325,7 +325,7 @@ private struct CalendarRow: View {
                     .fill(on ? Design.accent : .clear)
                     .overlay(RoundedRectangle(cornerRadius: 5, style: .continuous).strokeBorder(Design.ink.opacity(on ? 0 : 0.35), lineWidth: 1.5))
                     .overlay {
-                        if on { Image(systemName: "checkmark").font(.system(size: 9.5, weight: .heavy)).foregroundStyle(Design.hex(0x00140D)) }
+                        if on { Image(systemName: "checkmark").font(.system(size: 9.5, weight: .heavy)).foregroundStyle(Design.onAccent) }
                     }
                     .frame(width: 18, height: 18)
                 Circle().fill(calendar.color.color).frame(width: 8, height: 8)
@@ -392,7 +392,7 @@ private struct ClipboardPaneContent: View {
                         Text("Always on")
                     }
                     .font(.system(size: 12))
-                    .foregroundStyle(Design.ink.opacity(0.55))
+                    .foregroundStyle(Design.muted(0.55))
                 }
             }
 
@@ -419,7 +419,7 @@ private struct ClipboardPaneContent: View {
                             if let selectedApp { module.removeExcludedApp(selectedApp) }
                             selectedApp = nil
                         } label: {
-                            Text("−").font(.system(size: 18)).foregroundStyle(Design.ink.opacity(0.5)).frame(width: 28, height: 28).contentShape(Rectangle())
+                            Text("−").font(.system(size: 18)).foregroundStyle(Design.muted(0.5)).frame(width: 28, height: 28).contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                         .disabled(selectedApp == nil)
@@ -499,7 +499,7 @@ private struct ExcludedRow: View {
             .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
             Text(name).font(.system(size: 13.5))
             Spacer(minLength: 0)
-            Text(note).font(.system(size: 12)).foregroundStyle(Design.ink.opacity(0.45))
+            Text(note).font(.system(size: 12)).foregroundStyle(Design.muted(0.45))
         }
         .padding(.horizontal, 16)
         .frame(height: 44)
@@ -520,12 +520,12 @@ struct ShortcutsPane: View {
         let conflicts = GlobalHotKeys.shared.conflicts
         VStack(alignment: .leading, spacing: 22) {
             Text("Global shortcuts work in every app. Click one to record a new combination.")
-                .font(.system(size: 12.5)).foregroundStyle(Design.ink.opacity(0.55))
+                .font(.system(size: 12.5)).foregroundStyle(Design.muted(0.55))
             Card {
                 ForEach(Array(ShortcutAction.allCases.enumerated()), id: \.element) { index, action in
                     let off = action.module.map(hidden.contains) ?? false
                     HStack(spacing: 12) {
-                        Image(systemName: action.symbol).font(.system(size: 14)).foregroundStyle(Design.ink.opacity(0.75)).frame(width: 17)
+                        Image(systemName: action.symbol).font(.system(size: 14)).foregroundStyle(Design.muted(0.75)).frame(width: 17)
                         Text(action.title).font(.system(size: 13.5))
                         Spacer(minLength: 0)
                         if off {
@@ -639,7 +639,7 @@ struct UpdatesPane: View {
                 Text("Every update is signed and verified before it installs.")
             }
             .font(.system(size: 12))
-            .foregroundStyle(Design.ink.opacity(0.5))
+            .foregroundStyle(Design.muted(0.5))
         }
     }
 }
@@ -659,7 +659,7 @@ private struct StatusCardView: View {
                         .background(look.tile, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                     VStack(alignment: .leading, spacing: 3) {
                         Text(title).font(.system(size: 16, weight: .semibold))
-                        Text(detail(now: context.date)).font(.system(size: 12.5)).foregroundStyle(Design.ink.opacity(0.55))
+                        Text(detail(now: context.date)).font(.system(size: 12.5)).foregroundStyle(Design.muted(0.55))
                     }
                     Spacer(minLength: 0)
                     if let button { button }
@@ -668,12 +668,12 @@ private struct StatusCardView: View {
             if case .available(let update) = updates.status, !update.notes.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("WHAT’S IN \(update.version)").font(.system(size: 12, weight: .semibold)).tracking(0.72)
-                        .foregroundStyle(Design.ink.opacity(0.5))
+                        .foregroundStyle(Design.muted(0.5))
                     ForEach(update.notes, id: \.self) { Text("· \($0)") }
                 }
                 .font(.system(size: 13))
                 .lineSpacing(13 * 0.45 - 2)
-                .foregroundStyle(Design.ink.opacity(0.8))
+                .foregroundStyle(Design.muted(0.8))
                 .padding(.top, 14)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .overlay(alignment: .top) { Rectangle().fill(Design.divider).frame(height: 1) }
@@ -741,10 +741,10 @@ private struct UpdateButton: View {
     var body: some View {
         Button(action: action) {
             Text(title).font(.system(size: height == 36 ? 13 : 12.5, weight: mint ? .semibold : (height == 36 ? .semibold : .medium)))
-                .foregroundStyle(mint ? Design.hex(0x00140D) : Design.ink)
+                .foregroundStyle(mint ? Design.primaryText : Design.ink)
                 .padding(.horizontal, height == 36 ? 16 : 14)
                 .frame(height: height)
-                .background(mint ? Design.accent : Design.ink.opacity(height == 36 ? 0.12 : 0.1), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .background(mint ? Design.primaryFill : Design.ink.opacity(height == 36 ? 0.12 : 0.1), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                 .fixedSize()
                 .contentShape(Rectangle())
         }
@@ -769,7 +769,7 @@ private struct FailureCard: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(version.map { "Orilio \($0) wasn’t installed" } ?? "The update wasn’t installed").font(.system(size: 15, weight: .semibold))
                     Text("\(reason), so nothing on your Mac was changed. You’re still on \(AboutPane.version).")
-                        .font(.system(size: 12.5)).foregroundStyle(Design.ink.opacity(0.6)).fixedSize(horizontal: false, vertical: true)
+                        .font(.system(size: 12.5)).foregroundStyle(Design.muted(0.6)).fixedSize(horizontal: false, vertical: true)
                 }
             }
             HStack(spacing: 8) {
@@ -796,14 +796,14 @@ struct AboutPane: View {
         VStack(spacing: 14) {
             AppIcon()
             Text("Orilio").font(.system(size: 30, weight: .semibold)).tracking(-0.9)
-            Text("Version \(Self.version) (\(Self.build))").font(.system(size: 13)).foregroundStyle(Design.ink.opacity(0.55))
+            Text("Version \(Self.version) (\(Self.build))").font(.system(size: 13)).foregroundStyle(Design.muted(0.55))
             Text("Free, for everyone. No account, no ads, no tracking.").font(.system(size: 15)).foregroundStyle(Design.ink.opacity(0.85))
             HStack(spacing: 8) {
                 PaneButton(title: "Send feedback") { FeedbackWindow.show() }
                 PaneButton(title: "Acknowledgements") { acknowledgements = true }
             }
             .padding(.top, 6)
-            Text("Made by Enbiya Goral").font(.system(size: 12)).foregroundStyle(Design.ink.opacity(0.4)).padding(.top, 10)
+            Text("Made by Enbiya Goral").font(.system(size: 12)).foregroundStyle(Design.muted(0.4)).padding(.top, 10)
         }
         .multilineTextAlignment(.center)
         .frame(maxWidth: .infinity, minHeight: 760 - 53 - 48)
@@ -839,7 +839,7 @@ private struct Acknowledgements: View {
                 .font(.system(size: 13)).foregroundStyle(Design.secondary)
             VStack(alignment: .leading, spacing: 8) {
                 Text("Lucide · ISC License").font(.system(size: 13, weight: .semibold))
-                Text(Self.lucide).font(.system(size: 11.5)).foregroundStyle(Design.ink.opacity(0.7)).fixedSize(horizontal: false, vertical: true)
+                Text(Self.lucide).font(.system(size: 11.5)).foregroundStyle(Design.muted(0.7)).fixedSize(horizontal: false, vertical: true)
             }
             .padding(14)
             .background(Design.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))

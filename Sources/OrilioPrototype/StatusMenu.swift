@@ -244,7 +244,7 @@ final class MenuHeaderModel {
 }
 
 /// The app mark, "Orilio" and what's live (mint).
-private struct MenuHeaderView: View {
+struct MenuHeaderView: View {
     let model: MenuHeaderModel
 
     var body: some View {
@@ -274,7 +274,7 @@ private struct MenuHeaderView: View {
 }
 
 /// Four 58 pt tiles (radius 11); an active one is mint.
-private struct QuickActionGrid: View {
+struct QuickActionGrid: View {
     let actions: [QuickAction]
     let run: (QuickAction) -> Void
 
@@ -291,7 +291,7 @@ private struct QuickActionGrid: View {
                         Image(systemName: active && action == .pin ? "pin.fill" : action.symbol)
                             .font(.system(size: 16, weight: .medium))
                             .foregroundStyle(active ? Design.accentText : Design.ink)
-                        Text(action.label).font(.system(size: 10.5)).foregroundStyle(Design.ink.opacity(0.75))
+                        Text(action.label).font(.system(size: 10.5)).foregroundStyle(Design.muted(0.75))
                     }
                     .frame(maxWidth: .infinity)
                     .frame(height: 58)

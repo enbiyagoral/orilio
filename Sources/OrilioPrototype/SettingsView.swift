@@ -41,6 +41,18 @@ enum SettingsDesign {
     static let label = adaptive(dark: .white.withAlphaComponent(0.85), light: ns(0x1D1D1F))
     static let secondary = adaptive(dark: .white.withAlphaComponent(0.5), light: ns(0x6E6E73))
     static let segmentOn = adaptive(dark: .white.withAlphaComponent(0.9), light: .white)
+    /// Quieter text that still reads at 4.5:1: the design's white opacity on dark (never under 50%),
+    /// #6E6E73 (or #3A3A3C for near-primary text) on light.
+    static func muted(_ darkOpacity: Double) -> Color {
+        adaptive(dark: .white.withAlphaComponent(max(0.5, darkOpacity)), light: ns(darkOpacity >= 0.7 ? 0x3A3A3C : 0x6E6E73))
+    }
+    /// Light windows use graphite for their main button; mint fills belong to the island.
+    static let primaryFill = adaptive(dark: ns(0x2BFFB8), light: ns(0x1D1D1F))
+    static let primaryText = adaptive(dark: ns(0x00140D), light: .white)
+    /// On a switch-colored fill (a checked box).
+    static let onAccent = hex(0x00140D)
+    /// The chosen segment's text.
+    static let segmentText = adaptive(dark: .black, light: ns(0x1D1D1F))
     static let segmentShadow = adaptive(dark: .clear, light: .black.withAlphaComponent(0.15))
     static let selected = adaptive(dark: .white.withAlphaComponent(0.1), light: .black.withAlphaComponent(0.08))
     static let artTint = hex(0xF7B56E)
@@ -192,7 +204,7 @@ struct SettingsView: View {
             ForEach(Pane.groups, id: \.0) { group, panes in
                 Text(group)
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Design.ink.opacity(0.4))
+                    .foregroundStyle(Design.muted(0.4))
                     .padding(EdgeInsets(top: 12, leading: 8, bottom: 4, trailing: 8))
                 ForEach(panes) { item in
                     Button { pane = item } label: {
@@ -209,7 +221,7 @@ struct SettingsView: View {
                             .background(item.tile, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                             Text(item.label).font(.system(size: 13.5, weight: .medium))
                             Spacer(minLength: 0)
-                            Text(item.code).font(.system(size: 10.5)).foregroundStyle(Design.ink.opacity(0.35))
+                            Text(item.code).font(.system(size: 10.5)).foregroundStyle(Design.muted(0.35))
                         }
                         .padding(.horizontal, 8)
                         .frame(height: 34)
@@ -318,7 +330,7 @@ struct Segmented<Value: Hashable>: View {
                 Button { pick(value) } label: {
                     Text(label)
                         .font(.system(size: compact ? 12.5 : 13, weight: .medium))
-                        .foregroundStyle(active ? .black : Design.ink.opacity(0.8))
+                        .foregroundStyle(active ? Design.segmentText : Design.muted(0.8))
                         .padding(.horizontal, compact ? 12 : 14)
                         .frame(height: compact ? 28 : 30)
                         .background(active ? Design.segmentOn : .clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -349,7 +361,7 @@ struct DesignCheckbox: View {
                     .fill(isOn ? Design.accent : Design.ink.opacity(0.1))
                     .overlay(RoundedRectangle(cornerRadius: 3.5, style: .continuous).strokeBorder(Design.ink.opacity(isOn ? 0 : 0.3), lineWidth: 1))
                     .overlay {
-                        if isOn { Image(systemName: "checkmark").font(.system(size: 9, weight: .heavy)).foregroundStyle(.black) }
+                        if isOn { Image(systemName: "checkmark").font(.system(size: 9, weight: .heavy)).foregroundStyle(Design.onAccent) }
                     }
                     .frame(width: 15, height: 15)
                 Text(title).font(.system(size: size)).foregroundStyle(color)
@@ -541,7 +553,7 @@ private struct ArrowButton: View {
         Button(action: action) {
             Image(systemName: symbol)
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(Design.ink.opacity(0.75))
+                .foregroundStyle(Design.muted(0.75))
                 .frame(width: 30, height: 30)
                 .contentShape(Rectangle())
         }
@@ -702,7 +714,7 @@ private struct AppearancePane: View {
                     }
                 }
                 HStack {
-                    Text("Neon accent").font(.system(size: 13)).foregroundStyle(Design.ink.opacity(0.75))
+                    Text("Neon accent").font(.system(size: 13)).foregroundStyle(Design.muted(0.75))
                     Spacer()
                     HStack(spacing: 10) {
                         ForEach(Preferences.Accent.allCases) { option in
@@ -837,7 +849,7 @@ private struct ThemeCard: View {
                 .background(.black, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(style.title).font(.system(size: 13.5, weight: .semibold))
-                    Text(style.detail).font(.system(size: 12)).foregroundStyle(Design.ink.opacity(0.55))
+                    Text(style.detail).font(.system(size: 12)).foregroundStyle(Design.muted(0.55))
                 }
             }
             .padding(12)
@@ -880,7 +892,7 @@ private struct DisplaysPane: View {
                         Button { fullscreen = mode.rawValue } label: {
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(label).font(.system(size: 13.5, weight: .semibold))
-                                Text(detail).font(.system(size: 12)).lineSpacing(12 * 0.4).foregroundStyle(Design.ink.opacity(0.55))
+                                Text(detail).font(.system(size: 12)).lineSpacing(12 * 0.4).foregroundStyle(Design.muted(0.55))
                                     .fixedSize(horizontal: false, vertical: true)
                             }
                             .padding(.horizontal, 14)
@@ -927,7 +939,7 @@ private struct DisplaysIllustration: View {
                 UnevenRoundedRectangle(bottomLeadingRadius: 6, bottomTrailingRadius: 6).fill(Design.hex(0x3A3A3F))
                     .frame(width: 250, height: 7)
                     .padding(.top, -3)
-                Text("Built-in · notch").font(.system(size: 12)).foregroundStyle(Design.ink.opacity(0.6))
+                Text("Built-in · notch").font(.system(size: 12)).foregroundStyle(Design.muted(0.6))
             }
             .opacity(showOn == .pointer ? 0.55 : 1)
 
@@ -952,7 +964,7 @@ private struct DisplaysIllustration: View {
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .background(RoundedRectangle(cornerRadius: 13, style: .continuous).fill(Design.hex(0x2A2A2E)).padding(-5))
                 Rectangle().fill(Design.hex(0x2A2A2E)).frame(width: 60, height: 16).padding(.top, -3)
-                Text("External · no notch → pill").font(.system(size: 12)).foregroundStyle(Design.ink.opacity(0.6))
+                Text("External · no notch → pill").font(.system(size: 12)).foregroundStyle(Design.muted(0.6))
             }
             .opacity(showOn == .builtIn ? 0.55 : 1)
         }

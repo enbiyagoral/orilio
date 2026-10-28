@@ -180,7 +180,7 @@ struct FeedbackView: View {
                     Button { model.kind = kind } label: {
                         Label(kind.label, systemImage: kind.symbol)
                             .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(active ? .black : Design.ink.opacity(0.8))
+                            .foregroundStyle(active ? Design.segmentText : Design.muted(0.8))
                             .padding(.horizontal, 14)
                             .frame(height: 30)
                             .background(active ? Design.segmentOn : .clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -202,7 +202,7 @@ struct FeedbackView: View {
                         .padding(EdgeInsets(top: 10, leading: 9, bottom: 10, trailing: 9))
                         .accessibilityLabel(model.kind.prompt)
                     if model.message.isEmpty {
-                        Text(model.kind.placeholder).font(.system(size: 13.5)).foregroundStyle(Design.ink.opacity(0.4))
+                        Text(model.kind.placeholder).font(.system(size: 13.5)).foregroundStyle(Design.muted(0.4))
                             .padding(EdgeInsets(top: 10, leading: 14, bottom: 0, trailing: 14))
                             .allowsHitTesting(false)
                     }
@@ -229,11 +229,11 @@ struct FeedbackView: View {
                 if model.showsInfo {
                     VStack(alignment: .leading, spacing: 0) {
                         ForEach(model.info.lines, id: \.self) { Text($0) }
-                        Text(SystemInfo.neverIncluded).foregroundStyle(Design.ink.opacity(0.45))
+                        Text(SystemInfo.neverIncluded).foregroundStyle(Design.muted(0.45))
                     }
                     .font(.system(size: 12, design: .monospaced))
                     .lineSpacing(12 * 0.7 - 4)
-                    .foregroundStyle(Design.ink.opacity(0.75))
+                    .foregroundStyle(Design.muted(0.75))
                     .padding(EdgeInsets(top: 12, leading: 14, bottom: 12, trailing: 14))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .overlay(alignment: .top) { Rectangle().fill(Design.divider).frame(height: 1) }
@@ -246,7 +246,7 @@ struct FeedbackView: View {
             HStack {
                 let count = model.message.trimmingCharacters(in: .whitespacesAndNewlines).count
                 Text(count > 0 ? "\(count) characters" : "Write a few words to continue")
-                    .font(.system(size: 12)).foregroundStyle(Design.ink.opacity(0.5))
+                    .font(.system(size: 12)).foregroundStyle(Design.muted(0.5))
                 Spacer()
                 if FeedbackComposer.issuesURL != nil {
                     FeedbackButton(title: "Post on GitHub", mint: false, enabled: model.isReady) { model.postOnGitHub() }
@@ -266,7 +266,7 @@ struct FeedbackView: View {
             Text(sent == .github ? "GitHub is open in your browser" : "Your Mail app is ready").font(.system(size: 20, weight: .semibold))
             Text(sent == .github ? "We filled in the title and details. Review it and press Submit new issue."
                  : "We drafted the email with your message\(model.includeInfo ? " and system info" : ""). Just press Send — nothing has gone out yet.")
-                .font(.system(size: 13.5)).foregroundStyle(Design.ink.opacity(0.62))
+                .font(.system(size: 13.5)).foregroundStyle(Design.muted(0.62))
                 .multilineTextAlignment(.center).frame(maxWidth: 420)
             FeedbackButton(title: "Send something else", mint: false, enabled: true) { model.again() }.padding(.top, 8)
         }
@@ -284,10 +284,10 @@ private struct FeedbackButton: View {
     var body: some View {
         Button(action: action) {
             Text(title).font(.system(size: 13, weight: mint ? .semibold : .medium))
-                .foregroundStyle(mint ? Design.hex(0x00140D).opacity(enabled ? 1 : 0.6) : Design.ink)
+                .foregroundStyle(mint ? Design.primaryText.opacity(enabled ? 1 : 0.6) : Design.ink)
                 .padding(.horizontal, mint ? 16 : 14)
                 .frame(height: 36)
-                .background(mint ? Design.accent.opacity(enabled ? 1 : 0.25) : Design.ink.opacity(0.1),
+                .background(mint ? Design.primaryFill.opacity(enabled ? 1 : 0.25) : Design.ink.opacity(0.1),
                             in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                 .contentShape(Rectangle())
         }

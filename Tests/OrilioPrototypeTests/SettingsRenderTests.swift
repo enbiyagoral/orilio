@@ -30,6 +30,29 @@ struct SettingsRender {
                 }
                 try #require(png).write(to: directory.appending(path: "\(pane.rawValue)-\(name).png"))
             }
+            // The other windows and the menu bar extra.
+            let scheme: ColorScheme = appearance == .darkAqua ? .dark : .light
+            let notes = WhatsNew(version: "0.5", items: [.init(icon: "tray.full", title: "Shelf remembers", body: "Files stay after a restart."),
+                                                        .init(icon: "keyboard", title: "Keyboard", body: "Every module.", tint: "mint")])
+            let feedback = FeedbackModel()
+            feedback.showsInfo = true
+            let others: [(String, AnyView)] = [
+                ("whatsnew", AnyView(WhatsNewView(notes: notes) {})),
+                ("feedback", AnyView(FeedbackView(model: feedback))),
+                ("menu", AnyView(VStack(spacing: 0) {
+                    MenuHeaderView(model: MenuHeaderModel())
+                    QuickActionGrid(actions: QuickAction.allCases) { _ in }
+                }.frame(width: 284).padding(8).background(Color(nsColor: .windowBackgroundColor)))),
+            ]
+            for (file, view) in others {
+                let renderer = ImageRenderer(content: view.environment(\.colorScheme, scheme))
+                renderer.scale = 1
+                var png: Data?
+                NSAppearance(named: appearance)!.performAsCurrentDrawingAppearance {
+                    png = renderer.nsImage?.tiffRepresentation.flatMap(NSBitmapImageRep.init(data:))?.representation(using: .png, properties: [:])
+                }
+                try #require(png).write(to: directory.appending(path: "\(file)-\(name).png"))
+            }
         }
     }
 }
