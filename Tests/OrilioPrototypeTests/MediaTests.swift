@@ -247,11 +247,16 @@ struct ScriptablePlayerParsingTests {
 
     @Test func commandsNeverTargetAnotherApp() {
         let next = ScriptablePlayer.spotify.commandScript(.next)
-        #expect(next.hasPrefix("tell application id \"com.spotify.client\""))
+        // Asking first never launches a closed (or quitting) app; only then is it told anything.
+        #expect(next.hasPrefix("if application id \"com.spotify.client\" is not running then error number -600\ntell application id \"com.spotify.client\""))
         #expect(next.contains("next track"))
         #expect(next.contains("with timeout of 3 seconds"))
         let seek = ScriptablePlayer.music.commandScript(.seek(to: 12.345))
-        #expect(seek.hasPrefix("tell application id \"com.apple.Music\""))
+        #expect(seek.hasPrefix("if application id \"com.apple.Music\" is not running then error number -600\ntell application id \"com.apple.Music\""))
+        for player in [ScriptablePlayer.spotify, .music] {
+            #expect(player.stateScript.hasPrefix("if application id \"\(player.bundleID)\" is not running then"))
+        }
+        #expect(ScriptablePlayer.music.artworkScript?.hasPrefix("if application id \"com.apple.Music\" is not running then") == true)
         #expect(seek.contains("set player position to 12.35"))
     }
 }

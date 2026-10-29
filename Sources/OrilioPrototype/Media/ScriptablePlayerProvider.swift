@@ -29,6 +29,7 @@ struct ScriptablePlayer: Sendable {
         notification: "com.apple.Music.playerInfo",
         stateScript: stateScript(bundleID: "com.apple.Music", trackKey: "persistent ID of t", artworkURL: "\"\""),
         artworkScript: """
+        if application id "com.apple.Music" is not running then return missing value
         tell application id "com.apple.Music"
             with timeout of 3 seconds
                 try
@@ -41,8 +42,10 @@ struct ScriptablePlayer: Sendable {
         """,
         scriptDurationScale: 1)
 
+    /// A script sent while the app quits would launch it again: each one first asks, which never launches.
     private static func stateScript(bundleID: String, trackKey: String, artworkURL: String) -> String {
         """
+        if application id "\(bundleID)" is not running then return {"error", "-600", "not running"}
         tell application id "\(bundleID)"
             with timeout of 3 seconds
                 try
@@ -70,6 +73,7 @@ struct ScriptablePlayer: Sendable {
         }
         // A busy app must not hold the shared script queue for AppleScript's default two minutes.
         return """
+        if application id "\(bundleID)" is not running then error number -600
         tell application id "\(bundleID)"
             with timeout of 3 seconds
                 \(verb)
@@ -227,6 +231,8 @@ actor ScriptablePlayerProvider: MediaProvider {
         switch event {
         case .info(let new):
             guard isRunning else { return }
+            // A quitting player says "Stopped" last: take it as is, with no script to ask after it.
+            if new.state == .stopped { apply(new); return }
             status = permission == .denied ? .permissionDenied : .ready
             if permission == .granted {
                 await fetchState() // adds position and artwork the notification lacks

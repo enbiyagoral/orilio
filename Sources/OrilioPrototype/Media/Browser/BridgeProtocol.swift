@@ -55,8 +55,9 @@ enum BridgeProtocol {
     /// Far above any real message; anything larger is dropped as malformed.
     static let maxMessageBytes = 64 * 1024
     static let maxTextLength = 300
-    /// Sessions must be re-confirmed (the tab sends a heartbeat every 25 s) or they expire.
-    static let sessionLifetime: TimeInterval = 60
+    /// Sessions must be re-confirmed (the tab sends a heartbeat every 25 s) or they expire. Chrome
+    /// holds a background tab's timers to about one a minute, so the lifetime spans two of those.
+    static let sessionLifetime: TimeInterval = 150
     /// The sites the extension supports, by the adapter id it reports, with the name Orilio shows.
     static let sites = ["youtube-music": "YouTube Music", "youtube": "YouTube", "spotify": "Spotify", "soundcloud": "SoundCloud"]
     /// Cover art hosts of those sites (Google, Spotify, SoundCloud). Anything else is dropped.
