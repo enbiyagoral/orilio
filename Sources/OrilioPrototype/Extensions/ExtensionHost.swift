@@ -36,6 +36,21 @@ struct ExtensionState: Codable, Equatable {
     var installedAt = Date()
     /// Loaded from a folder in Developer Mode rather than the catalog.
     var local = false
+
+    init() {}
+
+    /// Every field may be missing (a field added later, an older file): it takes its default, so one
+    /// new field never costs every extension its settings, storage and grants.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let defaults = ExtensionState()
+        enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? defaults.enabled
+        settings = try c.decodeIfPresent([String: JSONValue].self, forKey: .settings) ?? defaults.settings
+        storage = try c.decodeIfPresent([String: JSONValue].self, forKey: .storage) ?? defaults.storage
+        granted = try c.decodeIfPresent(ExtensionManifest.Permissions.self, forKey: .granted) ?? defaults.granted
+        installedAt = try c.decodeIfPresent(Date.self, forKey: .installedAt) ?? defaults.installedAt
+        local = try c.decodeIfPresent(Bool.self, forKey: .local) ?? defaults.local
+    }
 }
 
 /// The packages on disk: Application Support/Orilio/Extensions/<id>/ (manifest, script, icon) and one
@@ -53,9 +68,15 @@ struct ExtensionStore {
     func folder(_ id: String) -> URL { root.appending(path: id, directoryHint: .isDirectory) }
     private var stateURL: URL { root.appending(path: "state.json") }
 
+    /// A file that can't be read is put aside before anything is saved over it.
     func loadState() -> [String: ExtensionState] {
-        guard let data = try? Data(contentsOf: stateURL) else { return [:] }
-        return (try? JSONDecoder().decode([String: ExtensionState].self, from: data)) ?? [:]
+        guard FileManager.default.fileExists(atPath: stateURL.path) else { return [:] }
+        if let data = try? Data(contentsOf: stateURL), let state = try? JSONDecoder().decode([String: ExtensionState].self, from: data) {
+            return state
+        }
+        let aside = root.appending(path: "state-unreadable-\(Int(Date().timeIntervalSince1970)).json")
+        try? FileManager.default.moveItem(at: stateURL, to: aside)
+        return [:]
     }
 
     func saveState(_ state: [String: ExtensionState]) {

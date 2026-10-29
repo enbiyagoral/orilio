@@ -256,3 +256,32 @@ struct ExtensionCallTimeoutTests {
         #expect(outcome.current?.hasPrefix("timed out") == true, "\(outcome.current ?? "still waiting after 8 s")")
     }
 }
+
+/// QA-1: one field the decoder didn't expect (or a corrupt file) used to load as no state at all, and the
+/// next save wiped every extension's grants, settings and storage.
+struct ExtensionStateFileTests {
+    @Test func aMissingFieldKeepsEverythingElse() throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: "orilio-state-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        // No "local", "installedAt" or "storage": written before those fields existed.
+        try Data(#"{"community.prayer-times":{"enabled":true,"settings":{"remindBefore":15},"granted":{"notifications":true}}}"#.utf8)
+            .write(to: root.appending(path: "state.json"))
+        let state = ExtensionStore(root: root).loadState()["community.prayer-times"]
+        #expect(state?.settings["remindBefore"] == .number(15))
+        #expect(state?.granted.notifications == true)
+        #expect(state?.local == false)
+    }
+
+    @Test func aCorruptFileIsKeptAside() throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: "orilio-state-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try Data("{ broken".utf8).write(to: root.appending(path: "state.json"))
+        let store = ExtensionStore(root: root)
+        #expect(store.loadState().isEmpty)
+        store.saveState([:])
+        let aside = try FileManager.default.contentsOfDirectory(atPath: root.path).filter { $0.hasPrefix("state-unreadable-") }
+        #expect(aside.count == 1)
+    }
+}
