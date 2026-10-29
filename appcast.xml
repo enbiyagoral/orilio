@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+  <channel>
+    <title>Orilio</title>
+    <link>https://github.com/enbiyagoral/orilio</link>
+    <description>Orilio updates. scripts/release.sh adds each release here.</description>
+    <language>en</language>
+  </channel>
+</rss>

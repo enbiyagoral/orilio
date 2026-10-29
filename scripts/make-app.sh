@@ -11,10 +11,13 @@ CONFIG="${1:-debug}"
 # The version the app reports (and Sparkle compares); override to build a test update.
 VERSION="${ORILIO_VERSION:-0.1.0}"
 BUILD="${ORILIO_BUILD:-1}"
-# Sparkle: the appcast and the EdDSA public key (from Sparkle's generate_keys). While these are
-# placeholders the updater doesn't start and nothing goes on the network.
-FEED_URL="${ORILIO_FEED_URL:-https://PLACEHOLDER.invalid/appcast.xml}"
-PUBLIC_KEY="${ORILIO_PUBLIC_ED_KEY:-PLACEHOLDER_SPARKLE_PUBLIC_ED_KEY}"
+# Sparkle: the appcast (appcast.xml in the public repository) and the EdDSA public key, which
+# scripts/release.sh saves to scripts/sparkle-public-key.txt. Without the key the updater doesn't
+# start and nothing goes on the network.
+FEED_URL="${ORILIO_FEED_URL:-https://raw.githubusercontent.com/enbiyagoral/orilio/main/appcast.xml}"
+KEY_FILE="scripts/sparkle-public-key.txt"
+PUBLIC_KEY="${ORILIO_PUBLIC_ED_KEY:-$( [ -s "$KEY_FILE" ] && tr -d '[:space:]' < "$KEY_FILE" || echo PLACEHOLDER_SPARKLE_PUBLIC_ED_KEY)}"
+WEBSITE_URL="https://github.com/enbiyagoral/orilio/releases/latest"
 # Send Feedback: the address Mail fills in, and the GitHub "new issue" page (empty: the button is hidden).
 FEEDBACK_EMAIL="${ORILIO_FEEDBACK_EMAIL:-}"
 ISSUES_URL="${ORILIO_ISSUES_URL-https://github.com/enbiyagoral/orilio/issues/new}"
@@ -26,6 +29,7 @@ BIN="$(swift build -c "$CONFIG" --show-bin-path)"
 cp "$BIN/OrilioPrototype" "$APP/Contents/MacOS/"
 ditto "$BIN/Sparkle.framework" "$APP/Contents/Frameworks/Sparkle.framework" # keeps its symlinks and helpers
 cp Resources/WhatsNew.json LICENSE "$APP/Contents/Resources/" # LICENSE: the GPL's text, shown in Settings › About
+ditto Resources/Localization "$APP/Contents/Resources" # en.lproj, tr.lproj: Localizable.strings and InfoPlist.strings
 # The app icon (Default, Dark and Tinted; drawn by scripts/make-icons.swift) → Assets.car + AppIcon.icns.
 xcrun actool Resources/Assets.xcassets --compile "$APP/Contents/Resources" --platform macosx \
   --minimum-deployment-target 14.6 --app-icon AppIcon --output-partial-info-plist "build/icon-info.plist" >/dev/null
@@ -73,10 +77,13 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>SUEnableAutomaticChecks</key><true/>
   <key>OrilioFeedbackEmail</key><string>$FEEDBACK_EMAIL</string>
   <key>OrilioIssuesURL</key><string>$ISSUES_URL</string>
+  <key>OrilioWebsiteURL</key><string>$WEBSITE_URL</string>
   <key>LSMinimumSystemVersion</key><string>14.6</string>
   <key>LSUIElement</key><true/>
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundleIconName</key><string>AppIcon</string>
+  <key>CFBundleDevelopmentRegion</key><string>en</string>
+  <key>CFBundleLocalizations</key><array><string>en</string><string>tr</string></array>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSCalendarsFullAccessUsageDescription</key><string>Orilio shows today's events and your next meeting in the notch. Calendar data stays on this Mac.</string>
   <key>NSCalendarsUsageDescription</key><string>Orilio shows today's events and your next meeting in the notch. Calendar data stays on this Mac.</string>
