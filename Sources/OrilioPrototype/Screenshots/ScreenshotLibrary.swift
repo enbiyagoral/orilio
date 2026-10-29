@@ -121,13 +121,14 @@ final class ScreenshotLibrary {
     }
 
     private func receive(_ receivers: [NSFilePromiseReceiver], into folder: URL) {
-        let incoming = folder.appending(path: UUID().uuidString, directoryHint: .isDirectory)
-        guard (try? FileManager.default.createDirectory(at: incoming, withIntermediateDirectories: true)) != nil else {
-            problem = "Orilio couldn't receive the image"
-            return
-        }
-        importing += receivers.count
         for receiver in receivers {
+            // One folder per promise: each import removes its own when done, never a sibling's still arriving.
+            let incoming = folder.appending(path: UUID().uuidString, directoryHint: .isDirectory)
+            guard (try? FileManager.default.createDirectory(at: incoming, withIntermediateDirectories: true)) != nil else {
+                problem = "Orilio couldn't receive the image"
+                continue
+            }
+            importing += 1
             receiver.receivePromisedFiles(atDestination: incoming, options: [:], operationQueue: .main) { [weak self] url, error in
                 MainActor.assumeIsolated {
                     guard let self else { return }
@@ -138,6 +139,7 @@ final class ScreenshotLibrary {
                             try? FileManager.default.removeItem(at: incoming)
                         }
                     } else {
+                        try? FileManager.default.removeItem(at: incoming)
                         self.problem = "An image couldn't be received"
                     }
                 }

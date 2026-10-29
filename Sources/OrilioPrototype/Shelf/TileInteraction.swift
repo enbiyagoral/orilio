@@ -88,8 +88,9 @@ final class TileInteractionView: NSView, NSDraggingSource {
     // MARK: NSDraggingSource
 
     func draggingSession(_ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
-        // Never `.move`: Finder would move the user's original out of its folder.
-        context == .outsideApplication ? [.copy, .generic] : []
+        // Never `.move`, nor `.generic`, which Finder takes as a move on the same volume: it would
+        // carry the user's original out of its folder.
+        context == .outsideApplication ? .copy : []
     }
 
     func draggingSession(_ session: NSDraggingSession, endedAt screenPoint: NSPoint, operation: NSDragOperation) {

@@ -77,7 +77,19 @@ actor ScreenshotStore {
     static func isManagedFileName(_ name: String, id: UUID) -> Bool {
         let parts = name.split(separator: ".", omittingEmptySubsequences: false)
         guard parts.count == 2, parts[0] == id.uuidString else { return false }
-        return (1...5).contains(parts[1].count) && parts[1].allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber) }
+        return isManagedExtension(String(parts[1]))
+    }
+
+    static func isManagedExtension(_ ext: String) -> Bool {
+        (1...5).contains(ext.count) && ext.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber) }
+    }
+
+    /// The copy's extension comes from what the image is, not its name: `photo.jpg_large` is a JPEG,
+    /// and a name the database wouldn't accept back would leave an orphan that vanishes on relaunch.
+    static func managedExtension(for url: URL) -> String {
+        let type = CGImageSourceCreateWithURL(url as CFURL, nil).flatMap(CGImageSourceGetType).flatMap { UTType($0 as String) }
+        let candidates = [type?.preferredFilenameExtension, url.pathExtension].compactMap { $0?.lowercased() }
+        return candidates.first(where: isManagedExtension) ?? "png"
     }
 
     nonisolated func thumbnailURL(for item: ScreenshotItem) -> URL {
@@ -116,8 +128,7 @@ actor ScreenshotStore {
         if try contains(hash: hash) { throw ImportError.duplicate }
 
         let id = UUID()
-        let ext = url.pathExtension.isEmpty ? "png" : url.pathExtension.lowercased()
-        let fileName = "\(id.uuidString).\(ext)"
+        let fileName = "\(id.uuidString).\(Self.managedExtension(for: url))"
         let fm = FileManager.default
         do {
             try fm.createDirectory(at: libraryDirectory, withIntermediateDirectories: true)

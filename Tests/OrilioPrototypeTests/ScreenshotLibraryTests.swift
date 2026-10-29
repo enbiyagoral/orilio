@@ -86,6 +86,16 @@ struct ScreenshotStoreTests {
         #expect(reopened == [first])
     }
 
+    @Test func aMisnamedImageKeepsItsPlaceAfterARestart() async throws {
+        let ws = Workspace()
+        let png = ws.image("photo.png", seed: 11)
+        let odd = ws.root.appending(path: "photo.jpg_large") // what a browser saves from some sites
+        try FileManager.default.moveItem(at: png, to: odd)
+        let item = try await ws.store().importFile(odd)
+        #expect(item.fileName.hasSuffix(".png")) // named by what it is
+        #expect(try await ws.store().all() == [item])
+    }
+
     @Test func removingDeletesOnlyOriliosCopy() async throws {
         let ws = Workspace()
         let store = ws.store()

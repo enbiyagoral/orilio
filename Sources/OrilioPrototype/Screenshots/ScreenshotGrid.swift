@@ -28,8 +28,8 @@ struct ScreenshotGrid: NSViewRepresentable {
         grid.register(ScreenshotCell.self, forItemWithIdentifier: ScreenshotCell.identifier)
         grid.dataSource = context.coordinator
         grid.delegate = context.coordinator
-        // Never `.move`: dragging a screenshot out leaves the library's copy in place.
-        grid.setDraggingSourceOperationMask([.copy, .generic], forLocal: false)
+        // Never `.move`, nor `.generic` (Finder's move on the same volume): the library's copy stays.
+        grid.setDraggingSourceOperationMask(.copy, forLocal: false)
         grid.setDraggingSourceOperationMask([], forLocal: true)
         grid.onOpen = { [weak coordinator = context.coordinator] in coordinator?.open($0) }
         grid.menuProvider = { [weak coordinator = context.coordinator] in coordinator?.menu(for: $0) }
