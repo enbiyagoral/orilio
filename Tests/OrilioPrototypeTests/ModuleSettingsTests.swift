@@ -36,6 +36,18 @@ struct ModuleSettingsTests {
         #expect(again.indicators == [.focus, .meeting])
     }
 
+    @Test func hideHandlersOfGoneIslandsDropOut() {
+        let modules = ModuleSettings(defaults: freshDefaults())
+        var hidden: [IslandTab] = []
+        let kept = NSObject()
+        modules.whenHidden(kept) { hidden.append($0) }
+        for _ in 0..<5 { modules.whenHidden(NSObject()) { _ in } } // displays that came and went
+        #expect(modules.hideHandlers.count == 2) // the live one and the newest
+        modules.setVisible(.notes, false)
+        #expect(hidden == [.notes])
+        _ = kept
+    }
+
     @Test func theLastModuleCantBeHidden() {
         let modules = ModuleSettings(defaults: freshDefaults())
         for tab in IslandTab.allCases { modules.setVisible(tab, false) }

@@ -393,7 +393,9 @@ final class IslandWindowController {
     /// To another display (pointer moved, a display was unplugged); the island's state goes with it.
     func move(to screen: ScreenInfo) {
         guard screen != self.screen else { return }
+        let sameDisplay = screen.id == self.screen.id
         self.screen = screen
+        if sameDisplay { return reposition() } // the Dock or the menu bar changed: no trip to make
         revealed = false
         guard panel.isVisible, !Theme.current.reducesMotion else { return reposition() }
         // A jump reads as a glitch: fade out where it was, then come down from the new display's top.
@@ -497,6 +499,8 @@ final class IslandWindowController {
         observers.forEach(NotificationCenter.default.removeObserver)
         observers = []
         model.onWillChangeState = nil
+        hint?.orderOut(nil)
+        hint = nil
         panel.orderOut(nil)
     }
 
@@ -590,6 +594,8 @@ final class IslandWindowController {
             let geometry = model.geometry
             // The design: the arrow starts about 88 pt below the top of the screen.
             hint.setFrameOrigin(NSPoint(x: (geometry.centerX - 230).rounded(), y: geometry.screenTop - 88 - 120))
+            // Already showing (the island's width or ears changed): it only follows, no fresh fade.
+            guard !hint.isVisible else { return }
             hint.alphaValue = 0
             hint.orderFrontRegardless()
             NSAnimationContext.runAnimationGroup { context in

@@ -31,6 +31,7 @@ final class IslandPositioner {
     private var observers: [(NotificationCenter, NSObjectProtocol)] = []
     private var pointerMonitor: Any?
     private var lastPointerCheck: TimeInterval = 0
+    private var trailingPointerCheck: Task<Void, Never>?
     private var edgeDwell: Task<Void, Never>?
     private var fullscreenRecheck: Task<Void, Never>?
     private var dragMonitor: Any?
@@ -233,6 +234,8 @@ final class IslandPositioner {
             NSEvent.removeMonitor(monitor)
             pointerMonitor = nil
             edgeDwell?.cancel()
+            trailingPointerCheck?.cancel()
+            trailingPointerCheck = nil
         }
     }
 
@@ -240,10 +243,24 @@ final class IslandPositioner {
     /// edge of a fullscreen one?
     private func pointerMoved(_ point: CGPoint) {
         let now = ProcessInfo.processInfo.systemUptime
-        guard now - lastPointerCheck >= Self.pointerThrottle else { return }
+        guard now - lastPointerCheck >= Self.pointerThrottle else {
+            // The last move of a burst still counts: the pointer may come to rest at the top edge
+            // just after a check, and no further event would come.
+            if trailingPointerCheck == nil {
+                trailingPointerCheck = Task { [weak self] in
+                    try? await Task.sleep(for: .seconds(Self.pointerThrottle))
+                    guard !Task.isCancelled, let self else { return }
+                    self.trailingPointerCheck = nil
+                    self.pointerMoved(NSEvent.mouseLocation)
+                }
+            }
+            return
+        }
         lastPointerCheck = now
         guard let display = ScreenResolver.display(at: point, in: screens),
               let screen = screens.first(where: { $0.id == display }) else { return }
+        // Left a fullscreen display (sideways too): what the pointer revealed there goes again.
+        for other in islands.values where other.screen.id != display { other.conceal() }
 
         // Follow the pointer, but never pull an open island out from under the user.
         if settings.placement == .pointer, display != pointerDisplay,

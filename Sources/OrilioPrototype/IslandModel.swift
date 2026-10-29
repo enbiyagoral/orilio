@@ -195,7 +195,7 @@ final class IslandModel {
         self.modules = modules
         self.live = live
         if !modules.isVisible(tab) { tab = modules.visible[0] }
-        modules.whenHidden { [weak self] in self?.moduleHidden($0) }
+        modules.whenHidden(self) { [weak self] in self?.moduleHidden($0) }
         self.mirror.whenChanged { [weak self] in self?.relayout() } // card → live mirror changes the size
         self.mirror.whenMustClose { [weak self] in if self?.tab == .mirror { self?.dismiss() } }
     }

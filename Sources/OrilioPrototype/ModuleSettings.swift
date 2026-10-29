@@ -36,9 +36,13 @@ final class ModuleSettings {
     @ObservationIgnored let store: PreferencesStore
     /// Called when a module is hidden, so it can stop its work (and give up what it reads).
     /// Every display's island registers (each moves off the hidden tab).
-    @ObservationIgnored private var hideHandlers: [(IslandTab) -> Void] = []
+    @ObservationIgnored private(set) var hideHandlers: [(owner: () -> AnyObject?, run: (IslandTab) -> Void)] = []
 
-    func whenHidden(_ handler: @escaping (IslandTab) -> Void) { hideHandlers.append(handler) }
+    /// Kept while `owner` lives: the islands of displays that went away drop out.
+    func whenHidden(_ owner: AnyObject, _ handler: @escaping (IslandTab) -> Void) {
+        hideHandlers.removeAll { $0.owner() == nil }
+        hideHandlers.append(({ [weak owner] in owner }, handler))
+    }
 
     init(store: PreferencesStore) {
         self.store = store
@@ -92,7 +96,7 @@ final class ModuleSettings {
             // A module other than Extensions has to stay (see `hidden`).
             guard visible.contains(where: { $0 != tab && $0 != .extensions }), !hidden.contains(tab) else { return }
             if tab == .mirror { preferences.mirrorEnabled = false } else { preferences.hiddenModules.append(tab.key) }
-            hideHandlers.forEach { $0(tab) }
+            hideHandlers.forEach { $0.run(tab) }
         }
     }
 
