@@ -153,16 +153,20 @@ final class ExtensionHost {
 
     @ObservationIgnored let store: ExtensionStore
     @ObservationIgnored private var connection: NSXPCConnection?
-    @ObservationIgnored private let broker = FetchBroker { id in await ExtensionHost.shared.grantedHosts(id) }
+    @ObservationIgnored private lazy var broker = FetchBroker { [weak self] id in await self?.grantedHosts(id) ?? [] }
+    /// The runner's connection: the XPC service, or an in-process listener in tests.
+    @ObservationIgnored private let makeConnection: @MainActor () -> NSXPCConnection
     @ObservationIgnored private var timers: [String: Task<Void, Never>] = [:]
     @ObservationIgnored private var loadedScripts = Set<String>()
     @ObservationIgnored private var wakeObserver: NSObjectProtocol?
     /// Off in tests: nothing is started and no notifications are touched.
     @ObservationIgnored private let startsRunner: Bool
 
-    init(store: ExtensionStore = ExtensionStore(), startsRunner: Bool = true) {
+    init(store: ExtensionStore = ExtensionStore(), startsRunner: Bool = true,
+         connection: @escaping @MainActor () -> NSXPCConnection = { NSXPCConnection(serviceName: ExtensionXPC.serviceName) }) {
         self.store = store
         self.startsRunner = startsRunner
+        makeConnection = connection
     }
 
     /// Loads what's installed and starts the enabled extensions. Once, at launch.
@@ -362,17 +366,17 @@ final class ExtensionHost {
 
     private func connectionProxy() -> ExtensionRunnerProtocol? {
         if connection == nil {
-            let connection = NSXPCConnection(serviceName: ExtensionXPC.serviceName)
+            let connection = makeConnection()
             connection.remoteObjectInterface = NSXPCInterface(with: ExtensionRunnerProtocol.self)
             connection.exportedInterface = NSXPCInterface(with: ExtensionHostProtocol.self)
             connection.exportedObject = broker
             // A late handler of an earlier connection must not drop the current one.
             let tag = ObjectIdentifier(connection)
-            connection.invalidationHandler = {
-                Task { @MainActor in ExtensionHost.shared.runnerWentAway(tag) }
+            connection.invalidationHandler = { [weak self] in
+                Task { @MainActor in self?.runnerWentAway(tag) }
             }
-            connection.interruptionHandler = {
-                Task { @MainActor in ExtensionHost.shared.runnerWentAway(tag) }
+            connection.interruptionHandler = { [weak self] in
+                Task { @MainActor in self?.runnerWentAway(tag) }
             }
             connection.resume()
             self.connection = connection
@@ -400,7 +404,8 @@ final class ExtensionHost {
     }
 
     private func restartRunner() {
-        if let pid = connection?.processIdentifier, pid > 0 { kill(pid, SIGKILL) }
+        // Never this process (an in-process runner in tests).
+        if let pid = connection?.processIdentifier, pid > 0, pid != getpid() { kill(pid, SIGKILL) }
         connection?.invalidate()
         runnerWentAway()
     }
