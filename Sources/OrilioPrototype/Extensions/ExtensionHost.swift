@@ -123,6 +123,12 @@ enum ExtensionPackage {
     static let maxScriptBytes = 512 * 1024
 
     static func read(_ folder: URL) throws -> ExtensionManifest {
+        // Plain files only: a link named main.js could hand the extension any file on the Mac.
+        for name in files {
+            let path = folder.appending(path: name).path
+            guard let type = try? FileManager.default.attributesOfItem(atPath: path)[.type] as? FileAttributeType else { continue }
+            guard type == .typeRegular else { throw ManifestError.invalid("\(name) (not a plain file)") }
+        }
         let manifest = try ManifestValidator.validate(try Data(contentsOf: folder.appending(path: "orilio-extension.json")))
         let script = folder.appending(path: "main.js")
         guard let size = try? script.resourceValues(forKeys: [.fileSizeKey]).fileSize, size <= maxScriptBytes else {

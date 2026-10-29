@@ -194,6 +194,14 @@ struct ExtensionCatalogTests {
         #expect(throws: CatalogError.mismatch("version")) { try ExtensionCatalog.verify(prayerFolder, against: other) }
     }
 
+    @Test func aLinkInAPackageIsRefused() throws {
+        let folder = scratch()
+        let fm = FileManager.default
+        try fm.copyItem(at: prayerFolder.appending(path: "orilio-extension.json"), to: folder.appending(path: "orilio-extension.json"))
+        try fm.createSymbolicLink(at: folder.appending(path: "main.js"), withDestinationURL: prayerFolder.appending(path: "main.js"))
+        #expect(throws: ManifestError.self) { try ExtensionPackage.read(folder) }
+    }
+
     @Test func aChecksumMismatchIsRefused() throws {
         let zip = Data("not really a zip".utf8)
         #expect(throws: CatalogError.checksum) { try ExtensionCatalog.unpack(zip, sha256: String(repeating: "0", count: 64)) }
