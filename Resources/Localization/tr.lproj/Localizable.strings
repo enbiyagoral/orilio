@@ -173,6 +173,7 @@
 "Capture" = "Çek";
 "Check for updates automatically" = "Güncellemeleri otomatik denetle";
 "Check now" = "Şimdi denetle";
+"Check that your Mac has free space. Orilio tries again with your next change." = "Mac’inizde boş yer olduğundan emin olun. Orilio bir sonraki değişikliğinizde yeniden dener.";
 "Checking for updates…" = "Güncellemeler denetleniyor…";
 "Choose a city" = "Şehir seçin";
 "Choose a folder with orilio-extension.json and main.js." = "orilio-extension.json ve main.js içeren bir klasör seçin.";
@@ -325,6 +326,7 @@
 "It grows out of %@ only when you reach for it." = "Yalnızca ona uzandığınızda açılır.";
 "It runs in its own sandboxed process and can only show content through Orilio’s widgets. You can change this any time." = "Kendi korumalı (sandbox) sürecinde çalışır ve içeriği yalnızca Orilio’nun bileşenleriyle gösterebilir. Bunu istediğiniz zaman değiştirebilirsiniz.";
 "It stays until you close it or press Esc." = "Siz kapatana ya da Esc’ye basana kadar açık kalır.";
+"It was kept as %@ in Orilio’s Notes folder." = "Orilio’nun Notlar klasöründe %@ adıyla saklandı.";
 "It would be great if the Shelf could…" = "Raf şunu yapabilse harika olurdu…";
 "Join" = "Katıl";
 "Join %@" = "%@ toplantısına katıl";
@@ -423,6 +425,7 @@
 "Note actions" = "Not işlemleri";
 "Notes & Tasks" = "Notlar ve Görevler";
 "Notes and Tasks" = "Notlar ve Görevler";
+"Notes couldn't be saved" = "Notlar kaydedilemedi";
 "Nothing beyond showing content in Orilio’s widgets." = "Orilio’nun bileşenlerinde içerik göstermenin ötesinde hiçbir şey.";
 "Nothing else on your calendars today." = "Takvimlerinizde bugün başka bir şey yok.";
 "Nothing else today" = "Bugün başka bir şey yok";
@@ -483,6 +486,7 @@
 "Orilio is up to date" = "Orilio güncel";
 "Orilio island" = "Orilio adası";
 "Orilio isn't allowed to control %@" = "Orilio’nun %@ uygulamasını kontrol etme izni yok";
+"Orilio left the file as it is and won't save over it. Restart Orilio to try again." = "Orilio dosyayı olduğu gibi bıraktı ve üzerine kaydetmeyecek. Yeniden denemek için Orilio’yu yeniden başlatın.";
 "Orilio lives here now. Hover %@ any time." = "Orilio artık burada. İstediğiniz zaman üzerine gelin.";
 "Orilio reads events from calendars already added to this Mac — iCloud, Google, Outlook. Nothing leaves your Mac." = "Orilio etkinlikleri bu Mac’e zaten eklenmiş takvimlerden okur — iCloud, Google, Outlook. Hiçbir şey Mac’inizden çıkmaz.";
 "Orilio reads the calendars on this Mac; macOS asks first." = "Orilio bu Mac’teki takvimleri okur; macOS önce sorar.";
@@ -742,6 +746,8 @@
 "You're free" = "Boştasınız";
 "Your Mac was asleep, so Orilio stayed quiet." = "Mac’iniz uykudaydı, bu yüzden Orilio sessiz kaldı.";
 "Your Mail app is ready" = "Mail uygulamanız hazır";
+"Your notes couldn't be read" = "Notlarınız okunamadı";
+"Your notes file was damaged" = "Notlar dosyanız bozulmuştu";
 "Your screenshot library" = "Ekran görüntüsü arşiviniz";
 "Your work is never covered for long." = "Çalışmanız hiçbir zaman uzun süre kapanmaz.";
 "a city you pick — no GPS" = "seçtiğiniz bir şehir — GPS yok";

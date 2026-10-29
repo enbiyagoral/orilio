@@ -18,19 +18,43 @@ struct NotesPanel: View {
     @Bindable var module: NotesModule
 
     var body: some View {
-        HStack(alignment: .top, spacing: 16) {
-            VStack(alignment: .leading, spacing: 8) {
-                NotesHeader(module: module)
-                if module.browsing {
-                    NotesList(module: module)
-                } else {
-                    NoteEditor(module: module)
+        VStack(alignment: .leading, spacing: 10) {
+            NotesNotice(module: module)
+            HStack(alignment: .top, spacing: 16) {
+                VStack(alignment: .leading, spacing: 8) {
+                    NotesHeader(module: module)
+                    if module.browsing {
+                        NotesList(module: module)
+                    } else {
+                        NoteEditor(module: module)
+                    }
                 }
+                .frame(width: 300)
+                TaskList(module: module)
             }
-            .frame(width: 300)
-            TaskList(module: module)
         }
         .frame(maxHeight: .infinity, alignment: .top)
+    }
+}
+
+/// What went wrong with the notes file, so nothing is lost without a word.
+private struct NotesNotice: View {
+    let module: NotesModule
+
+    var body: some View {
+        if module.unreadable {
+            StatusCard(tone: .warn, symbol: "exclamationmark.triangle", title: "Your notes couldn't be read",
+                       detail: "Orilio left the file as it is and won't save over it. Restart Orilio to try again.", layout: .banner)
+        } else if module.saveFailed {
+            StatusCard(tone: .warn, symbol: "exclamationmark.triangle", title: "Notes couldn't be saved",
+                       detail: "Check that your Mac has free space. Orilio tries again with your next change.",
+                       primary: .init("Try again") { Task { await module.saveNow() } }, layout: .banner)
+        } else if let backup = module.recoveredBackup {
+            StatusCard(tone: .warn, symbol: "doc.badge.clock", title: "Your notes file was damaged",
+                       detail: String(localized: "It was kept as \(backup) in Orilio’s Notes folder."),
+                       primary: .init("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([module.backupURL(backup)]) },
+                       secondary: .init("Dismiss") { module.dismissRecovered() }, layout: .banner)
+        }
     }
 }
 

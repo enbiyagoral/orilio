@@ -235,3 +235,29 @@ struct NotesUnreadableFileTests {
     }
 }
 
+
+/// QA-1: a failed save (a full disk, a folder that can't be written) was swallowed, so edits were lost
+/// without a word. The panel now says so, and the next save that works clears it.
+@MainActor
+struct NotesSaveFailureTests {
+    @Test func aFailedSaveIsReported() async throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: "orilio-notes-\(UUID().uuidString)")
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: directory.path)
+            try? FileManager.default.removeItem(at: directory)
+        }
+        let module = NotesModule(store: NotesStore(directory: directory))
+        await module.load()
+        module.newNote()
+        module.currentText = "First"
+        await module.saveNow()
+        #expect(!module.saveFailed)
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: directory.path) // can't be written
+        module.currentText = "Second"
+        await module.saveNow()
+        #expect(module.saveFailed)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: directory.path)
+        await module.saveNow()
+        #expect(!module.saveFailed)
+    }
+}

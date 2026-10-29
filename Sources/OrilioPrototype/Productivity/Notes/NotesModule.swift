@@ -17,6 +17,13 @@ final class NotesModule {
     var query = ""
     /// The unreadable file Orilio kept aside on the last load, if any.
     private(set) var recoveredBackup: String?
+    /// The last save didn't work (a full disk, a folder that can't be written); the panel says so.
+    private(set) var saveFailed = false
+    /// The file is there but couldn't be read: nothing is saved over it this session.
+    private(set) var unreadable = false
+
+    func dismissRecovered() { recoveredBackup = nil }
+    func backupURL(_ name: String) -> URL { store.directory.appending(path: name) }
 
     @ObservationIgnored private let store: NotesStore
     @ObservationIgnored let now: @MainActor () -> Date
@@ -40,6 +47,7 @@ final class NotesModule {
             tasks = file.tasks
             recoveredBackup = backup
         case .unavailable:
+            unreadable = true
             return // `loaded` stays false, so nothing is saved over the file; the next launch tries again
         }
         loaded = true
@@ -199,17 +207,18 @@ final class NotesModule {
         guard loaded else { return } // never overwrite a file that hasn't been read yet
         pendingSave?.cancel()
         let contents = contents
-        pendingSave = Task { [store] in
+        pendingSave = Task { [weak self, store] in
             try? await Task.sleep(for: Self.saveDelay)
             guard !Task.isCancelled else { return }
-            try? await store.save(contents)
+            let failed = (try? await store.save(contents)) == nil
+            self?.saveFailed = failed
         }
     }
 
     func saveNow() async {
         pendingSave?.cancel()
         guard loaded else { return }
-        try? await store.save(contents)
+        saveFailed = (try? await store.save(contents)) == nil
     }
 
     var markdown: String { NotesPolicy.markdown(notes: notes.filter { !$0.isBlank }, tasks: tasks) }
@@ -221,6 +230,10 @@ final class NotesModule {
         panel.allowedContentTypes = [.init(filenameExtension: "md") ?? .plainText]
         NSApp.activate()
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        try? markdown.write(to: url, atomically: true, encoding: .utf8)
+        do {
+            try markdown.write(to: url, atomically: true, encoding: .utf8)
+        } catch {
+            NSAlert(error: error).runModal() // never a silent "exported"
+        }
     }
 }
