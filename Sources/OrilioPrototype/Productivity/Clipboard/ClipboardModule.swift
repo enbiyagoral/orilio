@@ -32,17 +32,27 @@ actor ClipboardStore {
 
     nonisolated func imageURL(_ name: String) -> URL { directory.appending(path: "Images/\(name)") }
 
-    /// A missing or corrupt file loads as an empty history; entries naming a file that isn't
-    /// their own managed image are dropped.
+    /// Saving is off: the history was there but couldn't be read, nor put aside.
+    private var saveBlocked = false
+
+    /// A missing file loads as an empty history. One that can't be read is put aside first (pinned
+    /// items included), never saved over. Entries naming a file that isn't their own managed image
+    /// are dropped.
     func load() -> [ClipItem] {
-        guard let data = try? Data(contentsOf: directory.appending(path: "history.json")),
-              let file = try? JSONDecoder().decode(File.self, from: data) else { return [] }
-        return file.items.filter { item in
+        let file = directory.appending(path: "history.json")
+        guard FileManager.default.fileExists(atPath: file.path) else { return [] }
+        guard let data = try? Data(contentsOf: file), let decoded = try? JSONDecoder().decode(File.self, from: data) else {
+            let aside = directory.appending(path: "history-unreadable-\(Int(Date().timeIntervalSince1970)).json")
+            if (try? FileManager.default.moveItem(at: file, to: aside)) == nil { saveBlocked = true }
+            return []
+        }
+        return decoded.items.filter { item in
             item.imageFileName.map { ClipboardPolicy.isManagedImageName($0, id: item.id) } ?? (item.kind != .image)
         }
     }
 
     func save(_ items: [ClipItem]) throws {
+        guard !saveBlocked else { throw CocoaError(.fileWriteNoPermission) } // never over a history we couldn't read
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try JSONEncoder().encode(File(items: items)).write(to: directory.appending(path: "history.json"), options: .atomic)
     }

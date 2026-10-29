@@ -358,3 +358,22 @@ struct ClipboardExcludedSwitchTests {
         #expect(h.module.items.map(\.text) == ["hello"])
     }
 }
+
+/// QA-1: a clipboard history that couldn't be read loaded as empty, and the next copy saved over it,
+/// pinned items included. It is now put aside first.
+@MainActor
+struct ClipboardUnreadableHistoryTests {
+    @Test func anUnreadableHistoryIsKeptAside() async throws {
+        let h = Harness()
+        try FileManager.default.createDirectory(at: h.directory, withIntermediateDirectories: true)
+        let original = Data(#"{"version":99,"items":"future format"}"#.utf8)
+        try original.write(to: h.directory.appending(path: "history.json"))
+        await h.module.enable()
+        h.board.copy("after the bad file")
+        h.module.check()
+        await h.module.saveNow()
+        let aside = try FileManager.default.contentsOfDirectory(atPath: h.directory.path).filter { $0.hasPrefix("history-unreadable-") }
+        #expect(aside.count == 1)
+        #expect(try aside.first.map { try Data(contentsOf: h.directory.appending(path: $0)) } == original)
+    }
+}
