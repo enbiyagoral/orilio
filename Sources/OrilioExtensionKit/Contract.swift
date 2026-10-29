@@ -185,16 +185,21 @@ enum ISO8601 {
 
 public enum ExtensionLimits {
     public static let reminders = 24
+    /// A reminder must be set at least this far ahead, and no more than `remindersPerHour` go off in any hour.
+    public static let reminderLead: TimeInterval = 60
+    public static let remindersPerHour = 6
     public static let actions = 3
     public static let sections = 4
     public static let rows = 8
     /// A call (refresh, action) must answer within this.
     public static let callTimeout: Duration = .seconds(5)
-    /// The runner quits after a call that left it bigger than this; the host starts it again.
+    /// After a call that left the runner bigger than this, the host restarts it.
     public static let memoryBudgetBytes: UInt64 = 256 * 1024 * 1024
     public static let storageBytes = 64 * 1024
     public static let fetchBytes = 1024 * 1024
     public static let fetchTimeout: TimeInterval = 10
+    /// Fetches one extension may have in flight; more fail at once.
+    public static let fetchesInFlight = 4
 }
 
 // MARK: - What goes over XPC

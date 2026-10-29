@@ -43,9 +43,8 @@ final class Runner: NSObject, ExtensionRunnerProtocol, @unchecked Sendable {
             engine.call(id: extensionID, function: function, context: context) { outcome in
                 switch outcome {
                 case .success(let callReply):
+                    // Over budget, the app restarts this process once it has the answer.
                     reply(try? JSONEncoder().encode(callReply), nil)
-                    // Over budget: answer, then quit; the app starts a fresh process for the next call.
-                    if callReply.residentBytes > ExtensionLimits.memoryBudgetBytes { exit(3) }
                 case .failure(let error):
                     reply(nil, error.localizedDescription)
                 }

@@ -43,7 +43,14 @@ public final class ExtensionEngine: @unchecked Sendable {
         var thrown: String?
         context.exceptionHandler = { _, exception in thrown = exception?.toString() }
         // Nothing from the outside world but what is installed below.
-        context.evaluateScript("delete globalThis.eval; delete globalThis.Function.prototype.constructor;")
+        // Nothing that compiles a string into code: `eval`, `Function`, and the async and generator
+        // function constructors that every such function still reaches through `.constructor`.
+        context.evaluateScript("""
+        for (const f of [function () {}, async function () {}, function* () {}, async function* () {}]) {
+          delete Object.getPrototypeOf(f).constructor;
+        }
+        delete globalThis.eval; delete globalThis.Function;
+        """)
         installAPI(in: context, id: id, manifest: manifest)
         context.evaluateScript(script, withSourceURL: URL(string: "orilio-extension://\(id)/main.js"))
         if let thrown { throw EngineError.message("The script failed to load: \(thrown)") }

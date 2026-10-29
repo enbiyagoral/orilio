@@ -71,8 +71,19 @@ struct ExtensionContractTests {
     @Test func remindersArePlannedSoonestFirstAndUnique() {
         let now = Date()
         let r = { (id: String, s: TimeInterval) in ExtensionResult.Reminder(id: id, date: now.addingTimeInterval(s), title: id) }
-        let plan = ReminderPlan.upcoming([r("b", 120), r("past", -60), r("a", 60), r("a", 90)], now: now)
-        #expect(plan.map(\.id) == ["a", "b"])
+        let plan = ReminderPlan.upcoming([r("b", 120), r("past", -60), r("a", 60), r("a", 90), r("now", 1)], now: now)
+        #expect(plan.map(\.id) == ["a", "b"]) // "now" is inside the lead time
+    }
+
+    @Test func noMoreThanTheHourlyCapGoOffInAnyHour() {
+        let now = Date()
+        let r = { (id: String, s: TimeInterval) in ExtensionResult.Reminder(id: id, date: now.addingTimeInterval(s), title: id) }
+        let burst = (0..<10).map { r("r\($0)", 120 + Double($0) * 60) }
+        #expect(ReminderPlan.upcoming(burst, now: now).count == ExtensionLimits.remindersPerHour)
+        // What already went off counts, so a run of results can't add up past it.
+        let earlier = Array(repeating: now.addingTimeInterval(-60), count: ExtensionLimits.remindersPerHour)
+        #expect(ReminderPlan.upcoming(burst, now: now, earlier: earlier).isEmpty)
+        #expect(ReminderPlan.upcoming([r("later", 3_700)], now: now, earlier: earlier).map(\.id) == ["later"])
     }
 }
 

@@ -39,6 +39,23 @@ struct PrayerTimesExtensionTests {
         return engine
     }
 
+    @Test func aScriptCantCompileStringsIntoCode() async throws {
+        let engine = ExtensionEngine(queue: queue) { _, _, _, _, completion in completion(nil, 0, "offline") }
+        let manifest = try ManifestValidator.validate(Data(contentsOf: prayerFolder.appending(path: "orilio-extension.json")))
+        let script = """
+        function refresh() {
+          // Each would hand back a freshly compiled function (or eval's 1) if it still worked.
+          const tries = [() => eval("() => 1"), () => Function("return 1"), () => (function () {}).constructor("return 1"),
+                         () => (async function () {}).constructor("return 1"), () => (function* () {}).constructor("yield 1"),
+                         () => (async function* () {}).constructor("yield 1")];
+          return { compiled: tries.filter((t) => { try { return typeof t() === "function"; } catch { return false; } }).length };
+        }
+        """
+        try queue.sync { try engine.load(id: "probe", script: script, manifest: manifest) }
+        let reply = try await run(engine, queue, id: "probe", istanbul("2026-10-28T13:30:00Z")).get()
+        #expect(String(decoding: reply.result, as: UTF8.self) == #"{"compiled":0}"#)
+    }
+
     @Test func theManifestIsValid() throws {
         let manifest = try ManifestValidator.validate(Data(contentsOf: prayerFolder.appending(path: "orilio-extension.json")))
         #expect(manifest.permissions.network == ["ezanvakti.emushaf.net"]) // Diyanet's times, and nothing else

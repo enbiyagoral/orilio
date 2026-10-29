@@ -277,6 +277,9 @@ final class ExtensionHost {
                                           locale: Locale.preferredLanguages.first ?? "en", timeZone: TimeZone.current.identifier, action: action)
                 let reply = try await withTimeout { try await self.send(id, function: function, context: context) }
                 let result = try ExtensionResult.decode(reply.result).limited()
+                if reply.residentBytes > ExtensionLimits.memoryBudgetBytes { restartRunner() } // the answer is in; start fresh
+                // Uninstalled or turned off while it ran: its answer is no longer wanted.
+                guard let ext = installed.first(where: { $0.id == id }), ext.state.enabled else { return }
                 update(id) {
                     $0.result = result
                     if $0.manifest.permissions.storage { $0.state.storage = reply.storage }
@@ -285,6 +288,8 @@ final class ExtensionHost {
                 saveStates()
                 if ext.manifest.provides.contains(.reminders), ext.state.granted.notifications {
                     await ReminderPoster.replace(id, with: result.reminders ?? [], extensionName: ext.manifest.name)
+                    // Gone while they were being set: take them back.
+                    if !installed.contains(where: { $0.id == id && $0.state.enabled }) { await ReminderPoster.replace(id, with: []) }
                 }
                 schedule(id, refreshAt: result.refreshAt)
                 scheduleDue()
@@ -481,24 +486,33 @@ struct ExtensionEarContent: Equatable {
 // MARK: - Fetches
 
 /// The app side of `orilio.fetch`: HTTPS to the extension's declared and allowed hosts only, redirects
-/// included, with size and time limits. No cookies or cache are shared with anything else.
-final class FetchBroker: NSObject, ExtensionHostProtocol, URLSessionTaskDelegate, @unchecked Sendable {
+/// included, with size, time and in-flight limits. No cookies or cache are shared with anything else.
+final class FetchBroker: NSObject, ExtensionHostProtocol, @unchecked Sendable {
     /// The hosts an extension may reach (asked on the main actor).
     var permissions: @Sendable (String) async -> [String] = { _ in [] }
+    /// Guards `inFlight`, which fetch tasks on any thread change.
     private let lock = NSLock()
-    private var allowed: [Int: [String]] = [:] // per task, for redirects
+    private var inFlight: [String: Int] = [:]
 
     private lazy var session: URLSession = {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = ExtensionLimits.fetchTimeout
+        configuration.timeoutIntervalForResource = ExtensionLimits.fetchTimeout // a slow trickle ends too
         configuration.httpCookieStorage = nil
         configuration.urlCache = nil
         configuration.httpAdditionalHeaders = ["User-Agent": "Orilio-Extension"]
-        return URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
+        return URLSession(configuration: configuration)
     }()
 
     func fetch(extensionID: String, url: String, method: String, body: Data?, reply: @escaping @Sendable (Data?, Int, String?) -> Void) {
+        let admitted = lock.withLock {
+            guard inFlight[extensionID, default: 0] < ExtensionLimits.fetchesInFlight else { return false }
+            inFlight[extensionID, default: 0] += 1
+            return true
+        }
+        guard admitted else { return reply(nil, 0, "Too many fetches at once") }
         Task {
+            defer { lock.withLock { inFlight[extensionID, default: 1] -= 1 } }
             let hosts = await permissions(extensionID)
             guard let target = URL(string: url), DomainPolicy.allows(target, hosts: hosts) else {
                 return reply(nil, 0, "Blocked: \(URL(string: url)?.host ?? url) isn't one of this extension's domains")
@@ -507,36 +521,62 @@ final class FetchBroker: NSObject, ExtensionHostProtocol, URLSessionTaskDelegate
             var request = URLRequest(url: target)
             request.httpMethod = method.uppercased()
             request.httpBody = body
-            let task = session.dataTask(with: request) { data, response, error in
-                if let error { return reply(nil, 0, error.localizedDescription) }
-                guard let data, data.count <= ExtensionLimits.fetchBytes else { return reply(nil, 0, "The response is too large") }
+            do {
+                let (bytes, response) = try await session.bytes(for: request, delegate: RedirectGuard(hosts: hosts))
+                // Counted as it arrives: past the limit, the download stops rather than filling memory.
+                var data = Data()
+                for try await byte in bytes {
+                    guard data.count < ExtensionLimits.fetchBytes else { return reply(nil, 0, "The response is too large") }
+                    data.append(byte)
+                }
                 reply(data, (response as? HTTPURLResponse)?.statusCode ?? 0, nil)
+            } catch {
+                reply(nil, 0, error.localizedDescription)
             }
-            lock.withLock { allowed[task.taskIdentifier] = hosts }
-            task.resume()
         }
     }
+}
 
-    /// A redirect to a host the extension didn't declare is refused.
+/// A redirect to a host the extension didn't declare is refused.
+private final class RedirectGuard: NSObject, URLSessionTaskDelegate, Sendable {
+    let hosts: [String]
+    init(hosts: [String]) { self.hosts = hosts }
+
     func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
-                    newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
-        let hosts = lock.withLock { allowed[task.taskIdentifier] ?? [] }
-        completionHandler(request.url.map { DomainPolicy.allows($0, hosts: hosts) } == true ? request : nil)
+                    newRequest request: URLRequest) async -> URLRequest? {
+        request.url.map { DomainPolicy.allows($0, hosts: hosts) } == true ? request : nil
     }
 }
 
 // MARK: - Reminders
 
 /// Schedules an extension's reminders under Orilio's identity, replacing its previous set each time.
+@MainActor
 enum ReminderPoster {
     static func prefix(_ id: String) -> String { "ext.\(id)." }
+    /// When each extension's reminders were set to go off, so results in a row can't add up past the hourly cap.
+    private static var scheduled: [String: [Date]] = [:]
 
     static func replace(_ id: String, with reminders: [ExtensionResult.Reminder], extensionName: String = "") async {
         let center = UNUserNotificationCenter.current()
-        let pending = await center.pendingNotificationRequests().map(\.identifier).filter { $0.hasPrefix(prefix(id)) }
-        center.removePendingNotificationRequests(withIdentifiers: pending)
+        let now = Date()
+        let pending = await center.pendingNotificationRequests().filter { $0.identifier.hasPrefix(prefix(id)) }
+        // One about to go off that the extension still wants stays: set again, it would fall inside the lead time.
+        let wanted = Set(reminders.map { prefix(id) + $0.id })
+        let kept = pending.filter {
+            wanted.contains($0.identifier)
+                && ($0.trigger as? UNTimeIntervalNotificationTrigger)?.nextTriggerDate().map { $0 < now.addingTimeInterval(ExtensionLimits.reminderLead) } == true
+        }
+        let keptIDs = Set(kept.map(\.identifier))
+        center.removePendingNotificationRequests(withIdentifiers: pending.map(\.identifier).filter { !keptIDs.contains($0) })
+        // What went off in the last hour, and what stays, count against the cap.
+        let earlier = (scheduled[id] ?? []).filter { $0 <= now && $0 > now.addingTimeInterval(-3_600) }
+            + kept.compactMap { ($0.trigger as? UNTimeIntervalNotificationTrigger)?.nextTriggerDate() }
+        scheduled[id] = earlier
         guard !reminders.isEmpty, await center.notificationSettings().authorizationStatus == .authorized else { return }
-        for reminder in ReminderPlan.upcoming(reminders, now: Date()) {
+        let plan = ReminderPlan.upcoming(reminders.filter { !keptIDs.contains(prefix(id) + $0.id) }, now: now, earlier: earlier)
+        scheduled[id, default: []] += plan.map(\.date)
+        for reminder in plan {
             let content = UNMutableNotificationContent()
             content.title = L(extensionName)
             content.body = [reminder.title, reminder.body].compactMap { $0 }.joined(separator: " · ")
@@ -549,11 +589,20 @@ enum ReminderPoster {
 
 /// Which reminders to schedule. Pure.
 enum ReminderPlan {
-    /// Future ones only, soonest first, unique by id, within the limit.
-    static func upcoming(_ reminders: [ExtensionResult.Reminder], now: Date) -> [ExtensionResult.Reminder] {
+    /// At least the lead time ahead, soonest first, unique by id, no more than the hourly cap in any
+    /// hour (counting `earlier` ones), within the limit.
+    static func upcoming(_ reminders: [ExtensionResult.Reminder], now: Date, earlier: [Date] = []) -> [ExtensionResult.Reminder] {
         var seen = Set<String>()
-        return reminders.filter { $0.date > now && seen.insert($0.id).inserted }
-            .sorted { $0.date < $1.date }
-            .prefix(ExtensionLimits.reminders).map { $0 }
+        var times = earlier
+        var plan: [ExtensionResult.Reminder] = []
+        for reminder in reminders.sorted(by: { $0.date < $1.date })
+        where reminder.date >= now.addingTimeInterval(ExtensionLimits.reminderLead) && seen.insert(reminder.id).inserted {
+            let hour = reminder.date.addingTimeInterval(-3_600)
+            guard times.filter({ $0 > hour && $0 <= reminder.date }).count < ExtensionLimits.remindersPerHour else { continue }
+            times.append(reminder.date)
+            plan.append(reminder)
+            if plan.count == ExtensionLimits.reminders { break }
+        }
+        return plan
     }
 }
