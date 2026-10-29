@@ -289,7 +289,7 @@
 "Free, open-source extensions that live in the island — built by the community." = "Adada yaşayan, ücretsiz ve açık kaynaklı eklentiler — topluluk tarafından.";
 "From installed extensions · sandboxed" = "Yüklü eklentilerden · korumalı";
 "From the event’s location, notes or URL field" = "Etkinliğin konum, not veya URL alanından";
-"From ⇧⌘3, ⇧⌘4 or ⇧⌘5, from now on; the originals stay in %@. macOS asks once for access to that folder." = "Bundan sonra ⇧⌘3, ⇧⌘4 veya ⇧⌘5 ile çekilenler; orijinaller %@ klasöründe kalır. macOS o klasöre erişim için bir kez sorar.";
+"From ⇧⌘3, ⇧⌘4 or ⇧⌘5 from now on, saved or copied to the clipboard; saved originals stay in %@. macOS asks once for access to that folder." = "Bundan sonra ⇧⌘3, ⇧⌘4 veya ⇧⌘5 ile çekilenler, kaydedilen de panoya kopyalanan da; kaydedilen orijinaller %@ klasöründe kalır. macOS o klasöre erişim için bir kez sorar.";
 "GNU General Public License v3" = "GNU Genel Kamu Lisansı v3";
 "General" = "Genel";
 "Get started" = "Başlayın";
@@ -681,7 +681,7 @@
 "This is the island." = "Bu, ada.";
 "Times and reminders for your city" = "Şehriniz için vakitler ve hatırlatmalar";
 "Today" = "Bugün";
-"Today’s five times when opened" = "Açılınca günün beş vakti";
+"Today’s times and sunrise when opened" = "Açılınca günün vakitleri ve güneşin doğuşu";
 "Toggle the island" = "Adayı aç/kapat";
 "Tomorrow" = "Yarın";
 "Trackpad haptics" = "İzleme dörtgeni dokunsal geri bildirimi";

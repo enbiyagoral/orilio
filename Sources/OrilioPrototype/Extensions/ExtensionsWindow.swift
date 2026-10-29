@@ -11,8 +11,21 @@ import UserNotifications
 // The Extensions window (the Extensions · ExtCatalog design): browse, install with consent, turn on
 // or off, update and uninstall. Plus the settings form each extension's manifest describes.
 
-private let mint = SettingsDesign.hex(0x2BFFB8)
-private let onMint = SettingsDesign.hex(0x00140D)
+/// The design's colors on dark; on light, the Settings window's (graphite buttons, darker mint).
+private let mint = SettingsDesign.accent
+private let mintText = SettingsDesign.accentText
+private let buttonFill = SettingsDesign.primaryFill
+private let buttonText = SettingsDesign.primaryText
+private let ink = SettingsDesign.ink
+/// The chosen chip: white with black text on dark, graphite with white text on light.
+private let chosenText = SettingsDesign.adaptive(dark: .black, light: .white)
+private func surface(_ dark: UInt32, light: UInt32) -> Color { SettingsDesign.adaptive(dark: SettingsDesign.ns(dark), light: SettingsDesign.ns(light)) }
+
+/// The design's white at `opacity` on dark. On light: black tints for fills, Settings' greys for text.
+private func fade(_ opacity: Double) -> Color {
+    SettingsDesign.adaptive(dark: .white.withAlphaComponent(opacity),
+                            light: opacity >= 0.3 ? SettingsDesign.ns(opacity >= 0.7 ? 0x3A3A3C : 0x6E6E73) : .black.withAlphaComponent(opacity * 0.9))
+}
 private let mono = Font.system(size: 11.5, design: .monospaced)
 
 @MainActor
@@ -28,8 +41,7 @@ enum ExtensionsWindow {
             window.styleMask = [.titled, .closable, .miniaturizable, .fullSizeContentView]
             window.titlebarAppearsTransparent = true
             window.titleVisibility = .hidden
-            window.appearance = NSAppearance(named: .darkAqua) // the design is dark, like the island it fills
-            window.backgroundColor = SettingsDesign.ns(0x17171B)
+            window.backgroundColor = NSColor(name: nil) { $0.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? SettingsDesign.ns(0x17171B) : .white }
             window.setFrame(NSRect(x: 0, y: 0, width: 1280, height: 780), display: false)
             window.isReleasedWhenClosed = false
             window.center()
@@ -74,6 +86,11 @@ struct ExtensionsView: View {
         }
     }
 
+    private var categories: [Category] {
+        let used = Set(catalog.entries.map(\.category))
+        return Category.allCases.filter { $0 == .all || used.contains($0.rawValue) }
+    }
+
     private var showsBuild: Bool {
         let q = query.trimmingCharacters(in: .whitespaces).lowercased()
         return q.isEmpty || "build your own".contains(q)
@@ -85,19 +102,19 @@ struct ExtensionsView: View {
                 .font(.system(size: 13.5, weight: .semibold))
                 .frame(maxWidth: .infinity)
                 .frame(height: 48)
-                .background(SettingsDesign.hex(0x1F1F24))
-                .overlay(alignment: .bottom) { Rectangle().fill(.white.opacity(0.06)).frame(height: 1) }
+                .background(surface(0x1F1F24, light: 0xF5F5F7))
+                .overlay(alignment: .bottom) { Rectangle().fill(fade(0.06)).frame(height: 1) }
             HStack(spacing: 0) {
                 browser
-                Rectangle().fill(.white.opacity(0.06)).frame(width: 1)
+                Rectangle().fill(fade(0.06)).frame(width: 1)
                 detail
                     .frame(width: 400)
                     .frame(maxHeight: .infinity, alignment: .top)
-                    .background(.white.opacity(0.02))
+                    .background(fade(0.02))
             }
         }
-        .foregroundStyle(.white)
-        .background(SettingsDesign.hex(0x17171B))
+        .foregroundStyle(ink)
+        .background(surface(0x17171B, light: 0xFFFFFF))
         .frame(width: 1280, height: 780)
         .ignoresSafeArea()
         .onAppear { if selection == nil { selection = catalog.entries.first.map { .entry($0.id) } ?? .build } }
@@ -113,32 +130,35 @@ struct ExtensionsView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Make your notch yours.").font(.system(size: 32, weight: .semibold)).tracking(-0.96)
                     Text("Free, open-source extensions that live in the island — built by the community.")
-                        .font(.system(size: 14)).foregroundStyle(.white.opacity(0.6))
+                        .font(.system(size: 14)).foregroundStyle(fade(0.6))
                 }
                 Spacer(minLength: 0)
                 HStack(spacing: 8) {
-                    Image(systemName: "magnifyingglass").font(.system(size: 12)).foregroundStyle(.white.opacity(0.5))
-                    TextField("", text: $query, prompt: Text("Search extensions").foregroundStyle(.white.opacity(0.4)))
+                    Image(systemName: "magnifyingglass").font(.system(size: 12)).foregroundStyle(fade(0.5))
+                    TextField("", text: $query, prompt: Text("Search extensions").foregroundStyle(fade(0.4)))
                         .textFieldStyle(.plain).font(.system(size: 13))
                         .accessibilityLabel("Search extensions")
                 }
                 .padding(.horizontal, 12)
                 .frame(width: 260, height: 36)
-                .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                .background(fade(0.08), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
             }
-            HStack(spacing: 6) {
-                ForEach(Category.allCases, id: \.self) { item in
-                    let active = item == category
-                    Button { category = item } label: {
-                        Text(L(item.label))
-                            .font(.system(size: 12.5, weight: .medium))
-                            .foregroundStyle(active ? .black : .white.opacity(0.8))
-                            .padding(.horizontal, 14).frame(height: 30)
-                            .background(active ? .white.opacity(0.9) : .white.opacity(0.07), in: Capsule())
-                            .contentShape(Capsule())
+            // Only categories something is in; with one (or none) there's nothing to filter.
+            if categories.count > 2 {
+                HStack(spacing: 6) {
+                    ForEach(categories, id: \.self) { item in
+                        let active = item == category
+                        Button { category = item } label: {
+                            Text(L(item.label))
+                                .font(.system(size: 12.5, weight: .medium))
+                                .foregroundStyle(active ? chosenText : fade(0.8))
+                                .padding(.horizontal, 14).frame(height: 30)
+                                .background(active ? fade(0.9) : fade(0.07), in: Capsule())
+                                .contentShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityAddTraits(active ? .isSelected : [])
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityAddTraits(active ? .isSelected : [])
                 }
             }
             if catalog.offline {
@@ -187,30 +207,30 @@ struct ExtensionsView: View {
                     Tile(tint: tile, icon: icon, size: 46, radius: 13)
                     Spacer()
                     if installed {
-                        Text("Installed").font(.system(size: 11, weight: .semibold)).foregroundStyle(mint)
+                        Text("Installed").font(.system(size: 11, weight: .semibold)).foregroundStyle(mintText)
                             .padding(.horizontal, 8).frame(height: 22)
                             .background(mint.opacity(0.14), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
                     }
                 }
                 VStack(alignment: .leading, spacing: 3) {
                     Text(L(name)).font(.system(size: 15.5, weight: .semibold))
-                    Text(L(tagline)).font(.system(size: 12.5)).lineSpacing(12.5 * 0.4 - 2).foregroundStyle(.white.opacity(0.58))
+                    Text(L(tagline)).font(.system(size: 12.5)).lineSpacing(12.5 * 0.4 - 2).foregroundStyle(fade(0.58))
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 0)
                 HStack(spacing: 6) {
                     ForEach(chips, id: \.self) { chip in
-                        Text(L(chip)).font(.system(size: 11)).foregroundStyle(.white.opacity(0.7))
+                        Text(L(chip)).font(.system(size: 11)).foregroundStyle(fade(0.7))
                             .padding(.horizontal, 8).frame(height: 22)
-                            .background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                            .background(fade(0.07), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                     }
                 }
             }
             .padding(18)
             .frame(maxWidth: .infinity, minHeight: 150, alignment: .topLeading)
-            .background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .background(fade(0.04), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(selected ? mint.opacity(0.7) : .white.opacity(0.08), lineWidth: selected ? 1.5 : 1))
+                .strokeBorder(selected ? mint.opacity(0.7) : fade(0.08), lineWidth: selected ? 1.5 : 1))
             .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         }
         .buttonStyle(.plain)
@@ -227,7 +247,7 @@ struct ExtensionsView: View {
             buildDetail
         case nil:
             Text("Select an extension to see what it does and what it can access.")
-                .font(.system(size: 13.5)).foregroundStyle(.white.opacity(0.55)).multilineTextAlignment(.center)
+                .font(.system(size: 13.5)).foregroundStyle(fade(0.55)).multilineTextAlignment(.center)
                 .padding(40).frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
@@ -240,10 +260,10 @@ struct ExtensionsView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(L(entry.name)).font(.system(size: 20, weight: .semibold)).tracking(-0.4)
                     Text("\(L(entry.author)) · v\(installed?.manifest.version ?? entry.version) · \(entry.license)")
-                        .font(.system(size: 12.5)).foregroundStyle(.white.opacity(0.55))
+                        .font(.system(size: 12.5)).foregroundStyle(fade(0.55))
                 }
             }
-            Text(L(entry.description)).font(.system(size: 13.5)).lineSpacing(13.5 * 0.55 - 3).foregroundStyle(.white.opacity(0.8))
+            Text(L(entry.description)).font(.system(size: 13.5)).lineSpacing(13.5 * 0.55 - 3).foregroundStyle(fade(0.8))
                 .fixedSize(horizontal: false, vertical: true)
             does(entry.does)
             access(entry.permissions.lines.map { ($0.symbol, $0.label, $0.detail, $0.mono, nil) }, never: true)
@@ -256,7 +276,7 @@ struct ExtensionsView: View {
                 }
                 .disabled(busy != nil)
             }
-            if let failure { Text(L(failure)).font(.system(size: 12)).foregroundStyle(SettingsDesign.amber).fixedSize(horizontal: false, vertical: true) }
+            if let failure { Text(L(failure)).font(.system(size: 12)).foregroundStyle(SettingsDesign.warn).fixedSize(horizontal: false, vertical: true) }
         }
         .padding(28)
         .id(entry.id)
@@ -288,19 +308,19 @@ struct ExtensionsView: View {
                 DesignSwitch(isOn: installed.state.enabled, label: "Show in the notch") { host.setEnabled(entry.id, !installed.state.enabled) }
             }
             .padding(.horizontal, 14).frame(minHeight: 48)
-            .background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(.white.opacity(0.07), lineWidth: 1))
+            .background(fade(0.04), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(fade(0.07), lineWidth: 1))
             HStack(spacing: 8) {
                 Button { settingsFor = SheetID(id: entry.id) } label: {
                     Text("Extension settings").font(.system(size: 13, weight: .medium))
                         .frame(maxWidth: .infinity).frame(height: 38)
-                        .background(.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                        .background(fade(0.1), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .disabled(installed.manifest.settings.isEmpty)
                 Button { host.uninstall(entry.id) } label: {
-                    Text("Uninstall").font(.system(size: 13, weight: .semibold)).foregroundStyle(SettingsDesign.hex(0xFF9A9A))
+                    Text("Uninstall").font(.system(size: 13, weight: .semibold)).foregroundStyle(surface(0xFF9A9A, light: 0xC9302C))
                         .padding(.horizontal, 14).frame(height: 38)
                         .background(SettingsDesign.hex(0xFF6B6B, 0.14), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
                         .contentShape(Rectangle())
@@ -316,11 +336,11 @@ struct ExtensionsView: View {
                 Tile(tint: nil, icon: "chevron.left.forwardslash.chevron.right", size: 60, radius: 16)
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Build your own").font(.system(size: 20, weight: .semibold)).tracking(-0.4)
-                    Text("Orilio · GPL-3.0-or-later").font(.system(size: 12.5)).foregroundStyle(.white.opacity(0.55))
+                    Text("Orilio · GPL-3.0-or-later").font(.system(size: 12.5)).foregroundStyle(fade(0.55))
                 }
             }
             Text("Extensions describe what to show; Orilio draws it with its own components, so every extension looks native. Start from Prayer Times: its README explains the manifest line by line.")
-                .font(.system(size: 13.5)).lineSpacing(13.5 * 0.55 - 3).foregroundStyle(.white.opacity(0.8))
+                .font(.system(size: 13.5)).lineSpacing(13.5 * 0.55 - 3).foregroundStyle(fade(0.8))
                 .fixedSize(horizontal: false, vertical: true)
             does(["Widgets for the ear and the island", "Actions and reminders", "Permissions you declare up front"])
             access([("shippingbox", "Template", "github.com/enbiyagoral/orilio — extensions", true, ExtensionCatalog.buildYourOwnURL)], never: false)
@@ -334,33 +354,33 @@ struct ExtensionsView: View {
 
     private func does(_ lines: [String]) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("IN THE NOTCH").font(.system(size: 11.5, weight: .semibold)).tracking(0.92).foregroundStyle(.white.opacity(0.5))
+            Text("IN THE NOTCH").font(.system(size: 11.5, weight: .semibold)).tracking(0.92).foregroundStyle(fade(0.5))
             ForEach(lines, id: \.self) { line in
                 HStack(spacing: 8) {
                     Image(systemName: "checkmark").font(.system(size: 11, weight: .semibold)).foregroundStyle(mint)
                     Text(L(line))
                 }
-                .font(.system(size: 13)).foregroundStyle(.white.opacity(0.8))
+                .font(.system(size: 13)).foregroundStyle(fade(0.8))
             }
         }
     }
 
     private func access(_ lines: [(String, String, String, Bool, URL?)], never: Bool) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("CAN ACCESS").font(.system(size: 11.5, weight: .semibold)).tracking(0.92).foregroundStyle(.white.opacity(0.5))
+            Text("CAN ACCESS").font(.system(size: 11.5, weight: .semibold)).tracking(0.92).foregroundStyle(fade(0.5))
             VStack(spacing: 0) {
                 ForEach(Array(lines.enumerated()), id: \.offset) { index, line in
                     let row = HStack(spacing: 10) {
-                        Image(systemName: line.0).font(.system(size: 13)).foregroundStyle(.white.opacity(0.7)).frame(width: 18)
+                        Image(systemName: line.0).font(.system(size: 13)).foregroundStyle(fade(0.7)).frame(width: 18)
                         VStack(alignment: .leading, spacing: 1) {
                             Text(L(line.1)).font(.system(size: 13))
-                            Text(L(line.2)).font(line.3 ? mono : .system(size: 11.5)).foregroundStyle(.white.opacity(0.5))
+                            Text(L(line.2)).font(line.3 ? mono : .system(size: 11.5)).foregroundStyle(fade(0.5))
                         }
                         Spacer(minLength: 0)
-                        if line.4 != nil { Image(systemName: "arrow.up.right").font(.system(size: 11)).foregroundStyle(.white.opacity(0.5)) }
+                        if line.4 != nil { Image(systemName: "arrow.up.right").font(.system(size: 11)).foregroundStyle(fade(0.5)) }
                     }
                     .padding(.horizontal, 12).frame(minHeight: 44)
-                    .overlay(alignment: .bottom) { if index < lines.count - 1 { Rectangle().fill(.white.opacity(0.05)).frame(height: 1) } }
+                    .overlay(alignment: .bottom) { if index < lines.count - 1 { Rectangle().fill(fade(0.05)).frame(height: 1) } }
                     if let url = line.4 {
                         Button { NSWorkspace.shared.open(url) } label: { row.contentShape(Rectangle()) }.buttonStyle(.plain)
                     } else {
@@ -368,11 +388,11 @@ struct ExtensionsView: View {
                     }
                 }
             }
-            .background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(.white.opacity(0.07), lineWidth: 1))
+            .background(fade(0.04), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(fade(0.07), lineWidth: 1))
             if never {
                 Text("Never: camera, clipboard, Shelf files, screenshots or other extensions’ data.")
-                    .font(.system(size: 11.5)).foregroundStyle(.white.opacity(0.45))
+                    .font(.system(size: 11.5)).foregroundStyle(fade(0.45))
             }
         }
     }
@@ -441,9 +461,9 @@ private struct Tile: View {
         let color = tint.map { ExtensionTint.color($0) }
         Image(systemName: icon)
             .font(.system(size: size * 0.43, weight: .medium))
-            .foregroundStyle(color ?? .white.opacity(0.8))
+            .foregroundStyle(color ?? fade(0.8))
             .frame(width: size, height: size)
-            .background(color.map { $0.opacity(0.14) } ?? .white.opacity(0.06), in: RoundedRectangle(cornerRadius: radius, style: .continuous))
+            .background(color.map { $0.opacity(0.14) } ?? fade(0.06), in: RoundedRectangle(cornerRadius: radius, style: .continuous))
     }
 }
 
@@ -456,10 +476,10 @@ private struct MintButton: View {
 
     var body: some View {
         Button(action: action) {
-            Text(L(title)).font(.system(size: size, weight: .semibold)).foregroundStyle(onMint)
+            Text(L(title)).font(.system(size: size, weight: .semibold)).foregroundStyle(buttonText)
                 .frame(maxWidth: .infinity).frame(height: height)
-                .background(mint, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
-                .shadow(color: mint.opacity(0.35), radius: 11)
+                .background(buttonFill, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
+                .shadow(color: SettingsDesign.adaptive(dark: SettingsDesign.ns(0x2BFFB8, 0.35), light: .clear), radius: 11) // the glow is the island’s, on dark
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -478,13 +498,13 @@ private struct ConsentSheet: View {
     var body: some View {
         let added = Set((new?.lines ?? []).map(\.label))
         ZStack {
-            Rectangle().fill(.ultraThinMaterial).overlay(SettingsDesign.hex(0x0A0A0E, 0.78))
+            Rectangle().fill(.ultraThinMaterial).overlay(SettingsDesign.adaptive(dark: SettingsDesign.ns(0x0A0A0E, 0.78), light: .black.withAlphaComponent(0.2)))
             VStack(alignment: .leading, spacing: 14) {
                 Text("Allow \(name) to:").font(.system(size: 16, weight: .semibold))
                 ForEach(permissions.lines, id: \.label) { line in
                     HStack(alignment: .firstTextBaseline, spacing: 10) {
                         Image(systemName: line.symbol).font(.system(size: 12)).foregroundStyle(mint).frame(width: 16)
-                        (Text(L(line.label)) + Text(" — " + L(line.detail)).foregroundColor(.white.opacity(0.5)))
+                        (Text(L(line.label)) + Text(" — " + L(line.detail)).foregroundColor(fade(0.5)))
                             .font(.system(size: 13)).lineSpacing(13 * 0.4 - 2).fixedSize(horizontal: false, vertical: true)
                         if added.contains(line.label) {
                             Text("New").font(.system(size: 10.5, weight: .semibold)).foregroundStyle(SettingsDesign.amber)
@@ -494,29 +514,29 @@ private struct ConsentSheet: View {
                     }
                 }
                 Text("It runs in its own sandboxed process and can only show content through Orilio’s widgets. You can change this any time.")
-                    .font(.system(size: 12)).lineSpacing(12 * 0.45 - 2).foregroundStyle(.white.opacity(0.55))
+                    .font(.system(size: 12)).lineSpacing(12 * 0.45 - 2).foregroundStyle(fade(0.55))
                     .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 8) {
                     Spacer()
                     Button(action: cancel) {
                         Text("Cancel").font(.system(size: 13.5, weight: .medium))
                             .padding(.horizontal, 16).frame(height: 38)
-                            .background(.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                            .background(fade(0.1), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
                     }
                     .buttonStyle(.plain)
                     .keyboardShortcut(.cancelAction)
                     Button(action: allow) {
-                        Text(new == nil ? "Allow & install" : "Allow & update").font(.system(size: 13.5, weight: .semibold)).foregroundStyle(onMint)
+                        Text(new == nil ? "Allow & install" : "Allow & update").font(.system(size: 13.5, weight: .semibold)).foregroundStyle(buttonText)
                             .padding(.horizontal, 18).frame(height: 38)
-                            .background(mint, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                            .background(buttonFill, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
                     }
                     .buttonStyle(.plain)
                     .keyboardShortcut(.defaultAction)
                 }
             }
             .padding(22)
-            .background(SettingsDesign.hex(0x202026), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(.white.opacity(0.1), lineWidth: 1))
+            .background(surface(0x202026, light: 0xFFFFFF), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(fade(0.1), lineWidth: 1))
             .shadow(color: .black.opacity(0.5), radius: 25, y: 20)
             .padding(24)
             .accessibilityElement(children: .contain)
@@ -538,13 +558,13 @@ struct ExtensionSettingsView: View {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 10) {
                     Text(L(ext.manifest.name)).font(.system(size: 14.5, weight: .semibold))
-                    Text("Extension settings").font(.system(size: 12)).foregroundStyle(.white.opacity(0.45))
+                    Text("Extension settings").font(.system(size: 12)).foregroundStyle(fade(0.45))
                     Spacer()
                     Button("Done", action: done).buttonStyle(.plain).font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(mint).keyboardShortcut(.defaultAction)
+                        .foregroundStyle(mintText).keyboardShortcut(.defaultAction)
                 }
                 .padding(.horizontal, 20).frame(height: 48)
-                .overlay(alignment: .bottom) { Rectangle().fill(.white.opacity(0.06)).frame(height: 1) }
+                .overlay(alignment: .bottom) { Rectangle().fill(fade(0.06)).frame(height: 1) }
                 VStack(alignment: .leading, spacing: 14) {
                     VStack(spacing: 0) {
                         ForEach(Array(ext.manifest.settings.enumerated()), id: \.offset) { index, setting in
@@ -555,15 +575,15 @@ struct ExtensionSettingsView: View {
                             }
                             .padding(.horizontal, 14).frame(minHeight: 52)
                             .overlay(alignment: .bottom) {
-                                if index < ext.manifest.settings.count - 1 { Rectangle().fill(.white.opacity(0.05)).frame(height: 1) }
+                                if index < ext.manifest.settings.count - 1 { Rectangle().fill(fade(0.05)).frame(height: 1) }
                             }
                         }
                     }
-                    .background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(.white.opacity(0.07), lineWidth: 1))
+                    .background(fade(0.04), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(fade(0.07), lineWidth: 1))
                     if ext.manifest.permissions.notifications {
                         Text("Reminders are scheduled with macOS notifications, so they arrive even when Orilio is closed.")
-                            .font(.system(size: 12)).lineSpacing(12 * 0.45 - 2).foregroundStyle(.white.opacity(0.5))
+                            .font(.system(size: 12)).lineSpacing(12 * 0.45 - 2).foregroundStyle(fade(0.5))
                     }
                     HStack(spacing: 8) {
                         ForEach(ext.manifest.permissions.network, id: \.self) { chip($0, mono: true) }
@@ -575,16 +595,15 @@ struct ExtensionSettingsView: View {
                 .padding(EdgeInsets(top: 18, leading: 20, bottom: 20, trailing: 20))
             }
             .frame(width: 640)
-            .foregroundStyle(.white)
-            .background(SettingsDesign.hex(0x1C1C1F))
-            .environment(\.colorScheme, .dark)
+            .foregroundStyle(ink)
+            .background(SettingsDesign.window)
         }
     }
 
     private func chip(_ text: String, mono: Bool = false) -> some View {
-        Text(L(text)).font(mono ? .system(size: 12, design: .monospaced) : .system(size: 12)).foregroundStyle(.white.opacity(0.6))
+        Text(L(text)).font(mono ? .system(size: 12, design: .monospaced) : .system(size: 12)).foregroundStyle(fade(0.6))
             .padding(.horizontal, 9).frame(height: 24)
-            .background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .background(fade(0.07), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
     }
 
     @ViewBuilder private func control(_ ext: InstalledExtension, _ setting: ExtensionManifest.Setting) -> some View {
@@ -601,9 +620,9 @@ struct ExtensionSettingsView: View {
                     let active = option.value == value
                     Button { set(option.value) } label: {
                         Text(L(option.label)).font(.system(size: 12.5, weight: active ? .medium : .regular))
-                            .foregroundStyle(active ? .black : .white.opacity(0.8))
+                            .foregroundStyle(active ? chosenText : fade(0.8))
                             .padding(.horizontal, 11).frame(height: 26)
-                            .background(active ? .white.opacity(0.9) : .clear, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                            .background(active ? fade(0.9) : .clear, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
@@ -611,7 +630,7 @@ struct ExtensionSettingsView: View {
                 }
             }
             .padding(3)
-            .background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .background(fade(0.07), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
         case .toggle:
             DesignSwitch(isOn: value?.bool ?? false, label: setting.label) { set(.bool(!(value?.bool ?? false))) }
         }
@@ -635,7 +654,7 @@ private struct CityPicker: View {
                 Text(city?["name"]?.string ?? L("Choose a city")).font(.system(size: 13))
             }
             .padding(.horizontal, 12).frame(height: 30)
-            .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .background(fade(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

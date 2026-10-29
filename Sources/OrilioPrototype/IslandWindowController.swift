@@ -264,6 +264,10 @@ final class IslandWindowController {
     private var swipeMonitor: Any?
     private var swipe = SwipeTracker()
     private var widthTask: Task<Void, Never>?
+    /// Bumped by each move to another display, so only the latest one arrives.
+    private var moveGeneration = 0
+    /// Fading out on the old display: layout waits for `arrive()`, which lays out on the new one.
+    private var moving = false
     private var hint: NSPanel?
     /// Where the last outside press started, to tell a click from the start of a drag.
     private var outsidePress: NSPoint?
@@ -372,10 +376,16 @@ final class IslandWindowController {
     }
 
     /// Places the island on its display. Never activates the app, so the user's focus stays put.
-    func reposition() {
+    func reposition(animated: Bool = true) {
+        guard !moving else { return }
         var geometry = screen.geometry
         geometry.panelWidth = PreferencesStore.shared.value.panelSize.width
-        if geometry != model.geometry { model.geometry = geometry }
+        if geometry != model.geometry {
+            // Moving to another display, the shape changes (ears ↔ floating pill) while it's out of sight.
+            var transaction = Transaction()
+            transaction.disablesAnimations = !animated
+            withTransaction(transaction) { model.geometry = geometry }
+        }
         panel.setFrame(geometry.windowFrame(for: model.state, tall: model.wantsTallPanel, collapsedWidth: model.liveCollapsedWidth,
                                             panel: model.customPanel(for: model.state), dropHint: model.dropHint), display: true)
     }
@@ -385,7 +395,34 @@ final class IslandWindowController {
         guard screen != self.screen else { return }
         self.screen = screen
         revealed = false
-        reposition()
+        guard panel.isVisible, !Theme.current.reducesMotion else { return reposition() }
+        // A jump reads as a glitch: fade out where it was, then come down from the new display's top.
+        moveGeneration += 1
+        moving = true
+        let generation = moveGeneration
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = 0.12
+            panel.animator().alphaValue = 0
+        }, completionHandler: { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, generation == self.moveGeneration else { return }
+                self.arrive()
+            }
+        })
+    }
+
+    /// The second half of a move: on the new display, a short drop from its top edge.
+    private func arrive() {
+        moving = false
+        reposition(animated: false)
+        let target = panel.frame
+        panel.setFrame(target.offsetBy(dx: 0, dy: 10), display: false)
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.22
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            panel.animator().setFrame(target, display: true)
+            panel.animator().alphaValue = 1
+        }
     }
 
     func setSpaces(all: Bool) { IslandWindowPolicy.apply(to: panel, allSpaces: all) }
@@ -432,6 +469,7 @@ final class IslandWindowController {
         let show = shouldShow
         guard show != panel.isVisible else { return }
         if !show { return panel.orderOut(nil) }
+        panel.alphaValue = 1 // a move to another display may have been cut short while it faded
         reposition()
         guard sliding, !Theme.current.reducesMotion else { return panel.orderFrontRegardless() }
         // Slide down from above the top edge.

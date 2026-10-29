@@ -312,3 +312,20 @@ struct ScreenshotPopulate {
         print("POPULATED \(loaded) reload \(reload)")
     }
 }
+
+/// A screenshot copied to the clipboard is just an image; an image copied from an app brings more along.
+struct ClipboardScreenshotTests {
+    @Test func aBareImageIsAScreenshot() {
+        #expect(ScreenshotWatcher.isScreenshotCopy(types: ["public.png"]))
+        #expect(ScreenshotWatcher.isScreenshotCopy(types: ["public.png", "Apple PNG pasteboard type"]))
+        #expect(ScreenshotWatcher.isScreenshotCopy(types: ["public.tiff", "NeXT TIFF v4.0 pasteboard type"]))
+    }
+
+    @Test func anythingElseIsLeftAlone() {
+        #expect(!ScreenshotWatcher.isScreenshotCopy(types: []))
+        #expect(!ScreenshotWatcher.isScreenshotCopy(types: ["public.utf8-plain-text"]))
+        #expect(!ScreenshotWatcher.isScreenshotCopy(types: ["public.png", "org.chromium.source-url"])) // copied from a web page
+        #expect(!ScreenshotWatcher.isScreenshotCopy(types: ["public.file-url", "public.png"]))         // a file from Finder
+        #expect(!ScreenshotWatcher.isScreenshotCopy(types: ["Apple PNG pasteboard type"]))           // no image type of its own
+    }
+}

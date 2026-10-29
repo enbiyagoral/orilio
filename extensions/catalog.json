@@ -12,7 +12,7 @@
       "category": "lifestyle",
       "icon": "sunrise",
       "tint": "mint",
-      "does": ["Next prayer and countdown in the ear", "Today’s five times when opened", "Reminder 5, 10 or 15 min before"],
+      "does": ["Next prayer and countdown in the ear", "Today’s times and sunrise when opened", "Reminder 5, 10 or 15 min before"],
       "permissions": { "network": ["ezanvakti.emushaf.net"], "notifications": true, "location": "city-picker", "storage": true },
       "package": "community.prayer-times.orilioext"
     }

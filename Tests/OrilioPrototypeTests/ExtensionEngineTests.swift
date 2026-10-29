@@ -52,7 +52,7 @@ struct PrayerTimesExtensionTests {
         guard case .list(let rows)? = result.island?.sections.first(where: { if case .list = $0 { true } else { false } }) else {
             Issue.record("no list"); return
         }
-        #expect(rows.map(\.title) == ["Sabah", "Öğle", "İkindi", "Akşam", "Yatsı"])
+        #expect(rows.map(\.title) == ["İmsak", "Güneş", "Öğle", "İkindi", "Akşam", "Yatsı"])
         #expect(rows.map(\.value) == rows.map(\.value).sorted()) // in order through the day
         #expect(rows.filter { $0.state == .next }.count == 1)
         #expect(result.ear?.trailing?.style == "countdown")
@@ -76,7 +76,7 @@ struct PrayerTimesExtensionTests {
         guard case .list(let rows)? = result.island?.sections.first(where: { if case .list = $0 { true } else { false } }) else {
             Issue.record("no list"); return
         }
-        #expect(rows.map(\.value) == ["05:57", "12:53", "15:45", "18:13", "19:33"])
+        #expect(rows.map(\.value) == ["05:57", "07:23", "12:53", "15:45", "18:13", "19:33"])
         #expect(reply.storage["diyanet"] != nil) // kept for offline use
         guard case .footnote(let source)? = result.island?.sections.last else { Issue.record("no footnote"); return }
         #expect(source.contains("EzanVakti"))

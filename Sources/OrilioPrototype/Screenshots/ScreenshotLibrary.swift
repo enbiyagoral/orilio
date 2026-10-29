@@ -54,7 +54,10 @@ final class ScreenshotLibrary {
         defaults.set(on, forKey: ScreenshotWatcher.enabledKey)
         addsSystemScreenshots = on
         if on {
-            if watcher == nil { watcher = ScreenshotWatcher { [weak self] in self?.importFiles($0) } }
+            if watcher == nil {
+                watcher = ScreenshotWatcher(onNew: { [weak self] in self?.importFiles($0) },
+                                            onCopied: { [weak self] in self?.importData($0, source: .paste, quiet: true) })
+            }
             watcher?.start()
         } else {
             watcher?.stop()
@@ -75,8 +78,9 @@ final class ScreenshotLibrary {
         run(urls.map { url in { store in try await store.importFile(url) } })
     }
 
-    func importData(_ data: Data, source: ScreenshotItem.Source) {
-        run([{ store in try await store.importData(data, source: source) }])
+    /// `quiet`: one Orilio found on its own (a copied screenshot): already in the library is no news.
+    func importData(_ data: Data, source: ScreenshotItem.Source, quiet: Bool = false) {
+        run([{ store in try await store.importData(data, source: source) }], quiet: quiet)
     }
 
     /// Reads the clipboard only when the user asks (Paste button or ⌘V).
@@ -142,7 +146,8 @@ final class ScreenshotLibrary {
     }
 
     /// Runs imports with bounded concurrency and reports the outcome once.
-    private func run(_ jobs: [@Sendable (ScreenshotStore) async throws -> ScreenshotItem], then cleanup: (@Sendable () -> Void)? = nil) {
+    private func run(_ jobs: [@Sendable (ScreenshotStore) async throws -> ScreenshotItem], quiet: Bool = false,
+                     then cleanup: (@Sendable () -> Void)? = nil) {
         importing += jobs.count
         let store = store
         Task {
@@ -172,7 +177,7 @@ final class ScreenshotLibrary {
             cleanup?()
             importing -= jobs.count
             insert(added)
-            problem = Self.summary(added: added.count, duplicates: duplicates, unreadable: unreadable)
+            if !quiet { problem = Self.summary(added: added.count, duplicates: duplicates, unreadable: unreadable) }
         }
     }
 

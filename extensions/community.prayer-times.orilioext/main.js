@@ -18,8 +18,9 @@
 const DIYANET = { fajrAngle: 18, ishaAngle: 17, temkin: { fajr: 0, sunrise: -7, dhuhr: 5, asr: 4, maghrib: 7, isha: 0 } };
 
 const NAMES = {
-  tr: { fajr: "Sabah", dhuhr: "Öğle", asr: "İkindi", maghrib: "Akşam", isha: "Yatsı" },
-  en: { fajr: "Fajr", dhuhr: "Dhuhr", asr: "Asr", maghrib: "Maghrib", isha: "Isha" },
+  // Diyanet's names: the day starts with İmsak (the end of sahur and the start of the sabah prayer).
+  tr: { fajr: "İmsak", sunrise: "Güneş", dhuhr: "Öğle", asr: "İkindi", maghrib: "Akşam", isha: "Yatsı" },
+  en: { fajr: "Fajr", sunrise: "Sunrise", dhuhr: "Dhuhr", asr: "Asr", maghrib: "Maghrib", isha: "Isha" },
 };
 
 // ---------------------------------------------------------------------------------------------
@@ -222,7 +223,8 @@ async function refresh(ctx) {
   const notifyAtTime = ctx.settings.notifyAtTime !== false;
   const showCountdown = ctx.settings.showCountdown !== false;
 
-  const rows = ORDER.map((k) => ({
+  // The five prayers and Güneş (when sabah ends): Güneş is listed, never "next" and never reminded.
+  const rows = ["fajr", "sunrise", "dhuhr", "asr", "maghrib", "isha"].map((k) => ({
     title: names[k],
     value: clock(times[k], city.timeZone),
     state: !nextKey ? "past" : k === nextKey ? "next" : times[k] < now ? "past" : "later",

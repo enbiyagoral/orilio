@@ -142,7 +142,9 @@ private struct RowsView: View {
     let rows: [ExtensionResult.Section.Row]
 
     var body: some View {
-        VStack(spacing: 4) {
+        // Six rows (a prayer list with Güneş) are a little tighter so they fit the same island.
+        let tight = rows.count > 5
+        VStack(spacing: tight ? 3 : 4) {
             ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                 let next = row.state == .next, past = row.state == .past
                 HStack {
@@ -155,7 +157,7 @@ private struct RowsView: View {
                 }
                 .font(.system(size: 14, weight: next ? .semibold : .regular))
                 .padding(.horizontal, 14)
-                .frame(height: 40)
+                .frame(height: tight ? 34 : 40)
                 .background(next ? extensionMint.opacity(0.1) : .clear, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(extensionMint.opacity(next ? 0.6 : 0), lineWidth: 1.5))
                 .opacity(past ? 0.45 : 1)
@@ -186,7 +188,8 @@ struct ExtensionEarView: View {
                         Text(part.text ?? "").lineLimit(1)
                     }
                 }
-                .foregroundStyle(ExtensionTint.color(part.style == "countdown" ? part.tint ?? "mint" : part.tint))
+                // A countdown is live: the theme's color, like a meeting's and the music beside it.
+                .foregroundStyle(part.style == "countdown" && (part.tint == nil || part.tint == "mint") ? accent(.live) : ExtensionTint.color(part.tint))
             }
         }
     }

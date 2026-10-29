@@ -221,7 +221,7 @@ final class IslandModel {
         let playing = media.current.flatMap { $0.state == .playing ? $0 : nil }
         return LiveActivityResolver.layout(meeting: meetingSoon, focus: FocusEarKind(focus), transient: live.transient,
                                            nowPlaying: playing, visible: modules.visibleSet, indicators: modules.indicators,
-                                           extensionEar: ExtensionHost.shared.ear)
+                                           extensionEar: ExtensionHost.shared.ear, order: modules.order)
     }
 
     /// A meeting about to start, for the collapsed island (only when Calendar is on and readable),

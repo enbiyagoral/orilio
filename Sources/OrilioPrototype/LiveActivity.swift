@@ -111,16 +111,19 @@ struct EarLayout: Equatable {
 ///
 /// 1. A meeting within 10 minutes (and the first 5 after it starts) takes both ears.
 /// 2. A confirmation takes both ears for 2 s, over anything except a meeting.
-/// 3. A focus session takes the leading ear; music playing may keep the trailing one.
-/// 4. An extension's ears (a prayer countdown); music playing keeps the trailing one.
-/// 5. Music playing takes both ears.
-/// 6. Otherwise idle: the island is the notch.
+/// 3. Focus, music and an extension go in the user's module order (Settings › Modules): the first one
+///    there wins. An extension at its reminder time (at the latest 10 minutes before) goes ahead of music.
+///    - Focus takes the leading ear; music playing may keep the trailing one.
+///    - An extension takes both ears, or the leading one with music on the trailing one.
+///    - Music takes both ears.
+/// 4. Otherwise idle: the island is the notch.
 ///
 /// Hidden modules and indicators the user turned off never claim the notch.
 enum LiveActivityResolver {
     static func layout(meeting: CalendarEvent?, focus: FocusEarKind?, transient: Transient?,
                        nowPlaying: MediaSessionSnapshot?, visible: Set<IslandTab>,
-                       indicators: Set<CollapsedIndicator>, extensionEar: ExtensionEarContent? = nil) -> EarLayout {
+                       indicators: Set<CollapsedIndicator>, extensionEar: ExtensionEarContent? = nil, now: Date = Date(),
+                       order: [IslandTab] = IslandTab.allCases) -> EarLayout {
         func allowed(_ module: IslandTab, _ indicator: CollapsedIndicator?) -> Bool {
             visible.contains(module) && indicator.map(indicators.contains) ?? true
         }
@@ -133,15 +136,26 @@ enum LiveActivityResolver {
             return EarLayout(leading: activity, trailing: activity)
         }
         let music = nowPlaying.flatMap { allowed(.music, .music) ? LiveActivity(payload: .nowPlaying($0)) : nil }
-        if let focus, allowed(.focus, .focus) {
+        enum Candidate { case focus(FocusEarKind), music, extensionEar(ExtensionEarContent) }
+        let rank = { (tab: IslandTab) in Double(order.firstIndex(of: tab) ?? order.count) }
+        var candidates: [(Candidate, Double)] = []
+        if let focus, allowed(.focus, .focus) { candidates.append((.focus(focus), rank(.focus))) }
+        if music != nil { candidates.append((.music, rank(.music))) }
+        if let extensionEar, allowed(.extensions, nil) {
+            // At its reminder time an extension goes ahead of music, wherever the two are in the list.
+            let due = music != nil && extensionEar.isDue(at: now)
+            candidates.append((.extensionEar(extensionEar), due ? min(rank(.extensions), rank(.music) - 0.5) : rank(.extensions)))
+        }
+        switch candidates.min(by: { $0.1 < $1.1 })?.0 {
+        case .focus(let focus)?:
             let activity = LiveActivity(payload: .focus(focus))
             return EarLayout(leading: activity, trailing: music ?? (focus == .onBreak ? activity : nil))
-        }
-        if let extensionEar, allowed(.extensions, nil) {
-            let activity = LiveActivity(payload: .extensionEar(extensionEar, withMusic: music != nil))
+        case .extensionEar(let content)?:
+            let activity = LiveActivity(payload: .extensionEar(content, withMusic: music != nil))
             return EarLayout(leading: activity, trailing: music ?? activity)
+        case .music?, nil:
+            return EarLayout(leading: music, trailing: music)
         }
-        return EarLayout(leading: music, trailing: music)
     }
 }
 

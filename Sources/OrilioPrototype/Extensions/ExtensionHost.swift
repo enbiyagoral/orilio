@@ -165,8 +165,26 @@ final class ExtensionHost {
 
     /// The ear an extension asks for: the first enabled one that has one. Always below meetings, focus and confirmations.
     var ear: ExtensionEarContent? {
+        _ = dueTick // re-read when an ear's moment to share the notch with music comes
         guard let ext = installed.first(where: { $0.state.enabled && $0.result?.ear != nil }), let ear = ext.result?.ear else { return nil }
-        return ExtensionEarContent(extensionID: ext.id, leading: ear.leading, trailing: ear.trailing)
+        let target = [ear.trailing, ear.leading].compactMap { $0?.style == "countdown" ? $0?.target : nil }.first
+        return ExtensionEarContent(extensionID: ext.id, leading: ear.leading, trailing: ear.trailing,
+                                   dueFrom: ExtensionEarContent.dueFrom(target: target, reminders: ext.result?.reminders ?? []))
+    }
+
+    /// Bumped when an ear becomes due (see `ExtensionEarContent.dueFrom`), so the notch re-resolves then.
+    private(set) var dueTick = 0
+    @ObservationIgnored private var dueTask: Task<Void, Never>?
+
+    /// One wakeup at the moment the current ear becomes due; nothing polls.
+    private func scheduleDue() {
+        dueTask?.cancel()
+        guard let due = ear?.dueFrom, due > Date() else { return }
+        dueTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(due.timeIntervalSinceNow))
+            guard !Task.isCancelled else { return }
+            self?.dueTick += 1
+        }
     }
 
     // MARK: Lifecycle of one extension
@@ -248,6 +266,7 @@ final class ExtensionHost {
                     await ReminderPoster.replace(id, with: result.reminders ?? [], extensionName: ext.manifest.name)
                 }
                 schedule(id, refreshAt: result.refreshAt)
+                scheduleDue()
             } catch {
                 failed(id, error)
             }
@@ -395,6 +414,18 @@ struct ExtensionEarContent: Equatable {
     let extensionID: String
     let leading: ExtensionResult.EarPart?
     let trailing: ExtensionResult.EarPart?
+    /// From when it shares the notch with music; until then music keeps both ears.
+    var dueFrom: Date? = nil
+
+    /// The earliest reminder for the countdown's moment (a reminder 10 or 15 min before), and never
+    /// later than 10 minutes before it.
+    static func dueFrom(target: Date?, reminders: [ExtensionResult.Reminder]) -> Date? {
+        guard let target else { return nil }
+        let earliest = reminders.map(\.date).filter { $0 <= target && $0 > target.addingTimeInterval(-3_600) }.min() ?? target
+        return min(earliest, target.addingTimeInterval(-600))
+    }
+
+    func isDue(at now: Date) -> Bool { dueFrom.map { now >= $0 } ?? true }
 }
 
 // MARK: - Fetches
@@ -457,7 +488,7 @@ enum ReminderPoster {
         guard !reminders.isEmpty, await center.notificationSettings().authorizationStatus == .authorized else { return }
         for reminder in ReminderPlan.upcoming(reminders, now: Date()) {
             let content = UNMutableNotificationContent()
-            content.title = extensionName
+            content.title = L(extensionName)
             content.body = [reminder.title, reminder.body].compactMap { $0 }.joined(separator: " · ")
             content.sound = .default
             let trigger = UNTimeIntervalNotificationTrigger(timeInterval: max(1, reminder.date.timeIntervalSinceNow), repeats: false)

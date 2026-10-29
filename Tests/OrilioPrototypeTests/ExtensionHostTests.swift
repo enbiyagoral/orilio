@@ -96,6 +96,57 @@ struct ExtensionEarPriorityTests {
         #expect(ExtensionEarContent.part(ear, side: .leading, withMusic: true)?.style == "countdown") // music keeps the right ear
     }
 
+    /// Music playing: the song keeps the notch until the prayer's reminder time, then shares it.
+    @Test func musicKeepsTheNotchUntilTheReminder() {
+        let now = Date()
+        let target = now.addingTimeInterval(2 * 3_600)
+        let reminders = [ExtensionResult.Reminder(id: "before", date: target.addingTimeInterval(-15 * 60), title: "Öğle 15 dakika sonra"),
+                         ExtensionResult.Reminder(id: "at", date: target, title: "Öğle vakti")]
+        let prayer = ExtensionEarContent(extensionID: "community.prayer-times", leading: .init(text: "Öğle"),
+                                         trailing: .init(style: "countdown", target: target),
+                                         dueFrom: ExtensionEarContent.dueFrom(target: target, reminders: reminders))
+        #expect(prayer.dueFrom == target.addingTimeInterval(-15 * 60))
+        let song = MediaSessionSnapshot(sourceID: "spotify", providerID: "spotify", sourceName: "Spotify", title: "Yıldızlar", artist: nil,
+                                        album: nil, artworkURL: nil, state: .playing, duration: 200, position: 10, positionDate: now,
+                                        capabilities: [], updatedAt: now)
+        let early = LiveActivityResolver.layout(meeting: nil, focus: nil, transient: nil, nowPlaying: song, visible: visible,
+                                                indicators: Set(CollapsedIndicator.allCases), extensionEar: prayer, now: now)
+        #expect(early.leading?.kind == .nowPlaying && early.trailing?.kind == .nowPlaying)
+        let due = LiveActivityResolver.layout(meeting: nil, focus: nil, transient: nil, nowPlaying: song, visible: visible,
+                                              indicators: Set(CollapsedIndicator.allCases), extensionEar: prayer,
+                                              now: target.addingTimeInterval(-10 * 60))
+        #expect(due.leading?.kind == .extensionEar && due.trailing?.kind == .nowPlaying)
+        // Without music the countdown is there all along.
+        let quiet = LiveActivityResolver.layout(meeting: nil, focus: nil, transient: nil, nowPlaying: nil, visible: visible,
+                                                indicators: Set(CollapsedIndicator.allCases), extensionEar: prayer, now: now)
+        #expect(quiet.leading?.kind == .extensionEar)
+        // No reminder before it: at the latest 10 minutes before.
+        #expect(ExtensionEarContent.dueFrom(target: target, reminders: []) == target.addingTimeInterval(-600))
+    }
+
+    /// Settings › Modules decides among focus, music and an extension.
+    @Test func theModuleOrderDecides() {
+        let now = Date()
+        let far = ExtensionEarContent(extensionID: "community.prayer-times", leading: .init(text: "İmsak"),
+                                      trailing: .init(style: "countdown", target: now.addingTimeInterval(8 * 3_600)),
+                                      dueFrom: now.addingTimeInterval(8 * 3_600 - 600))
+        let song = MediaSessionSnapshot(sourceID: "spotify", providerID: "spotify", sourceName: "Spotify", title: "Yıldızlar", artist: nil,
+                                        album: nil, artworkURL: nil, state: .playing, duration: 200, position: 10, positionDate: now,
+                                        capabilities: [], updatedAt: now)
+        func resolve(focus: FocusEarKind? = nil, music: Bool, order: [IslandTab]) -> EarLayout {
+            LiveActivityResolver.layout(meeting: nil, focus: focus, transient: nil, nowPlaying: music ? song : nil, visible: visible,
+                                        indicators: Set(CollapsedIndicator.allCases), extensionEar: far, now: now, order: order)
+        }
+        // Extensions above Now Playing: the countdown shows with music too (music on the right).
+        let first = resolve(music: true, order: [.extensions, .music, .focus])
+        #expect(first.leading?.kind == .extensionEar && first.trailing?.kind == .nowPlaying)
+        // The default order (Now Playing above Extensions): music, until the reminder time.
+        #expect(resolve(music: true, order: IslandTab.allCases).leading?.kind == .nowPlaying)
+        // Extensions above Focus: the countdown wins over a running session.
+        #expect(resolve(focus: .running, music: false, order: [.extensions, .focus]).leading?.kind == .extensionEar)
+        #expect(resolve(focus: .running, music: false, order: [.focus, .extensions]).leading?.kind == .focus)
+    }
+
     @Test func aHiddenExtensionsModuleClaimsNothing() {
         let layout = LiveActivityResolver.layout(meeting: nil, focus: nil, transient: nil, nowPlaying: nil, visible: visible.subtracting([.extensions]),
                                                  indicators: Set(CollapsedIndicator.allCases), extensionEar: ear)

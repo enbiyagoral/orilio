@@ -108,6 +108,9 @@ private extension AnyTransition {
 struct IslandView: View {
     let model: IslandModel
     @Environment(\.reducesMotion) private var reduceMotion
+    /// The open panel's shadow, only once the shape has settled: a blurred shadow on a shape that is
+    /// growing or shrinking is recomputed every frame, and that was where the open and close hitched.
+    @State private var shadowShown = false
 
     var body: some View {
         let geometry = model.geometry
@@ -137,7 +140,18 @@ struct IslandView: View {
                 // A file drag somewhere on screen: a 1.5 pt mint edge ("Drop on Shelf").
                 .overlay(shape.stroke(accent(.action).opacity(hint ? 0.6 : 0), lineWidth: 3)) // the outer half falls outside the window
                 // The design's 0 24 60 rgba(0,0,0,.55), kept inside the window's shadow margin.
-                .shadow(color: .black.opacity(open ? 0.55 : 0), radius: 18, y: 14)
+                .shadow(color: .black.opacity(shadowShown ? 0.55 : 0), radius: shadowShown ? 18 : 0, y: shadowShown ? 14 : 0)
+                .task(id: open) {
+                    guard open else {
+                        // Closing: gone at once, so the shrinking shape draws without it.
+                        var instant = Transaction()
+                        instant.disablesAnimations = true
+                        return withTransaction(instant) { shadowShown = false }
+                    }
+                    if !reduceMotion { try? await Task.sleep(for: .seconds(IslandModel.openDuration)) }
+                    guard !Task.isCancelled else { return }
+                    withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) { shadowShown = true }
+                }
 
             ZStack(alignment: .top) {
                 switch state {
@@ -1171,7 +1185,9 @@ private struct MusicEar: View {
         } else if session.kind == .video {
             ActivityIndicator(session: session)
         } else {
-            EqualizerView(mode: EqualizerView.Mode(session), color: Self.barColor, style: .wave)
+            // Playing bars are "live", like a countdown beside them; Calm keeps the artwork's warm tint.
+            EqualizerView(mode: EqualizerView.Mode(session),
+                          color: Theme.current.style == .calm ? Self.barColor : NSColor(accent(.live)), style: .wave)
         }
     }
 }

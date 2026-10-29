@@ -103,12 +103,6 @@ struct SettingsView: View {
 
         var label: String { rawValue.capitalized }
         var title: String { self == .displays ? "Displays & Fullscreen" : label }
-        var code: String {
-            switch self {
-            case .modules, .appearance, .displays, .startup: "M4"
-            default: ""
-            }
-        }
         var symbol: String {
             switch self {
             case .general: "gearshape"
@@ -228,7 +222,6 @@ struct SettingsView: View {
                             .background(item.tile, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                             Text(L(item.label)).font(.system(size: 13.5, weight: .medium))
                             Spacer(minLength: 0)
-                            Text(L(item.code)).font(.system(size: 10.5)).foregroundStyle(Design.muted(0.35))
                         }
                         .padding(.horizontal, 8)
                         .frame(height: 34)
@@ -606,7 +599,7 @@ private struct ModuleDetails: View {
                     SectionLabel("Screenshots")
                     Card {
                         SettingRow(title: "Add new macOS screenshots to the library",
-                                   note: String(localized: "From ⇧⌘3, ⇧⌘4 or ⇧⌘5, from now on; the originals stay in \(ScreenshotWatcher.folder.lastPathComponent). macOS asks once for access to that folder.")) {
+                                   note: String(localized: "From ⇧⌘3, ⇧⌘4 or ⇧⌘5 from now on, saved or copied to the clipboard; saved originals stay in \(ScreenshotWatcher.folder.lastPathComponent). macOS asks once for access to that folder.")) {
                             DesignSwitch(isOn: library.addsSystemScreenshots, label: "Add new macOS screenshots") {
                                 library.setAddsSystemScreenshots(!library.addsSystemScreenshots)
                             }
@@ -839,7 +832,7 @@ private struct ThemeCard: View {
 
     var body: some View {
         let chip: Color = style == .calm ? .white : accent
-        let wave: Color = style == .neon ? accent : Design.artTint
+        let wave: Color = style == .calm ? Design.artTint : accent
         let glow: Color = style == .calm ? .clear : accent.opacity(0.7)
         Button(action: action) {
             VStack(alignment: .leading, spacing: 10) {

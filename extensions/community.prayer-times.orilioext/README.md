@@ -1,6 +1,6 @@
 # Prayer Times
 
-The next prayer and a countdown in the notch, today's five times when the island opens, and a
+The next prayer and a countdown in the notch, today's times and sunrise when the island opens, and a
 reminder before each one. The times are Diyanet İşleri Başkanlığı's own, from the
 [EzanVakti API](https://ezanvakti.emushaf.net) — the only place this extension connects to. A month is
 kept on your Mac, so it keeps working offline.
@@ -92,7 +92,7 @@ The settings form Orilio draws: `city` (needs `"location": "city-picker"`), `sel
   ear: { leading: { text: "İkindi" }, trailing: { style: "countdown", target: "2026-10-28T12:45:00Z" } },
   island: { sections: [
     { type: "hero", label: "Sıradaki vakit", title: "İkindi", countdownTo: "…", caption: "15:45’de" },
-    { type: "list", rows: [{ title: "Sabah", value: "05:57", state: "past" }, …] },
+    { type: "list", rows: [{ title: "İmsak", value: "05:57", state: "past" }, …] },
     { type: "footnote", text: "…" },
   ] },
   reminders: [{ id: "asr-before-…", date: "…", title: "İkindi 10 dakika sonra", body: "15:45" }],

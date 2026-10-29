@@ -36,10 +36,12 @@ struct EqualizerView: NSViewRepresentable {
         static let arch = Style(size: CGSize(width: 16, height: 14), barWidth: 2,
                                 low: [0.15, 0.25, 0.35, 0.25, 0.15], high: [0.45, 0.75, 1.0, 0.75, 0.45],
                                 rest: [0.3, 0.5, 0.7, 0.5, 0.3], periods: [0.43, 0.57, 0.37, 0.61, 0.49], phase: 0.13)
-        /// The M3 hub design's collapsed music state: four 3 pt bars, 6/12/8/14 of 16 pt, slow waves.
-        static let wave = Style(size: CGSize(width: 19.5, height: 16), barWidth: 3,
-                                low: [0.15, 0.3, 0.2, 0.35], high: [0.375, 0.75, 0.5, 0.875],
-                                rest: [0.3, 0.55, 0.4, 0.6], periods: [0.9, 1.07, 1.24, 1.41], phase: 0.12)
+        /// The collapsed music state: five 2 pt bars with 2 pt gaps, so it reads as one wave rather than
+        /// a row of blocks. The peaks don't line up in the middle, and the slow, uneven periods keep it
+        /// from looking like a loop.
+        static let wave = Style(size: CGSize(width: 18, height: 16), barWidth: 2,
+                                low: [0.2, 0.35, 0.25, 0.4, 0.2], high: [0.5, 0.9, 0.65, 1.0, 0.55],
+                                rest: [0.3, 0.55, 0.4, 0.6, 0.35], periods: [0.9, 1.07, 1.24, 0.97, 1.33], phase: 0.12)
     }
 
     func makeNSView(context: Context) -> EqualizerLayerView { EqualizerLayerView(style: style) }
@@ -56,11 +58,14 @@ struct EqualizerView: NSViewRepresentable {
 final class EqualizerLayerView: NSView {
     private let style: EqualizerView.Style
     private var bars: [CALayer] = []
+    /// Each bar's resting height as a fraction of the view's.
+    private var levels: [CGFloat]
     private var current: EqualizerView.Mode?
     private var currentReduceMotion = false
 
     init(style: EqualizerView.Style = .arch) {
         self.style = style
+        levels = style.rest
         super.init(frame: NSRect(origin: .zero, size: style.size))
         wantsLayer = true
         for _ in style.rest {
@@ -84,11 +89,15 @@ final class EqualizerLayerView: NSView {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         for (index, bar) in bars.enumerated() {
-            bar.bounds = CGRect(x: 0, y: 0, width: style.barWidth, height: bounds.height)
+            bar.bounds = CGRect(x: 0, y: 0, width: style.barWidth, height: height(levels[index]))
             bar.position = CGPoint(x: CGFloat(index) * (style.barWidth + gap) + style.barWidth / 2, y: bounds.midY)
         }
         CATransaction.commit()
     }
+
+    /// Bars change height, never scale: a scaled bar squashes its round caps.
+    /// Never shorter than a dot, so a bar doesn't vanish.
+    private func height(_ level: CGFloat) -> CGFloat { max(style.barWidth, level * style.size.height) } // fixed size; set before layout too
 
     func apply(_ mode: EqualizerView.Mode, color: NSColor, reduceMotion: Bool) {
         bars.forEach { $0.backgroundColor = color.cgColor }
@@ -102,9 +111,9 @@ final class EqualizerLayerView: NSView {
         // Settle into the resting shape; this short ease is the only motion when paused.
         CATransaction.begin()
         CATransaction.setAnimationDuration(reduceMotion ? 0 : 0.3)
+        levels = style.rest.map { mode == .buffering ? 0.3 : $0 }
         for (index, bar) in bars.enumerated() {
-            let scale = mode == .buffering ? 0.3 : style.rest[index]
-            bar.transform = CATransform3DMakeScale(1, scale, 1)
+            bar.bounds.size.height = height(levels[index])
         }
         layer?.opacity = mode == .paused ? 0.45 : 1
         CATransaction.commit()
@@ -113,14 +122,17 @@ final class EqualizerLayerView: NSView {
         switch mode {
         case .playing:
             for (index, bar) in bars.enumerated() {
-                let level = CABasicAnimation(keyPath: "transform.scale.y")
-                level.fromValue = style.low[index]
-                level.toValue = style.high[index]
+                let level = CABasicAnimation(keyPath: "bounds.size.height")
+                level.fromValue = height(style.low[index])
+                level.toValue = height(style.high[index])
                 level.duration = style.periods[index]
                 level.autoreverses = true
                 level.repeatCount = .infinity
                 level.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
                 level.beginTime = CACurrentMediaTime() - Double(index) * style.phase // start out of phase
+                // Slow, small bars look the same at 30 fps; without this the window server redraws them
+                // at the display's full rate (120 Hz on ProMotion) for as long as music plays.
+                level.preferredFrameRateRange = CAFrameRateRange(minimum: 15, maximum: 30, preferred: 30)
                 bar.add(level, forKey: "level")
             }
         case .buffering:
