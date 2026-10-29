@@ -144,7 +144,9 @@ const plain = (s) => (s || "").toLocaleUpperCase("tr").normalize("NFD").replace(
 /** The district for a city (its own district, else the province centre), then that district's month. */
 async function diyanetMonth(city, cached) {
   const key = city.latitude + "," + city.longitude;
-  const place = cached && cached.key === key && cached.district ? cached : { key };
+  // The district is kept as soon as it's found, so a slow month fetch only needs that one request next time.
+  const saved = orilio.storage.get("diyanetPlace");
+  const place = cached && cached.key === key && cached.district ? cached : saved && saved.key === key ? saved : { key };
   if (!place.district) {
     if (city.countryCode && city.countryCode !== "TR") return null; // ponytail: Türkiye's districts only
     const cities = await getJSON("/sehirler/2"); // 2: Türkiye
@@ -156,6 +158,7 @@ async function diyanetMonth(city, cached) {
       || districts.find((d) => plain(d.IlceAdi) === plain(match.SehirAdi)) || districts[0];
     place.district = district.IlceID;
     place.districtName = district.IlceAdi;
+    orilio.storage.set("diyanetPlace", { key, district: place.district, districtName: place.districtName });
   }
   const days = {};
   for (const v of await getJSON("/vakitler/" + place.district)) {
@@ -188,7 +191,7 @@ async function refresh(ctx) {
   if (!city || typeof city.latitude !== "number" || typeof city.longitude !== "number" || !city.timeZone) {
     return {
       island: { sections: [{ type: "notice", icon: "location", title: turkish ? "Şehir seçin" : "Choose a city",
-        detail: turkish ? "Vakitler, Prayer Times ayarlarında seçtiğiniz şehre göre hesaplanır." : "Times are calculated for the city you pick in the extension's settings." }] },
+        detail: turkish ? "Vakitler, Namaz Vakitleri ayarlarında seçtiğiniz şehre göre gösterilir." : "Times are calculated for the city you pick in the extension's settings." }] },
     };
   }
 

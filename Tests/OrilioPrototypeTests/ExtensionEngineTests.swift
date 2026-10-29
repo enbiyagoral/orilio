@@ -82,6 +82,16 @@ struct PrayerTimesExtensionTests {
         #expect(source.contains("EzanVakti"))
     }
 
+    /// The month fetch fails after the district was found: the district is kept for the next try.
+    @Test func aFoundDistrictIsKeptWhenTheMonthFails() async throws {
+        let engine = try engine([
+            "/sehirler/2": #"[{"SehirAdi":"İSTANBUL","SehirID":"539"}]"#,
+            "/ilceler/539": #"[{"IlceAdi":"İSTANBUL","IlceID":"9541"}]"#,
+        ])
+        let reply = try await run(engine, queue, id: "community.prayer-times", istanbul("2026-10-28T01:00:00Z")).get()
+        #expect(reply.storage["diyanetPlace"]?.object?["district"] == .string("9541"))
+    }
+
     @Test func offlineItCalculatesAndSaysSo() async throws {
         let result = try ExtensionResult.decode(try await run(try engine(), queue, id: "community.prayer-times", istanbul("2026-10-28T01:00:00Z")).get().result)
         guard case .footnote(let source)? = result.island?.sections.last else { Issue.record("no footnote"); return }
