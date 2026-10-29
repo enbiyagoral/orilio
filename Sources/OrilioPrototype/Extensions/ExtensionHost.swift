@@ -153,7 +153,7 @@ final class ExtensionHost {
 
     @ObservationIgnored let store: ExtensionStore
     @ObservationIgnored private var connection: NSXPCConnection?
-    @ObservationIgnored private let broker = FetchBroker()
+    @ObservationIgnored private let broker = FetchBroker { id in await ExtensionHost.shared.grantedHosts(id) }
     @ObservationIgnored private var timers: [String: Task<Void, Never>] = [:]
     @ObservationIgnored private var loadedScripts = Set<String>()
     @ObservationIgnored private var wakeObserver: NSObjectProtocol?
@@ -356,7 +356,6 @@ final class ExtensionHost {
             let connection = NSXPCConnection(serviceName: ExtensionXPC.serviceName)
             connection.remoteObjectInterface = NSXPCInterface(with: ExtensionRunnerProtocol.self)
             connection.exportedInterface = NSXPCInterface(with: ExtensionHostProtocol.self)
-            broker.permissions = { id in await ExtensionHost.shared.grantedHosts(id) }
             connection.exportedObject = broker
             connection.invalidationHandler = {
                 Task { @MainActor in ExtensionHost.shared.runnerWentAway() }
@@ -494,11 +493,15 @@ struct ExtensionEarContent: Equatable {
 /// The app side of `orilio.fetch`: HTTPS to the extension's declared and allowed hosts only, redirects
 /// included, with size, time and in-flight limits. No cookies or cache are shared with anything else.
 final class FetchBroker: NSObject, ExtensionHostProtocol, @unchecked Sendable {
-    /// The hosts an extension may reach (asked on the main actor).
-    var permissions: @Sendable (String) async -> [String] = { _ in [] }
+    /// The hosts an extension may reach (asked on the main actor). Set once: fetches read it on any thread.
+    let permissions: @Sendable (String) async -> [String]
     /// Guards `inFlight`, which fetch tasks on any thread change.
     private let lock = NSLock()
     private var inFlight: [String: Int] = [:]
+
+    init(permissions: @escaping @Sendable (String) async -> [String]) {
+        self.permissions = permissions
+    }
 
     private lazy var session: URLSession = {
         let configuration = URLSessionConfiguration.ephemeral

@@ -299,14 +299,17 @@ struct ScreenshotCaptureService: Sendable {
         let process = Process()
         process.executableURL = tool
         process.arguments = ["-i", "-x", output.path] // interactive selection, no shutter sound
-        do {
-            try process.run()
-        } catch {
-            return .failed("The system capture tool couldn't start")
+        // The handler is set before the tool starts, so a quick exit can't go unnoticed.
+        let started = await withCheckedContinuation { continuation in
+            process.terminationHandler = { _ in continuation.resume(returning: true) }
+            do {
+                try process.run()
+            } catch {
+                process.terminationHandler = nil
+                continuation.resume(returning: false)
+            }
         }
-        await withCheckedContinuation { continuation in
-            process.terminationHandler = { _ in continuation.resume() }
-        }
+        guard started else { return .failed("The system capture tool couldn't start") }
         // Esc in the selection, or a denied permission, leaves no file.
         return FileManager.default.fileExists(atPath: output.path) ? .captured(output) : .cancelled
     }
