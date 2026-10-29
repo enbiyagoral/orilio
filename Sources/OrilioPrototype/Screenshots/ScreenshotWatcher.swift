@@ -2,7 +2,7 @@
 // Orilio — a calm control surface for the Mac notch.
 // Copyright (C) 2026 Enbiya Goral and Orilio contributors
 
-import Foundation
+import AppKit
 
 /// Adds screenshots taken with the system shortcuts (⇧⌘3, ⇧⌘4, ⇧⌘5) to the library as they are
 /// saved, and the ones copied to the clipboard instead. Off until the user turns it on; screenshots
@@ -85,7 +85,11 @@ final class ScreenshotWatcher {
         let change = pasteboard.changeCount
         guard change != lastChange else { return }
         lastChange = change
-        guard pasteboard.readPermission != .denied, Self.isScreenshotCopy(types: pasteboard.types),
+        // Clipboard history's excluded apps (password managers) are left out here too: a QR code copied
+        // from one is an image and nothing else, just like a screenshot.
+        let excluded = ClipboardPolicy.defaultExcludedApps + (UserDefaults.standard.stringArray(forKey: ClipboardKeys.excludedApps) ?? [])
+        guard !excluded.contains(NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""),
+              pasteboard.readPermission != .denied, Self.isScreenshotCopy(types: pasteboard.types),
               let data = pasteboard.imageData() else { return }
         onCopied(data)
     }
