@@ -96,8 +96,8 @@ private struct SmallButton: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help(label)
-        .accessibilityLabel(label)
+        .help(L(label))
+        .accessibilityLabel(L(label))
     }
 }
 
@@ -210,7 +210,7 @@ private struct TaskList: View {
                 Text("Tasks").font(.system(size: 13, weight: .semibold))
                 Spacer()
                 if !module.tasks.isEmpty {
-                    Text(module.doneText).font(.system(size: 11.5)).foregroundStyle(.white.opacity(0.5))
+                    Text(L(module.doneText)).font(.system(size: 11.5)).foregroundStyle(.white.opacity(0.5))
                 }
             }
             .padding(.horizontal, 6)
@@ -344,7 +344,7 @@ private struct TaskRow: View {
                     .onTapGesture(count: 2) { editing = task.id }
             }
             if let due = NotesPolicy.dueText(task.due, now: now), !task.done {
-                Text(due)
+                Text(L(due))
                     .font(.system(size: 11.5))
                     .foregroundStyle(NotesPolicy.isOverdue(task, now: now) ? Color(red: 1, green: 0.48, blue: 0.43) : .white.opacity(0.5))
             }

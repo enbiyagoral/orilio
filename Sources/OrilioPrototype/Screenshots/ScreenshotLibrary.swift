@@ -178,8 +178,8 @@ final class ScreenshotLibrary {
 
     static func summary(added: Int, duplicates: Int, unreadable: Int) -> String? {
         var parts: [String] = []
-        if duplicates > 0 { parts.append(duplicates == 1 ? "1 was already in the library" : "\(duplicates) were already in the library") }
-        if unreadable > 0 { parts.append(unreadable == 1 ? "1 isn't a readable image" : "\(unreadable) aren't readable images") }
+        if duplicates > 0 { parts.append(duplicates == 1 ? "1 was already in the library" : String(localized: "\(duplicates) were already in the library")) }
+        if unreadable > 0 { parts.append(unreadable == 1 ? "1 isn't a readable image" : String(localized: "\(unreadable) aren't readable images")) }
         return parts.isEmpty ? nil : parts.joined(separator: ", ")
     }
 

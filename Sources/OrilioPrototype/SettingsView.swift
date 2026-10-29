@@ -165,7 +165,7 @@ struct SettingsView: View {
             sidebar
             Rectangle().fill(Design.divider).frame(width: 1)
             VStack(spacing: 0) {
-                Text(pane.title)
+                Text(L(pane.title))
                     .font(.system(size: 15, weight: .semibold))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 28)
@@ -209,7 +209,7 @@ struct SettingsView: View {
             // The window's own traffic lights sit here (the design's 12 pt dots, 18 pt below them).
             Color.clear.frame(height: 32)
             ForEach(Pane.groups, id: \.0) { group, panes in
-                Text(group)
+                Text(L(group))
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(Design.muted(0.4))
                     .padding(EdgeInsets(top: 12, leading: 8, bottom: 4, trailing: 8))
@@ -226,9 +226,9 @@ struct SettingsView: View {
                             }
                             .frame(width: 22, height: 22)
                             .background(item.tile, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-                            Text(item.label).font(.system(size: 13.5, weight: .medium))
+                            Text(L(item.label)).font(.system(size: 13.5, weight: .medium))
                             Spacer(minLength: 0)
-                            Text(item.code).font(.system(size: 10.5)).foregroundStyle(Design.muted(0.35))
+                            Text(L(item.code)).font(.system(size: 10.5)).foregroundStyle(Design.muted(0.35))
                         }
                         .padding(.horizontal, 8)
                         .frame(height: 34)
@@ -273,7 +273,7 @@ private struct AppearanceGlyph: Shape {
 struct SectionLabel: View {
     let text: String
     init(_ text: String) { self.text = text }
-    var body: some View { Text(text).font(.system(size: 13, weight: .semibold)).foregroundStyle(Design.label) }
+    var body: some View { Text(L(text)).font(.system(size: 13, weight: .semibold)).foregroundStyle(Design.label) }
 }
 
 /// Rows in a rounded card (radius 14, 4% white, a 7% hairline), separated by 5% lines.
@@ -316,7 +316,7 @@ struct DesignSwitch: View {
                 .animation(.easeInOut(duration: 0.2), value: isOn)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(label)
+        .accessibilityLabel(L(label))
         .accessibilityValue(isOn ? "On" : "Off")
         .accessibilityAddTraits(.isToggle)
     }
@@ -335,7 +335,7 @@ struct Segmented<Value: Hashable>: View {
             ForEach(options, id: \.0) { value, label in
                 let active = value == selection
                 Button { pick(value) } label: {
-                    Text(label)
+                    Text(L(label))
                         .font(.system(size: compact ? 12.5 : 13, weight: .medium))
                         .foregroundStyle(active ? Design.segmentText : Design.muted(0.8))
                         .padding(.horizontal, compact ? 12 : 14)
@@ -371,12 +371,12 @@ struct DesignCheckbox: View {
                         if isOn { Image(systemName: "checkmark").font(.system(size: 9, weight: .heavy)).foregroundStyle(Design.onAccent) }
                     }
                     .frame(width: 15, height: 15)
-                Text(title).font(.system(size: size)).foregroundStyle(color)
+                Text(L(title)).font(.system(size: size)).foregroundStyle(color)
             }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(title)
+        .accessibilityLabel(L(title))
         .accessibilityValue(isOn ? "On" : "Off")
         .accessibilityAddTraits(.isToggle)
     }
@@ -398,7 +398,7 @@ struct DesignButton: View {
 
     var body: some View {
         Button(action: action) {
-            Text(title)
+            Text(L(title))
                 .font(.system(size: 13, weight: .medium))
                 .padding(.horizontal, 12)
                 .frame(height: 30)
@@ -419,8 +419,8 @@ struct SettingRow<Control: View>: View {
     var body: some View {
         HStack(spacing: 20) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.system(size: 13.5, weight: .medium))
-                if let note { Text(note).font(.system(size: 12)).foregroundStyle(noteColor).fixedSize(horizontal: false, vertical: true) }
+                Text(L(title)).font(.system(size: 13.5, weight: .medium))
+                if let note { Text(L(note)).font(.system(size: 12)).foregroundStyle(noteColor).fixedSize(horizontal: false, vertical: true) }
             }
             Spacer(minLength: 0)
             control
@@ -518,13 +518,13 @@ private struct ModuleRow: View {
                 .frame(width: 32, height: 32)
                 .background(Design.ink.opacity(0.08), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
             VStack(alignment: .leading, spacing: 1) {
-                Text(tab.settingsTitle).font(.system(size: 14, weight: .medium))
-                Text(tab.settingsDetail).font(.system(size: 12)).foregroundStyle(Design.secondary)
+                Text(L(tab.settingsTitle)).font(.system(size: 14, weight: .medium))
+                Text(L(tab.settingsDetail)).font(.system(size: 12)).foregroundStyle(Design.secondary)
             }
             Spacer(minLength: 0)
-            ArrowButton(symbol: "chevron.up", label: "Move \(tab.settingsTitle) up", enabled: index > 0) { modules.move(tab, by: -1) }
-            ArrowButton(symbol: "chevron.down", label: "Move \(tab.settingsTitle) down", enabled: index < last) { modules.move(tab, by: 1) }
-            DesignSwitch(isOn: visible, label: "Show \(tab.settingsTitle)") {
+            ArrowButton(symbol: "chevron.up", label: String(localized: "Move \(L(tab.settingsTitle)) up"), enabled: index > 0) { modules.move(tab, by: -1) }
+            ArrowButton(symbol: "chevron.down", label: String(localized: "Move \(L(tab.settingsTitle)) down"), enabled: index < last) { modules.move(tab, by: 1) }
+            DesignSwitch(isOn: visible, label: String(localized: "Show \(L(tab.settingsTitle))")) {
                 modules.setVisible(tab, !visible) // the last visible module can't be hidden
             }
             .help(visible && modules.visible.count == 1 ? "One module always stays visible" : "")
@@ -567,7 +567,7 @@ private struct ArrowButton: View {
         .buttonStyle(.plain)
         .opacity(enabled ? 1 : 0.25)
         .disabled(!enabled)
-        .accessibilityLabel(label)
+        .accessibilityLabel(L(label))
     }
 }
 
@@ -606,7 +606,7 @@ private struct ModuleDetails: View {
                     SectionLabel("Screenshots")
                     Card {
                         SettingRow(title: "Add new macOS screenshots to the library",
-                                   note: "From ⇧⌘3, ⇧⌘4 or ⇧⌘5, from now on; the originals stay in \(ScreenshotWatcher.folder.lastPathComponent). macOS asks once for access to that folder.") {
+                                   note: String(localized: "From ⇧⌘3, ⇧⌘4 or ⇧⌘5, from now on; the originals stay in \(ScreenshotWatcher.folder.lastPathComponent). macOS asks once for access to that folder.")) {
                             DesignSwitch(isOn: library.addsSystemScreenshots, label: "Add new macOS screenshots") {
                                 library.setAddsSystemScreenshots(!library.addsSystemScreenshots)
                             }
@@ -617,7 +617,7 @@ private struct ModuleDetails: View {
             VStack(alignment: .leading, spacing: 10) {
                 SectionLabel("Privacy")
                 Card {
-                    Text("Spotify and Music are read through their public notifications and controlled with Apple Events after you allow it. Calendar events are read from the Calendar app on this Mac. Clipboard history stays on this Mac. No analytics; the only network use is loading cover art from the music services and checking for signed updates.")
+                    Text("Spotify and Music are read through their public notifications and controlled with Apple Events after you allow it. Calendar events are read from the Calendar app on this Mac. Clipboard history stays on this Mac. No analytics. Orilio itself goes on the network only to load cover art from the music services and to check for signed updates; extensions reach only the domains they declare and you allow, and a city you search for is looked up by Apple Maps.")
                         .font(.system(size: 12))
                         .foregroundStyle(Design.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -735,8 +735,8 @@ private struct AppearancePane: View {
                                     .shadow(color: active ? option.color.opacity(0.6) : .clear, radius: 7)
                             }
                             .buttonStyle(.plain)
-                            .help(option.title)
-                            .accessibilityLabel(option.title)
+                            .help(L(option.title))
+                            .accessibilityLabel(L(option.title))
                             .accessibilityAddTraits(active ? .isSelected : [])
                         }
                     }
@@ -806,7 +806,7 @@ private struct PanelPreview: View {
             }
             .frame(width: width, height: height)
             .animation(animation, value: size)
-            Text(note)
+            Text(L(note))
                 .font(.system(size: 12))
                 .foregroundStyle(.white.opacity(0.6))
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
@@ -816,10 +816,10 @@ private struct PanelPreview: View {
         .frame(height: 132)
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(note)
+        .accessibilityLabel(L(note))
     }
 
-    private var note: String { "\(size.title) · \(Int(size.width)) pt open" }
+    private var note: String { String(localized: "\(L(size.title)) · \(Int(size.width)) pt open") }
 
     private var animation: Animation? {
         switch motion {
@@ -857,8 +857,8 @@ private struct ThemeCard: View {
                 .frame(height: 52)
                 .background(.black, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(style.title).font(.system(size: 13.5, weight: .semibold))
-                    Text(style.detail).font(.system(size: 12)).foregroundStyle(Design.muted(0.55))
+                    Text(L(style.title)).font(.system(size: 13.5, weight: .semibold))
+                    Text(L(style.detail)).font(.system(size: 12)).foregroundStyle(Design.muted(0.55))
                 }
             }
             .padding(12)
@@ -900,8 +900,8 @@ private struct DisplaysPane: View {
                         let active = fullscreen == mode.rawValue
                         Button { fullscreen = mode.rawValue } label: {
                             VStack(alignment: .leading, spacing: 3) {
-                                Text(label).font(.system(size: 13.5, weight: .semibold))
-                                Text(detail).font(.system(size: 12)).lineSpacing(12 * 0.4).foregroundStyle(Design.muted(0.55))
+                                Text(L(label)).font(.system(size: 13.5, weight: .semibold))
+                                Text(L(detail)).font(.system(size: 12)).lineSpacing(12 * 0.4).foregroundStyle(Design.muted(0.55))
                                     .fixedSize(horizontal: false, vertical: true)
                             }
                             .padding(.horizontal, 14)
@@ -982,7 +982,7 @@ private struct DisplaysIllustration: View {
         .background(Design.ink.opacity(0.03), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Design.cardStroke, lineWidth: 1))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("The island is shown on: \(showOn.title)")
+        .accessibilityLabel(String(localized: "The island is shown on: \(L(showOn.title))"))
     }
 }
 
@@ -1005,7 +1005,7 @@ private struct StartupPane: View {
                         .background(Design.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                     VStack(alignment: .leading, spacing: 3) {
                         Text("Open Orilio at login").font(.system(size: 15, weight: .semibold))
-                        Text(loginNote).font(.system(size: 12.5)).foregroundStyle(loginNoteColor)
+                        Text(L(loginNote)).font(.system(size: 12.5)).foregroundStyle(loginNoteColor)
                     }
                     Spacer(minLength: 0)
                     DesignSwitch(isOn: login != .off, large: true, label: "Open Orilio at login") { setLogin(login == .off) }
@@ -1034,8 +1034,8 @@ private struct StartupPane: View {
                                     .overlay(Circle().fill(active ? Design.accent : .clear).frame(width: 8, height: 8))
                                     .frame(width: 18, height: 18)
                                 VStack(alignment: .leading, spacing: 1) {
-                                    Text(mode.title).font(.system(size: 13.5, weight: .medium))
-                                    Text(mode.detail).font(.system(size: 12)).foregroundStyle(Design.secondary)
+                                    Text(L(mode.title)).font(.system(size: 13.5, weight: .medium))
+                                    Text(L(mode.detail)).font(.system(size: 12)).foregroundStyle(Design.secondary)
                                 }
                                 Spacer(minLength: 0)
                             }

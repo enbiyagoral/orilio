@@ -24,7 +24,7 @@ enum ExtensionsWindow {
             let host = NSHostingController(rootView: ExtensionsView(catalog: .shared, host: .shared))
             host.sizingOptions = []
             let window = NSWindow(contentViewController: host)
-            window.title = "Orilio Extensions"
+            window.title = L("Orilio Extensions")
             window.styleMask = [.titled, .closable, .miniaturizable, .fullSizeContentView]
             window.titlebarAppearsTransparent = true
             window.titleVisibility = .hidden
@@ -130,7 +130,7 @@ struct ExtensionsView: View {
                 ForEach(Category.allCases, id: \.self) { item in
                     let active = item == category
                     Button { category = item } label: {
-                        Text(item.label)
+                        Text(L(item.label))
                             .font(.system(size: 12.5, weight: .medium))
                             .foregroundStyle(active ? .black : .white.opacity(0.8))
                             .padding(.horizontal, 14).frame(height: 30)
@@ -193,14 +193,14 @@ struct ExtensionsView: View {
                     }
                 }
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(name).font(.system(size: 15.5, weight: .semibold))
-                    Text(tagline).font(.system(size: 12.5)).lineSpacing(12.5 * 0.4 - 2).foregroundStyle(.white.opacity(0.58))
+                    Text(L(name)).font(.system(size: 15.5, weight: .semibold))
+                    Text(L(tagline)).font(.system(size: 12.5)).lineSpacing(12.5 * 0.4 - 2).foregroundStyle(.white.opacity(0.58))
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 0)
                 HStack(spacing: 6) {
                     ForEach(chips, id: \.self) { chip in
-                        Text(chip).font(.system(size: 11)).foregroundStyle(.white.opacity(0.7))
+                        Text(L(chip)).font(.system(size: 11)).foregroundStyle(.white.opacity(0.7))
                             .padding(.horizontal, 8).frame(height: 22)
                             .background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                     }
@@ -238,12 +238,12 @@ struct ExtensionsView: View {
             HStack(spacing: 14) {
                 Tile(tint: entry.tint, icon: ExtensionIcons.symbol(entry.icon) ?? "puzzlepiece.extension", size: 60, radius: 16)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(entry.name).font(.system(size: 20, weight: .semibold)).tracking(-0.4)
-                    Text("\(entry.author) · v\(installed?.manifest.version ?? entry.version) · \(entry.license)")
+                    Text(L(entry.name)).font(.system(size: 20, weight: .semibold)).tracking(-0.4)
+                    Text("\(L(entry.author)) · v\(installed?.manifest.version ?? entry.version) · \(entry.license)")
                         .font(.system(size: 12.5)).foregroundStyle(.white.opacity(0.55))
                 }
             }
-            Text(entry.description).font(.system(size: 13.5)).lineSpacing(13.5 * 0.55 - 3).foregroundStyle(.white.opacity(0.8))
+            Text(L(entry.description)).font(.system(size: 13.5)).lineSpacing(13.5 * 0.55 - 3).foregroundStyle(.white.opacity(0.8))
                 .fixedSize(horizontal: false, vertical: true)
             does(entry.does)
             access(entry.permissions.lines.map { ($0.symbol, $0.label, $0.detail, $0.mono, nil) }, never: true)
@@ -256,7 +256,7 @@ struct ExtensionsView: View {
                 }
                 .disabled(busy != nil)
             }
-            if let failure { Text(failure).font(.system(size: 12)).foregroundStyle(SettingsDesign.amber).fixedSize(horizontal: false, vertical: true) }
+            if let failure { Text(L(failure)).font(.system(size: 12)).foregroundStyle(SettingsDesign.amber).fixedSize(horizontal: false, vertical: true) }
         }
         .padding(28)
         .id(entry.id)
@@ -275,7 +275,7 @@ struct ExtensionsView: View {
     private func installedControls(_ entry: CatalogEntry, _ installed: InstalledExtension) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             if ExtensionCatalog.hasUpdate(entry, installed: installed) {
-                MintButton(title: busy == entry.id ? "Updating…" : "Update to v\(entry.version)", height: 38, radius: 11, size: 13.5) {
+                MintButton(title: busy == entry.id ? "Updating…" : String(localized: "Update to v\(entry.version)"), height: 38, radius: 11, size: 13.5) {
                     failure = nil
                     // More permissions than were allowed: ask again, showing the new ones.
                     if entry.permissions.added(since: installed.state.granted).isEmpty { install(entry) } else { consent = entry }
@@ -338,7 +338,7 @@ struct ExtensionsView: View {
             ForEach(lines, id: \.self) { line in
                 HStack(spacing: 8) {
                     Image(systemName: "checkmark").font(.system(size: 11, weight: .semibold)).foregroundStyle(mint)
-                    Text(line)
+                    Text(L(line))
                 }
                 .font(.system(size: 13)).foregroundStyle(.white.opacity(0.8))
             }
@@ -353,8 +353,8 @@ struct ExtensionsView: View {
                     let row = HStack(spacing: 10) {
                         Image(systemName: line.0).font(.system(size: 13)).foregroundStyle(.white.opacity(0.7)).frame(width: 18)
                         VStack(alignment: .leading, spacing: 1) {
-                            Text(line.1).font(.system(size: 13))
-                            Text(line.2).font(line.3 ? mono : .system(size: 11.5)).foregroundStyle(.white.opacity(0.5))
+                            Text(L(line.1)).font(.system(size: 13))
+                            Text(L(line.2)).font(line.3 ? mono : .system(size: 11.5)).foregroundStyle(.white.opacity(0.5))
                         }
                         Spacer(minLength: 0)
                         if line.4 != nil { Image(systemName: "arrow.up.right").font(.system(size: 11)).foregroundStyle(.white.opacity(0.5)) }
@@ -405,18 +405,18 @@ enum LocalExtensionLoader {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
-        panel.prompt = "Load"
-        panel.message = "Choose a folder with orilio-extension.json and main.js."
+        panel.prompt = L("Load")
+        panel.message = L("Choose a folder with orilio-extension.json and main.js.")
         guard panel.runModal() == .OK, let folder = panel.url else { return }
         do {
             let manifest = try ExtensionPackage.read(folder)
             let alert = NSAlert()
-            alert.messageText = "Allow \(manifest.name) to:"
-            let lines = manifest.permissions.lines.map { "• \($0.label) — \($0.detail)" }
-            alert.informativeText = (lines.isEmpty ? "Nothing beyond showing content in Orilio’s widgets." : lines.joined(separator: "\n"))
-                + "\n\nIt runs in its own sandboxed process and can only show content through Orilio’s widgets. You can change this any time."
-            alert.addButton(withTitle: "Allow & install")
-            alert.addButton(withTitle: "Cancel")
+            alert.messageText = String(localized: "Allow \(manifest.name) to:")
+            let lines = manifest.permissions.lines.map { "• " + L($0.label) + " — " + L($0.detail) }
+            alert.informativeText = (lines.isEmpty ? L("Nothing beyond showing content in Orilio’s widgets.") : lines.joined(separator: "\n"))
+                + "\n\n" + L("It runs in its own sandboxed process and can only show content through Orilio’s widgets. You can change this any time.")
+            alert.addButton(withTitle: L("Allow & install"))
+            alert.addButton(withTitle: L("Cancel"))
             guard alert.runModal() == .alertFirstButtonReturn else { return }
             Task {
                 await requestExtensionNotifications(manifest.permissions)
@@ -456,7 +456,7 @@ private struct MintButton: View {
 
     var body: some View {
         Button(action: action) {
-            Text(title).font(.system(size: size, weight: .semibold)).foregroundStyle(onMint)
+            Text(L(title)).font(.system(size: size, weight: .semibold)).foregroundStyle(onMint)
                 .frame(maxWidth: .infinity).frame(height: height)
                 .background(mint, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
                 .shadow(color: mint.opacity(0.35), radius: 11)
@@ -484,7 +484,7 @@ private struct ConsentSheet: View {
                 ForEach(permissions.lines, id: \.label) { line in
                     HStack(alignment: .firstTextBaseline, spacing: 10) {
                         Image(systemName: line.symbol).font(.system(size: 12)).foregroundStyle(mint).frame(width: 16)
-                        (Text(line.label) + Text(" — \(line.detail)").foregroundColor(.white.opacity(0.5)))
+                        (Text(L(line.label)) + Text(" — " + L(line.detail)).foregroundColor(.white.opacity(0.5)))
                             .font(.system(size: 13)).lineSpacing(13 * 0.4 - 2).fixedSize(horizontal: false, vertical: true)
                         if added.contains(line.label) {
                             Text("New").font(.system(size: 10.5, weight: .semibold)).foregroundStyle(SettingsDesign.amber)
@@ -537,7 +537,7 @@ struct ExtensionSettingsView: View {
         if let ext = host.installed.first(where: { $0.id == id }) {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 10) {
-                    Text(ext.manifest.name).font(.system(size: 14.5, weight: .semibold))
+                    Text(L(ext.manifest.name)).font(.system(size: 14.5, weight: .semibold))
                     Text("Extension settings").font(.system(size: 12)).foregroundStyle(.white.opacity(0.45))
                     Spacer()
                     Button("Done", action: done).buttonStyle(.plain).font(.system(size: 13, weight: .medium))
@@ -549,7 +549,7 @@ struct ExtensionSettingsView: View {
                     VStack(spacing: 0) {
                         ForEach(Array(ext.manifest.settings.enumerated()), id: \.offset) { index, setting in
                             HStack {
-                                Text(setting.label).font(.system(size: 13.5))
+                                Text(L(setting.label)).font(.system(size: 13.5))
                                 Spacer(minLength: 12)
                                 control(ext, setting)
                             }
@@ -582,7 +582,7 @@ struct ExtensionSettingsView: View {
     }
 
     private func chip(_ text: String, mono: Bool = false) -> some View {
-        Text(text).font(mono ? .system(size: 12, design: .monospaced) : .system(size: 12)).foregroundStyle(.white.opacity(0.6))
+        Text(L(text)).font(mono ? .system(size: 12, design: .monospaced) : .system(size: 12)).foregroundStyle(.white.opacity(0.6))
             .padding(.horizontal, 9).frame(height: 24)
             .background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
     }
@@ -600,7 +600,7 @@ struct ExtensionSettingsView: View {
                 ForEach(setting.options ?? [], id: \.value) { option in
                     let active = option.value == value
                     Button { set(option.value) } label: {
-                        Text(option.label).font(.system(size: 12.5, weight: active ? .medium : .regular))
+                        Text(L(option.label)).font(.system(size: 12.5, weight: active ? .medium : .regular))
                             .foregroundStyle(active ? .black : .white.opacity(0.8))
                             .padding(.horizontal, 11).frame(height: 26)
                             .background(active ? .white.opacity(0.9) : .clear, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
@@ -632,7 +632,7 @@ private struct CityPicker: View {
         Button { open = true } label: {
             HStack(spacing: 8) {
                 Image(systemName: "mappin.and.ellipse").font(.system(size: 12))
-                Text(city?["name"]?.string ?? "Choose a city").font(.system(size: 13))
+                Text(city?["name"]?.string ?? L("Choose a city")).font(.system(size: 13))
             }
             .padding(.horizontal, 12).frame(height: 30)
             .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -712,7 +712,7 @@ struct ExtensionsPane: View {
                         HStack(spacing: 8) {
                             if !ext.manifest.settings.isEmpty { DesignButton(title: "Settings…") { settingsFor = SheetID(id: ext.id) } }
                             DesignButton(title: "Uninstall") { host.uninstall(ext.id) }
-                            DesignSwitch(isOn: ext.state.enabled, label: "Show \(ext.manifest.name) in the notch") {
+                            DesignSwitch(isOn: ext.state.enabled, label: String(localized: "Show \(ext.manifest.name) in the notch")) {
                                 host.setEnabled(ext.id, !ext.state.enabled)
                             }
                         }
@@ -734,7 +734,7 @@ struct ExtensionsPane: View {
                     }
                 }
             }
-            if let failure { Text(failure).font(.system(size: 12)).foregroundStyle(SettingsDesign.warn) }
+            if let failure { Text(L(failure)).font(.system(size: 12)).foregroundStyle(SettingsDesign.warn) }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .sheet(item: $settingsFor) { sheet in ExtensionSettingsView(id: sheet.id, host: host) { settingsFor = nil } }
@@ -747,7 +747,7 @@ struct ExtensionsPane: View {
         if let error = ext.diagnostics.lastError {
             parts.append(error)
         } else if let run = ext.diagnostics.lastRun {
-            parts.append("last run \(run.formatted(date: .omitted, time: .shortened))")
+            parts.append(String(localized: "last run \(run.formatted(date: .omitted, time: .shortened))"))
             if ext.diagnostics.residentBytes > 0 {
                 parts.append(ByteCountFormatter.string(fromByteCount: Int64(ext.diagnostics.residentBytes), countStyle: .memory))
             }

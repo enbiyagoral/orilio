@@ -201,7 +201,9 @@ extension EarLayout {
         case (.extensionEar(let content, let withMusic), _):
             guard let part = ExtensionEarContent.part(content, side: side, withMusic: withMusic) else { return 0 }
             let icon: CGFloat = ExtensionIcons.symbol(part.icon) == nil ? 0 : 11 + 6
-            return icon + (part.style == "countdown" ? text("88:88", mono: true) : text(part.text ?? ""))
+            // The countdown's text as it reads now ("2 h 55 min"); the ear is re-measured as it changes.
+            let countdown = part.target.map { ExtensionCountdown.text(to: $0, from: now) } ?? ""
+            return icon + text(part.style == "countdown" ? countdown : part.text ?? "")
         }
     }
 }

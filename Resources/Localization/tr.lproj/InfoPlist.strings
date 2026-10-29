@@ -1,0 +1,5 @@
+/* Orilio — Türkçe izin açıklamaları. */
+"NSCalendarsFullAccessUsageDescription" = "Orilio bugünkü etkinlikleri ve sıradaki toplantınızı çentikte gösterir. Takvim verileri bu Mac’te kalır.";
+"NSCalendarsUsageDescription" = "Orilio bugünkü etkinlikleri ve sıradaki toplantınızı çentikte gösterir. Takvim verileri bu Mac’te kalır.";
+"NSCameraUsageDescription" = "Orilio, açtığınız sürece kamerayı çentikte ayna olarak gösterir. Hiçbir şey kaydedilmez, saklanmaz ya da gönderilmez.";
+"NSAppleEventsUsageDescription" = "Orilio, Spotify ve Müzik’te çalanı gösterir ve düğmelerini kullandığınızda oynatmayı kontrol eder.";

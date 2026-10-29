@@ -20,7 +20,7 @@ struct FocusPanel: View {
     var body: some View {
         if let ended = module.endedWhileAsleep {
             // The deadline passed while the Mac slept: say when, once, and offer the next one.
-            StatusCard(tone: .good, symbol: "moon.zzz", title: "Session ended at \(ended.formatted(date: .omitted, time: .shortened))",
+            StatusCard(tone: .good, symbol: "moon.zzz", title: String(localized: "Session ended at \(ended.formatted(date: .omitted, time: .shortened))"),
                        detail: "Your Mac was asleep, so Orilio stayed quiet.",
                        primary: .init("Start another") { module.begin() },
                        secondary: .init("Dismiss") { module.dismissEndedNotice() })
@@ -51,10 +51,10 @@ struct FocusPanel: View {
                 }
                 HStack(spacing: 6) {
                     ForEach(FocusModule.presets, id: \.self) { preset in
-                        Chip(label: "\(preset) min", active: module.minutes == preset) { module.setMinutes(preset) }
+                        Chip(label: String(localized: "\(preset) min"), active: module.minutes == preset) { module.setMinutes(preset) }
                     }
                     let custom = !FocusModule.presets.contains(module.minutes)
-                    Chip(label: custom ? "\(module.minutes) min" : "Custom", active: custom) { customOpen = true }
+                    Chip(label: custom ? String(localized: "\(module.minutes) min") : "Custom", active: custom) { customOpen = true }
                         .popover(isPresented: $customOpen, arrowEdge: .bottom) {
                             Stepper(module.minutes == 1 ? "1 minute" : "\(module.minutes) minutes",
                                     onIncrement: { module.setMinutes(FocusModule.step(module.minutes, up: true)) },
@@ -130,12 +130,12 @@ private struct FocusRing: View {
                 Text(FocusSession.text(remaining))
                     .font(.system(size: 38, weight: .semibold).monospacedDigit())
                     .tracking(-1.1)
-                Text(module.stateText).font(.system(size: 12)).foregroundStyle(.white.opacity(0.55))
+                Text(L(module.stateText)).font(.system(size: 12)).foregroundStyle(.white.opacity(0.55))
             }
         }
         .frame(width: 152, height: 152)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Focus timer, \(FocusSession.text(remaining)) remaining, \(module.stateText)")
+        .accessibilityLabel(String(localized: "Focus timer, \(FocusSession.text(remaining)) remaining, \(module.stateText)"))
     }
 }
 
@@ -146,7 +146,7 @@ private struct Chip: View {
 
     var body: some View {
         Button(action: action) {
-            Text(label)
+            Text(L(label))
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(active ? .black : .white)
                 .padding(.horizontal, 14)
@@ -172,7 +172,7 @@ private struct SessionDots: View {
             }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(count) focus \(count == 1 ? "session" : "sessions") completed today")
+        .accessibilityLabel(count == 1 ? String(localized: "1 focus session completed today") : String(localized: "\(count) focus sessions completed today"))
     }
 }
 
@@ -192,13 +192,13 @@ private struct FocusEndCard: View {
                         .overlay { Image(systemName: "checkmark").font(.system(size: 15, weight: .bold)).foregroundStyle(accent(.action)) }
                 }
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(title).font(.system(size: 14, weight: .semibold))
-                    Text(detail).font(.system(size: 11.5)).foregroundStyle(.white.opacity(0.58))
+                    Text(L(title)).font(.system(size: 14, weight: .semibold))
+                    Text(L(detail)).font(.system(size: 11.5)).foregroundStyle(.white.opacity(0.58))
                 }
             }
             HStack(spacing: 6) {
                 Button(action: primary) {
-                    Text(primaryTitle).font(.system(size: 12, weight: .semibold))
+                    Text(L(primaryTitle)).font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(Design.ink)
                         .frame(maxWidth: .infinity)
                         .frame(height: 34)
@@ -207,7 +207,7 @@ private struct FocusEndCard: View {
                 .buttonStyle(PressableStyle())
                 .keyboardFocusRing(true)
                 Button(action: secondary) {
-                    Text(secondaryTitle).font(.system(size: 12, weight: .medium))
+                    Text(L(secondaryTitle)).font(.system(size: 12, weight: .medium))
                         .padding(.horizontal, 12)
                         .frame(height: 34)
                         .background(.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
@@ -229,15 +229,15 @@ private struct FocusEndCard: View {
 
     private var detail: String {
         switch finished {
-        case .session(let number, _): "Session \(number) of \(FocusModule.cycle)"
-        case .breakOver(let next): "Ready for session \(next) of \(FocusModule.cycle)?"
+        case .session(let number, _): String(localized: "Session \(number) of \(FocusModule.cycle)")
+        case .breakOver(let next): String(localized: "Ready for session \(next) of \(FocusModule.cycle)?")
         }
     }
 
     private var primaryTitle: String {
         switch finished {
-        case .session(let number, _): "\(FocusModule.breakMinutes(after: number)) min break"
-        case .breakOver: "Start \(module.minutes) min"
+        case .session(let number, _): String(localized: "\(FocusModule.breakMinutes(after: number)) min break")
+        case .breakOver: String(localized: "Start \(module.minutes) min")
         }
     }
 
@@ -277,7 +277,7 @@ private struct BreakPanel: View {
                 }
                 .frame(width: 152, height: 152)
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Break, \(FocusSession.text(remaining)) left")
+                .accessibilityLabel(String(localized: "Break, \(FocusSession.text(remaining)) left"))
             }
             .frame(width: 176, height: 176)
             VStack(alignment: .leading, spacing: 16) {

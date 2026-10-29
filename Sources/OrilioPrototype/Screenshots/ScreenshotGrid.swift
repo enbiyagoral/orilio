@@ -162,7 +162,7 @@ final class ScreenshotCell: NSCollectionViewItem {
         view.layer?.contents = nil
         let date = item.capturedAt.formatted(date: .abbreviated, time: .shortened)
         view.toolTip = "\(date) · \(item.pixelWidth)×\(item.pixelHeight)"
-        view.setAccessibilityLabel("Screenshot, \(date)")
+        view.setAccessibilityLabel(String(localized: "Screenshot, \(date)"))
         load = Task { [weak self] in
             let box = await ThumbnailCache.shared.image(for: item, in: store)
             guard !Task.isCancelled, let self, self.showing == item.id else { return }
@@ -202,8 +202,8 @@ enum ScreenshotMenu {
         menu.addItem(.separator())
         let withOriginal = targets.allSatisfy(library.hasExternalOriginal)
         let title = withOriginal
-            ? (targets.count > 1 ? "Remove \(targets.count) from Library" : "Remove from Library")
-            : (targets.count > 1 ? "Delete \(targets.count) Screenshots" : "Delete Screenshot")
+            ? (targets.count > 1 ? String(localized: "Remove \(targets.count) from Library") : "Remove from Library")
+            : (targets.count > 1 ? String(localized: "Delete \(targets.count) Screenshots") : "Delete Screenshot")
         let remove = MenuAction(title) { library.remove(targets) }
         remove.toolTip = withOriginal
             ? "Orilio's copy moves to the Trash. The original file stays where it is."

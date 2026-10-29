@@ -144,10 +144,10 @@ struct CalendarDay: Equatable, Sendable {
     /// "in 4 min", "in 1 h 20 min", "now".
     static func countdown(to date: Date, from now: Date) -> String {
         let minutes = Int((date.timeIntervalSince(now) / 60).rounded(.up))
-        if minutes <= 0 { return "now" }
-        if minutes < 60 { return "in \(minutes) min" }
+        if minutes <= 0 { return String(localized: "now") }
+        if minutes < 60 { return String(localized: "in \(minutes) min") }
         let hours = minutes / 60, rest = minutes % 60
-        return rest == 0 ? "in \(hours) h" : "in \(hours) h \(rest) min"
+        return rest == 0 ? String(localized: "in \(hours) h") : String(localized: "in \(hours) h \(rest) min")
     }
 
     static func initials(_ name: String) -> String {

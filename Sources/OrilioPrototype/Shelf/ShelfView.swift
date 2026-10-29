@@ -20,7 +20,7 @@ struct DropTargetView: View {
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(.white.opacity(Metrics.secondaryText))
             }
-            Text(valid ? title : "This can't go on the \(destination)")
+            Text(valid ? title : String(localized: "This can't go on the \(L(destination))"))
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(valid ? .white : .white.opacity(Metrics.secondaryText))
         }
@@ -35,8 +35,8 @@ struct DropTargetView: View {
     }
 
     private var title: String {
-        let what = count == 1 ? "1 file" : "\(count) files"
-        return destination == "Shelf" ? "Release to add \(what)" : "Release to add \(what) to \(destination)"
+        let what = count == 1 ? L("1 file") : String(localized: "\(count) files")
+        return destination == "Shelf" ? String(localized: "Release to add \(what)") : String(localized: "Release to add \(what) to \(L(destination))")
     }
 }
 
@@ -75,7 +75,7 @@ struct ShelfView: View {
         .animation(.easeOut(duration: 0.22), value: shelf.previewing)
         // Once each time the shelf is shown: files may have moved or been deleted meanwhile.
         .task { shelf.refreshAvailability() }
-        .confirmationDialog("Remove all \(shelf.items.count) items from the Shelf?", isPresented: $confirmClear) {
+        .confirmationDialog(String(localized: "Remove all \(shelf.items.count) items from the Shelf?"), isPresented: $confirmClear) {
             Button("Clear All", role: .destructive) { shelf.clearAll() }
         } message: {
             Text("The files stay where they are.")
@@ -98,7 +98,8 @@ struct ShelfView: View {
             } else if section == .files, !shelf.items.isEmpty {
                 // The M5 dense design's header: "· 20 items · 1.2 GB", Select, Clear all…
                 HStack(spacing: 6) {
-                    Text("\(shelf.items.count) \(shelf.items.count == 1 ? "item" : "items") · \(ByteCountFormatter.string(fromByteCount: shelf.totalSize, countStyle: .file))")
+                    Text(shelf.items.count == 1 ? "1 item · \(ByteCountFormatter.string(fromByteCount: shelf.totalSize, countStyle: .file))" as LocalizedStringKey
+                         : "\(shelf.items.count) items · \(ByteCountFormatter.string(fromByteCount: shelf.totalSize, countStyle: .file))")
                         .font(.system(size: 12)).foregroundStyle(.white.opacity(0.5))
                         .padding(.trailing, 4)
                     HeaderPill(title: shelf.selection.count == shelf.items.count ? "Deselect" : "Select") { shelf.toggleSelectAll() }
@@ -110,7 +111,7 @@ struct ShelfView: View {
 
     private func title(for section: ShelfSection) -> String {
         let count = section == .files ? shelf.items.count : library.items.count
-        return count > 0 ? "\(section.rawValue) \(count)" : section.rawValue
+        return count > 0 ? String(localized: "\(L(section.rawValue)) \(count)") : L(section.rawValue)
     }
 }
 
@@ -120,7 +121,7 @@ private struct HeaderPill: View {
 
     var body: some View {
         Button(action: action) {
-            Text(title).font(.system(size: 12, weight: .medium))
+            Text(L(title)).font(.system(size: 12, weight: .medium))
                 .padding(.horizontal, 10)
                 .frame(height: 26)
                 .background(.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -170,7 +171,7 @@ private extension FilesStrip {
     /// Asks where the file is now (the open panel is Orilio's own; no permission is needed).
     func locate(_ item: ShelfItem) {
         let panel = NSOpenPanel()
-        panel.message = "Where is \(item.name) now?"
+        panel.message = String(localized: "Where is \(item.name) now?")
         panel.canChooseDirectories = item.isFolder
         panel.canChooseFiles = !item.isFolder
         panel.directoryURL = item.url.deletingLastPathComponent()
@@ -221,7 +222,7 @@ private struct FilesStrip: View {
                 }
                 if case .missing(let id) = state, let item = shelf.items.first(where: { $0.id == id }) {
                     StatusCard(tone: .warn, symbol: "doc.badge.ellipsis", title: "File moved or deleted",
-                               detail: "\(item.name) is no longer where it was.",
+                               detail: String(localized: "\(item.name) is no longer where it was."),
                                primary: .init("Locate…") { locate(item) }, secondary: .init("Remove") { shelf.remove(item) },
                                layout: .banner)
                         .background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
@@ -273,13 +274,13 @@ private struct ShelfTile: View {
             TileThumbnail(item: item, dense: dense, dimmed: showsActions)
                 .anchorPreference(key: ThumbnailBounds.self, value: .bounds) { $0 }
             VStack(alignment: .leading, spacing: 1) {
-                Text(item.isAvailable ? item.name : "Missing: \(item.name)")
+                Text(item.isAvailable ? item.name : String(localized: "Missing: \(item.name)"))
                     .font(.system(size: dense ? 10.5 : 12))
                     .foregroundStyle(item.isAvailable ? .white.opacity(dense ? 0.8 : 1) : .orange)
                     .lineLimit(1)
                     .truncationMode(.middle) // the extension stays visible
                 if !dense {
-                    Text(detail).font(.system(size: 10.5)).foregroundStyle(.white.opacity(0.45)).lineLimit(1)
+                    Text(L(detail)).font(.system(size: 10.5)).foregroundStyle(.white.opacity(0.45)).lineLimit(1)
                 }
             }
         }
@@ -348,9 +349,9 @@ private struct TileActions: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            action("arrow.up.right.square", "Open \(item.name)", primary: false) { shelf.open([item]) }
-            action("eye", "Quick Look \(item.name)", primary: true) { shelf.preview(item) }
-            action("xmark", "Remove \(item.name) from Shelf", primary: false) { shelf.remove(item) }
+            action("arrow.up.right.square", String(localized: "Open \(item.name)"), primary: false) { shelf.open([item]) }
+            action("eye", String(localized: "Quick Look \(item.name)"), primary: true) { shelf.preview(item) }
+            action("xmark", String(localized: "Remove \(item.name) from Shelf"), primary: false) { shelf.remove(item) }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -365,8 +366,8 @@ private struct TileActions: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(PressableStyle())
-        .help(label)
-        .accessibilityLabel(label)
+        .help(L(label))
+        .accessibilityLabel(L(label))
     }
 }
 
@@ -390,7 +391,7 @@ private struct MoreTile: View {
         }
         .buttonStyle(PressableStyle())
         .help("Show all files")
-        .accessibilityLabel("\(count) more files. Show all")
+        .accessibilityLabel(String(localized: "\(count) more files. Show all"))
     }
 }
 
@@ -411,7 +412,7 @@ private struct PendingTile: View {
         .frame(height: dense ? 92 : 146)
         .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: dense ? 12 : 16, style: .continuous))
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Receiving \(pending.name)")
+        .accessibilityLabel(String(localized: "Receiving \(pending.name)"))
     }
 }
 
@@ -433,7 +434,7 @@ private struct TileThumbnail: View {
                 .blur(radius: dimmed ? 6 : 0)
                 .overlay { if dimmed { Color.black.opacity(0.55) } }
             if let kind, !dense, item.cloud == .local {
-                Text(kind)
+                Text(L(kind))
                     .font(.system(size: 10, weight: .bold))
                     .tracking(0.6)
                     .padding(.horizontal, 5)

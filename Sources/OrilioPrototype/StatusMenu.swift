@@ -52,11 +52,11 @@ enum MenuStatus {
         switch layout.primary?.payload {
         case .meeting(let event)?:
             return MeetingEar.started(event, now: now) ? "\(event.title) · now"
-                : "\(event.title) \(CalendarDay.countdown(to: event.start, from: now))"
+                : String(localized: "\(event.title) \(CalendarDay.countdown(to: event.start, from: now))")
         case .focus(let kind)?:
             switch kind {
-            case .running: return focus.isRunning ? "Focus · \(FocusSession.text(focus.remaining(at: now))) left" : "Focus · paused"
-            case .onBreak: return "Break · \(FocusSession.text(focus.breakRemaining(at: now))) left"
+            case .running: return focus.isRunning ? String(localized: "Focus · \(FocusSession.text(focus.remaining(at: now))) left") : "Focus · paused"
+            case .onBreak: return String(localized: "Break · \(FocusSession.text(focus.breakRemaining(at: now))) left")
             case .done(let label): return label
             }
         case .nowPlaying(let session)?:
@@ -231,11 +231,11 @@ final class StatusMenu: NSObject, NSMenuDelegate {
                     island.modules.setVisible(tab, !island.modules.isVisible(tab))
                 })
             }
-            let sub = NSMenuItem(title: "Hide or show a module", action: nil, keyEquivalent: "")
+            let sub = NSMenuItem(title: L("Hide or show a module"), action: nil, keyEquivalent: "")
             sub.submenu = modules
             debug.addItem(sub)
         }
-        let item = NSMenuItem(title: "Debug", action: nil, keyEquivalent: "")
+        let item = NSMenuItem(title: L("Debug"), action: nil, keyEquivalent: "")
         item.submenu = debug
         return item
     }
@@ -272,7 +272,7 @@ struct MenuHeaderView: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text("Orilio").font(.system(size: 13, weight: .semibold))
                 if let status = model.status {
-                    Text(status).font(.system(size: 11.5)).foregroundStyle(Design.loginOn).lineLimit(1)
+                    Text(L(status)).font(.system(size: 11.5)).foregroundStyle(Design.loginOn).lineLimit(1)
                 }
             }
             Spacer(minLength: 0)
@@ -301,7 +301,7 @@ struct QuickActionGrid: View {
                         Image(systemName: active && action == .pin ? "pin.fill" : action.symbol)
                             .font(.system(size: 16, weight: .medium))
                             .foregroundStyle(active ? Design.accentText : Design.ink)
-                        Text(action.label).font(.system(size: 10.5)).foregroundStyle(Design.muted(0.75))
+                        Text(L(action.label)).font(.system(size: 10.5)).foregroundStyle(Design.muted(0.75))
                     }
                     .frame(maxWidth: .infinity)
                     .frame(height: 58)
@@ -309,7 +309,7 @@ struct QuickActionGrid: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(action.label)
+                .accessibilityLabel(L(action.label))
                 .accessibilityAddTraits(active ? .isSelected : [])
             }
         }

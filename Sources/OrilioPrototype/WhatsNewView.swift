@@ -33,8 +33,8 @@ struct WhatsNewView: View {
                             .frame(width: 40, height: 40)
                             .background(tile(item.tint), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                         VStack(alignment: .leading, spacing: 3) {
-                            Text(item.title).font(.system(size: 15, weight: .semibold))
-                            Text(item.body).font(.system(size: 13)).lineSpacing(13 * 0.45 - 2)
+                            Text(L(item.title)).font(.system(size: 15, weight: .semibold))
+                            Text(L(item.body)).font(.system(size: 13)).lineSpacing(13 * 0.45 - 2)
                                 .foregroundStyle(Design.secondary).fixedSize(horizontal: false, vertical: true)
                         }
                     }
@@ -117,7 +117,7 @@ enum WhatsNewWindow {
         if window == nil {
             let host = NSHostingController(rootView: WhatsNewView(notes: notes) { WhatsNewWindow.close() })
             let window = NSWindow(contentViewController: host)
-            window.title = "What’s New in Orilio"
+            window.title = L("What’s New in Orilio")
             window.styleMask = [.titled, .closable, .fullSizeContentView]
             window.titlebarAppearsTransparent = true
             window.titleVisibility = .hidden

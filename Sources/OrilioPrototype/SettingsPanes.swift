@@ -23,8 +23,8 @@ private struct PaneRow<Control: View>: View {
     var body: some View {
         HStack(spacing: 20) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.system(size: titleSize, weight: titleWeight))
-                if let note { Text(note).font(.system(size: 12)).foregroundStyle(noteColor).fixedSize(horizontal: false, vertical: true) }
+                Text(L(title)).font(.system(size: titleSize, weight: titleWeight))
+                if let note { Text(L(note)).font(.system(size: 12)).foregroundStyle(noteColor).fixedSize(horizontal: false, vertical: true) }
             }
             Spacer(minLength: 0)
             control
@@ -44,7 +44,7 @@ private struct PaneButton: View {
 
     var body: some View {
         Button(action: action) {
-            Text(title)
+            Text(L(title))
                 .font(.system(size: 13, weight: weight))
                 .foregroundStyle(foreground)
                 .padding(.horizontal, 14)
@@ -74,14 +74,19 @@ enum AppLanguage: String, CaseIterable, Identifiable {
     func apply() {
         if self == .system {
             UserDefaults.standard.removeObject(forKey: "AppleLanguages")
+            UserDefaults.standard.removeObject(forKey: "AppleLocale")
         } else {
             UserDefaults.standard.set([rawValue], forKey: "AppleLanguages")
+            // Dates and numbers in the same language ("26 Eki Pazartesi"), keeping the Mac's region.
+            let system = CFPreferencesCopyAppValue("AppleLocale" as CFString, kCFPreferencesAnyApplication) as? String
+            let region = system.flatMap { Locale(identifier: $0).region?.identifier }
+            UserDefaults.standard.set(region.map { "\(rawValue)_\($0)" } ?? rawValue, forKey: "AppleLocale")
         }
     }
 
     var title: String {
         switch self {
-        case .system: "System (\(Self.systemName))"
+        case .system: String(localized: "System (\(Self.systemName))")
         case .en: "English"
         case .tr: "Türkçe"
         }
@@ -138,7 +143,7 @@ struct GeneralPane: View {
                 PaneButton(title: "Import settings…", action: importSettings)
             }
             if let notice {
-                Text(notice.text).font(.system(size: 12)).foregroundStyle(notice.failed ? Design.warn : Design.secondary)
+                Text(L(notice.text)).font(.system(size: 12)).foregroundStyle(notice.failed ? Design.warn : Design.secondary)
             }
         }
     }
@@ -156,7 +161,7 @@ struct GeneralPane: View {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             try store.value.exported().write(to: url, options: .atomic)
-            notice = ("Settings exported to \(url.lastPathComponent).", false)
+            notice = (String(localized: "Settings exported to \(url.lastPathComponent)."), false)
         } catch {
             notice = (error.localizedDescription, true)
         }
@@ -169,7 +174,7 @@ struct GeneralPane: View {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             store.value = try Preferences.imported(from: Data(contentsOf: url))
-            notice = ("Settings imported from \(url.lastPathComponent).", false)
+            notice = (String(localized: "Settings imported from \(url.lastPathComponent)."), false)
         } catch {
             notice = (error.localizedDescription, true)
         }
@@ -212,7 +217,7 @@ private final class ClosureMenuItem: NSMenuItem {
 
     init(title: String, run: @escaping () -> Void) {
         self.run = run
-        super.init(title: title, action: #selector(fire), keyEquivalent: "")
+        super.init(title: L(title), action: #selector(fire), keyEquivalent: "")
         target = self
     }
 
@@ -288,7 +293,7 @@ private struct CalendarPaneContent: View {
                 Spacer(minLength: 0)
                 HStack(spacing: 6) {
                     ForEach(["Google Meet", "Zoom", "Microsoft Teams", "Webex"], id: \.self) { name in
-                        Text(name).font(.system(size: 12))
+                        Text(L(name)).font(.system(size: 12))
                             .padding(.horizontal, 10)
                             .padding(.vertical, 5)
                             .background(Design.ink.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -436,7 +441,8 @@ private struct ClipboardPaneContent: View {
             }
 
             HStack {
-                Text("\(module.items.count) \(module.items.count == 1 ? "item" : "items") · \(ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)) on disk")
+                Text(module.items.count == 1 ? "1 item · \(ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)) on disk" as LocalizedStringKey
+                     : "\(module.items.count) items · \(ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)) on disk")
                     .font(.system(size: 12.5)).foregroundStyle(Design.secondary)
                 Spacer()
                 PaneButton(title: "Clear history…", background: Design.dangerFill, foreground: Design.danger, weight: .semibold) { confirmClear = true }
@@ -459,7 +465,7 @@ private struct ClipboardPaneContent: View {
         panel.directoryURL = URL(filePath: "/Applications")
         panel.allowedContentTypes = [.application]
         panel.allowsMultipleSelection = true
-        panel.prompt = "Add"
+        panel.prompt = L("Add")
         guard panel.runModal() == .OK else { return }
         for url in panel.urls { if let id = Bundle(url: url)?.bundleIdentifier { module.addExcludedApp(id) } }
     }
@@ -501,9 +507,9 @@ private struct ExcludedRow: View {
             }
             .frame(width: 24, height: 24)
             .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-            Text(name).font(.system(size: 13.5))
+            Text(L(name)).font(.system(size: 13.5))
             Spacer(minLength: 0)
-            Text(note).font(.system(size: 12)).foregroundStyle(Design.muted(0.45))
+            Text(L(note)).font(.system(size: 12)).foregroundStyle(Design.muted(0.45))
         }
         .padding(.horizontal, 16)
         .frame(height: 44)
@@ -530,7 +536,7 @@ struct ShortcutsPane: View {
                     let off = action.module.map(hidden.contains) ?? false
                     HStack(spacing: 12) {
                         Image(systemName: action.symbol).font(.system(size: 14)).foregroundStyle(Design.muted(0.75)).frame(width: 17)
-                        Text(action.title).font(.system(size: 13.5))
+                        Text(L(action.title)).font(.system(size: 13.5))
                         Spacer(minLength: 0)
                         if off {
                             Text("Module hidden").font(.system(size: 12)).foregroundStyle(Design.secondary)
@@ -596,7 +602,7 @@ private struct Recorder: View {
                     Text("Record shortcut").foregroundStyle(Design.secondary)
                 } else {
                     ForEach(combo.keycaps, id: \.self) { key in
-                        Text(key).padding(.horizontal, 7).padding(.vertical, 2)
+                        Text(L(key)).padding(.horizontal, 7).padding(.vertical, 2)
                             .background(Design.ink.opacity(0.12), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
                     }
                 }
@@ -662,7 +668,7 @@ private struct StatusCardView: View {
                         .frame(width: 48, height: 48)
                         .background(look.tile, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(title).font(.system(size: 16, weight: .semibold))
+                        Text(L(title)).font(.system(size: 16, weight: .semibold))
                         Text(detail(now: context.date)).font(.system(size: 12.5)).foregroundStyle(Design.muted(0.55))
                     }
                     Spacer(minLength: 0)
@@ -700,7 +706,7 @@ private struct StatusCardView: View {
     private var title: String {
         switch updates.status {
         case .checking: "Checking for updates…"
-        case .available(let update): "Orilio \(update.version) is available"
+        case .available(let update): String(localized: "Orilio \(update.version) is available")
         case .notConfigured: "Updates aren’t set up in this build"
         case .idle, .failed: "Orilio is up to date"
         }
@@ -714,15 +720,15 @@ private struct StatusCardView: View {
             if let size = update.size { parts.append(ByteCountFormatter.string(fromByteCount: size, countStyle: .file)) }
             if let date = update.date {
                 parts.append(Calendar.current.isDateInToday(date) ? "released today"
-                             : "released \(date.formatted(.dateTime.day().month(.abbreviated)))")
+                             : String(localized: "released \(date.formatted(.dateTime.day().month(.abbreviated)))"))
             }
             return parts.isEmpty ? "Ready to install" : parts.joined(separator: " · ")
         case .notConfigured:
-            return "Version \(AboutPane.version) · this build has no update feed yet"
+            return String(localized: "Version \(AboutPane.version) · this build has no update feed yet")
         case .idle, .failed:
-            guard let checked = updates.lastChecked else { return "Version \(AboutPane.version) · not checked yet" }
+            guard let checked = updates.lastChecked else { return String(localized: "Version \(AboutPane.version) · not checked yet") }
             let ago = now.timeIntervalSince(checked) < 60 ? "just now" : RelativeDateTimeFormatter().localizedString(for: checked, relativeTo: now)
-            return "Version \(AboutPane.version) · checked \(ago)"
+            return String(localized: "Version \(AboutPane.version) · checked \(ago)")
         }
     }
 
@@ -744,7 +750,7 @@ private struct UpdateButton: View {
 
     var body: some View {
         Button(action: action) {
-            Text(title).font(.system(size: height == 36 ? 13 : 12.5, weight: mint ? .semibold : (height == 36 ? .semibold : .medium)))
+            Text(L(title)).font(.system(size: height == 36 ? 13 : 12.5, weight: mint ? .semibold : (height == 36 ? .semibold : .medium)))
                 .foregroundStyle(mint ? Design.primaryText : Design.ink)
                 .padding(.horizontal, height == 36 ? 16 : 14)
                 .frame(height: height)
@@ -771,7 +777,7 @@ private struct FailureCard: View {
                     .frame(width: 44, height: 44)
                     .background(Design.warn.opacity(0.14), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(version.map { "Orilio \($0) wasn’t installed" } ?? "The update wasn’t installed").font(.system(size: 15, weight: .semibold))
+                    Text(version.map { String(localized: "Orilio \($0) wasn’t installed") } ?? "The update wasn’t installed").font(.system(size: 15, weight: .semibold))
                     Text("\(reason), so nothing on your Mac was changed. You’re still on \(AboutPane.version).")
                         .font(.system(size: 12.5)).foregroundStyle(Design.muted(0.6)).fixedSize(horizontal: false, vertical: true)
                 }
@@ -867,7 +873,7 @@ private struct LicenseSheet: View {
         VStack(alignment: .leading, spacing: 14) {
             Text("GNU General Public License v3").font(.system(size: 15, weight: .semibold))
             ScrollView {
-                Text(text)
+                Text(L(text))
                     .font(.system(size: 11.5, design: .monospaced))
                     .foregroundStyle(Design.muted(0.8))
                     .textSelection(.enabled)
@@ -921,8 +927,8 @@ private struct Acknowledgements: View {
 
     private func license(_ title: String, _ text: String) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(title).font(.system(size: 13, weight: .semibold))
-            Text(text).font(.system(size: 11.5)).foregroundStyle(Design.muted(0.7)).fixedSize(horizontal: false, vertical: true)
+            Text(L(title)).font(.system(size: 13, weight: .semibold))
+            Text(L(text)).font(.system(size: 11.5)).foregroundStyle(Design.muted(0.7)).fixedSize(horizontal: false, vertical: true)
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)

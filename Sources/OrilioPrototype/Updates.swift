@@ -169,7 +169,7 @@ final class UpdateModel: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStanda
     }
 
     func downloadFromWebsite() {
-        // ponytail: the website isn't public yet; the feed's link page comes with the release setup.
+        // The latest release on GitHub (OrilioWebsiteURL, set by make-app.sh).
         if let url = (Bundle.main.object(forInfoDictionaryKey: "OrilioWebsiteURL") as? String).flatMap(URL.init(string:)) {
             NSWorkspace.shared.open(url)
         }
@@ -271,7 +271,11 @@ struct WhatsNew: Codable, Equatable {
     let items: [Item]
 
     static func bundled() -> WhatsNew? {
-        guard let url = Bundle.main.url(forResource: "WhatsNew", withExtension: "json"),
+        // The app's language first (tr.lproj/WhatsNew.json), else the English one at the top.
+        let localized = Bundle.main.preferredLocalizations.first.flatMap {
+            Bundle.main.url(forResource: "WhatsNew", withExtension: "json", subdirectory: nil, localization: $0)
+        }
+        guard let url = localized ?? Bundle.main.url(forResource: "WhatsNew", withExtension: "json"),
               let data = try? Data(contentsOf: url) else { return nil }
         return decode(data)
     }

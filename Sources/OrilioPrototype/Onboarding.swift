@@ -164,7 +164,7 @@ struct OnboardingView: View {
                     }
                 }
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Step \(model.step + 1) of 4")
+                .accessibilityLabel(String(localized: "Step \(model.step + 1) of 4"))
                 Spacer()
                 HStack(spacing: 8) {
                     if model.step > 0 {
@@ -210,7 +210,7 @@ struct OnboardingView: View {
 
     private var island: some View {
         VStack(alignment: .leading, spacing: 28) {
-            Heading(title: "This is the island.", detail: "It grows out of \(layout.place) only when you reach for it.")
+            Heading(title: "This is the island.", detail: String(localized: "It grows out of \(layout.place) only when you reach for it."))
             // Three equal columns, as in the design's grid.
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 14, alignment: .top), count: 3), spacing: 14) {
                 GestureCard(title: "Hover to peek", detail: "A glance at what is playing or what is next.",
@@ -246,7 +246,7 @@ struct OnboardingView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Open at login").font(.system(size: 15, weight: .semibold))
                         Text(model.login == .requiresApproval ? "Waiting for your approval in System Settings › General › Login Items"
-                             : "Starts quietly in \(layout.place). No window, no Dock icon.")
+                             : String(localized: "Starts quietly in \(layout.place). No window, no Dock icon."))
                             .font(.system(size: 12.5)).foregroundStyle(.white.opacity(0.55))
                     }
                     Spacer(minLength: 0)
@@ -270,7 +270,7 @@ struct OnboardingView: View {
                     Spacer(minLength: 0)
                     HStack(spacing: 4) {
                         ForEach(PreferencesStore.shared.value.shortcut(.toggleIsland).keycaps, id: \.self) { key in
-                            Text(key)
+                            Text(L(key))
                                 .font(.system(size: 13, weight: .medium))
                                 .padding(.horizontal, key == "Space" ? 11 : 9)
                                 .padding(.vertical, 4)
@@ -295,8 +295,8 @@ private struct Heading: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(title).font(.system(size: 30, weight: .semibold)).tracking(-0.9)
-            Text(detail).font(.system(size: 15)).foregroundStyle(.white.opacity(0.62))
+            Text(L(title)).font(.system(size: 30, weight: .semibold)).tracking(-0.9)
+            Text(L(detail)).font(.system(size: 15)).foregroundStyle(.white.opacity(0.62))
         }
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isHeader)
@@ -361,8 +361,8 @@ private struct GestureCard: View {
             }
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             VStack(alignment: .leading, spacing: 3) {
-                Text(title).font(.system(size: 15, weight: .semibold))
-                Text(detail).font(.system(size: 12.5)).lineSpacing(12.5 * 0.4 - 2).foregroundStyle(.white.opacity(0.6))
+                Text(L(title)).font(.system(size: 15, weight: .semibold))
+                Text(L(detail)).font(.system(size: 12.5)).lineSpacing(12.5 * 0.4 - 2).foregroundStyle(.white.opacity(0.6))
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -397,8 +397,8 @@ private struct ModuleTile: View {
                     .frame(width: 20, height: 20)
                 }
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(tab.onboardingTitle).font(.system(size: 13.5, weight: .semibold))
-                    Text(tab.onboardingNote).font(.system(size: 11.5)).foregroundStyle(.white.opacity(0.5))
+                    Text(L(tab.onboardingTitle)).font(.system(size: 13.5, weight: .semibold))
+                    Text(L(tab.onboardingNote)).font(.system(size: 11.5)).foregroundStyle(.white.opacity(0.5))
                 }
             }
             .padding(14)
@@ -413,7 +413,7 @@ private struct ModuleTile: View {
         .focused(focus, equals: .module(tab))
         .onKeyPress(.space) { action(); return .handled }
         .focusRing(focus.wrappedValue == .module(tab), radius: 16)
-        .accessibilityLabel("\(tab.onboardingTitle), \(tab.onboardingNote)")
+        .accessibilityLabel(String(localized: "\(tab.onboardingTitle), \(tab.onboardingNote)"))
         .accessibilityAddTraits(on ? [.isSelected, .isButton] : .isButton)
     }
 }
@@ -428,7 +428,7 @@ private struct FlowButton: View {
 
     var body: some View {
         Button(action: action) {
-            Text(title)
+            Text(L(title))
                 .font(.system(size: 14, weight: primary ? .semibold : .medium))
                 .foregroundStyle(primary ? Design.ink : .white)
                 .padding(.horizontal, primary ? 22 : 18)

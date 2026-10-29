@@ -58,7 +58,7 @@ struct ScreenshotsView: View {
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false
         panel.allowedContentTypes = [.image]
-        panel.message = "Choose screenshots to add. Orilio keeps its own copies; the originals stay where they are."
+        panel.message = L("Choose screenshots to add. Orilio keeps its own copies; the originals stay where they are.")
         NSApp.activate(ignoringOtherApps: true)
         panel.begin { response in
             if response == .OK { library.importFiles(panel.urls) }
@@ -81,8 +81,8 @@ private struct ToolbarButton: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(PressableStyle())
-        .help(label)
-        .accessibilityLabel(label)
+        .help(L(label))
+        .accessibilityLabel(L(label))
     }
 }
 

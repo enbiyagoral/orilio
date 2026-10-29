@@ -198,15 +198,15 @@ struct FeedbackView: View {
             .background(Design.ink.opacity(0.07), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
 
             VStack(alignment: .leading, spacing: 8) {
-                Text(model.kind.prompt).font(.system(size: 13, weight: .semibold)).foregroundStyle(Design.label)
+                Text(L(model.kind.prompt)).font(.system(size: 13, weight: .semibold)).foregroundStyle(Design.label)
                 ZStack(alignment: .topLeading) {
                     TextEditor(text: $model.message)
                         .font(.system(size: 13.5))
                         .scrollContentBackground(.hidden)
                         .padding(EdgeInsets(top: 10, leading: 9, bottom: 10, trailing: 9))
-                        .accessibilityLabel(model.kind.prompt)
+                        .accessibilityLabel(L(model.kind.prompt))
                     if model.message.isEmpty {
-                        Text(model.kind.placeholder).font(.system(size: 13.5)).foregroundStyle(Design.muted(0.4))
+                        Text(L(model.kind.placeholder)).font(.system(size: 13.5)).foregroundStyle(Design.muted(0.4))
                             .padding(EdgeInsets(top: 10, leading: 14, bottom: 0, trailing: 14))
                             .allowsHitTesting(false)
                     }
@@ -269,7 +269,8 @@ struct FeedbackView: View {
                 .overlay { Image(systemName: "checkmark").font(.system(size: 20, weight: .bold)).foregroundStyle(Design.accentText) }
             Text(sent == .github ? "GitHub is open in your browser" : "Your Mail app is ready").font(.system(size: 20, weight: .semibold))
             Text(sent == .github ? "We filled in the title and details. Review it and press Submit new issue."
-                 : "We drafted the email with your message\(model.includeInfo ? " and system info" : ""). Just press Send — nothing has gone out yet.")
+                 : model.includeInfo ? "We drafted the email with your message and system info. Just press Send — nothing has gone out yet."
+                 : "We drafted the email with your message. Just press Send — nothing has gone out yet.")
                 .font(.system(size: 13.5)).foregroundStyle(Design.muted(0.62))
                 .multilineTextAlignment(.center).frame(maxWidth: 420)
             FeedbackButton(title: "Send something else", mint: false, enabled: true) { model.again() }.padding(.top, 8)
@@ -287,7 +288,7 @@ private struct FeedbackButton: View {
 
     var body: some View {
         Button(action: action) {
-            Text(title).font(.system(size: 13, weight: mint ? .semibold : .medium))
+            Text(L(title)).font(.system(size: 13, weight: mint ? .semibold : .medium))
                 .foregroundStyle(mint ? Design.primaryText.opacity(enabled ? 1 : 0.6) : Design.ink)
                 .padding(.horizontal, mint ? 16 : 14)
                 .frame(height: 36)
@@ -312,7 +313,7 @@ enum FeedbackWindow {
         if let context { model.context = context }
         if window == nil {
             let window = NSWindow(contentViewController: NSHostingController(rootView: FeedbackView(model: model)))
-            window.title = "Send Feedback"
+            window.title = L("Send Feedback")
             window.styleMask = [.titled, .closable]
             window.isReleasedWhenClosed = false
             window.center()

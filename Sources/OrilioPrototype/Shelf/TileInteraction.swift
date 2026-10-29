@@ -115,7 +115,7 @@ extension TileInteraction.Actions {
                 menu.addItem(MenuAction("Show in Finder", enabled: available) { shelf.reveal(targets) })
                 menu.addItem(MenuAction("Copy", enabled: available) { shelf.copy(targets) })
                 menu.addItem(.separator())
-                menu.addItem(MenuAction(targets.count > 1 ? "Remove \(targets.count) Items from Shelf" : "Remove from Shelf") {
+                menu.addItem(MenuAction(targets.count > 1 ? String(localized: "Remove \(targets.count) Items from Shelf") : "Remove from Shelf") {
                     shelf.remove(targets) // never deletes the user's files
                 })
                 return menu
@@ -140,7 +140,7 @@ final class MenuAction: NSMenuItem {
 
     init(_ title: String, enabled: Bool = true, run: @escaping () -> Void) {
         self.run = run
-        super.init(title: title, action: enabled ? #selector(runAction) : nil, keyEquivalent: "")
+        super.init(title: L(title), action: enabled ? #selector(runAction) : nil, keyEquivalent: "")
         target = self
         isEnabled = enabled
     }

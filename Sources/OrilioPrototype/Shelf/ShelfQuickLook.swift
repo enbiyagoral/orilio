@@ -20,7 +20,7 @@ struct ShelfQuickLook: View {
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(item.name).font(.system(size: 15, weight: .semibold)).lineLimit(1).truncationMode(.middle)
-                    Text(meta).font(.system(size: 12)).foregroundStyle(.white.opacity(0.5)).lineLimit(1)
+                    Text(L(meta)).font(.system(size: 12)).foregroundStyle(.white.opacity(0.5)).lineLimit(1)
                 }
                 Spacer(minLength: 0)
                 if let app = ShelfMeta.defaultApp(for: item.url) {

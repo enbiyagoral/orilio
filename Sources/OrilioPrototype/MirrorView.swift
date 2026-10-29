@@ -132,7 +132,7 @@ private struct LiveMirror: View {
                         Button { pickerOpen.toggle() } label: {
                             HStack(spacing: 8) {
                                 Image(systemName: "video").font(.system(size: 13, weight: .medium))
-                                Text(snapshot.activeCamera?.shortName ?? "Camera").font(.system(size: 13, weight: .medium))
+                                Text(snapshot.activeCamera?.shortName ?? L("Camera")).font(.system(size: 13, weight: .medium))
                                 Image(systemName: "chevron.down").font(.system(size: 10, weight: .bold)).foregroundStyle(.white.opacity(0.7))
                             }
                             .padding(.leading, 10)
@@ -141,7 +141,7 @@ private struct LiveMirror: View {
                             .background(.black.opacity(0.5), in: Capsule())
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel("Camera: \(snapshot.activeCamera?.name ?? "")")
+                        .accessibilityLabel(String(localized: "Camera: \(snapshot.activeCamera?.name ?? "")"))
                         Spacer()
                         Button { mirror.send(.toggleMirrored) } label: {
                             Image(systemName: "flip.horizontal")
@@ -189,7 +189,7 @@ private struct CameraPicker: View {
                             .frame(width: 18)
                         VStack(alignment: .leading, spacing: 1) {
                             Text(camera.name).font(.system(size: 13, weight: .medium))
-                            Text(camera.detail).font(.system(size: 11.5)).foregroundStyle(.white.opacity(0.55))
+                            Text(L(camera.detail)).font(.system(size: 11.5)).foregroundStyle(.white.opacity(0.55))
                         }
                         Spacer(minLength: 0)
                         if active {

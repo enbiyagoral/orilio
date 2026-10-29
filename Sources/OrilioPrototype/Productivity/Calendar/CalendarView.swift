@@ -67,7 +67,7 @@ struct CalendarPanel: View {
                        primary: .init("Open Internet Accounts") { PrivacyPane.open(PrivacyPane.internetAccounts) })
         case .clearRestOfDay(let next):
             StatusCard(tone: .good, symbol: "calendar.badge.checkmark", title: "Nothing else today",
-                       detail: next.map { "Next up: \($0.title), \(Self.when($0.start, from: day.now))." } ?? "Nothing on your calendars this week.")
+                       detail: next.map { String(localized: "Next up: \($0.title), \(Self.when($0.start, from: day.now)).") } ?? "Nothing on your calendars this week.")
         case .events(let offline):
             CalendarToday(module: module, day: day, offline: offline)
         }
@@ -77,9 +77,9 @@ struct CalendarPanel: View {
     static func when(_ date: Date, from now: Date) -> String {
         let time = date.formatted(date: .omitted, time: .shortened)
         if Calendar.current.isDate(date, inSameDayAs: Calendar.current.date(byAdding: .day, value: 1, to: now) ?? now) {
-            return "tomorrow at \(time)"
+            return String(localized: "tomorrow at \(time)")
         }
-        return "\(date.formatted(.dateTime.weekday(.wide))) at \(time)"
+        return String(localized: "\(date.formatted(.dateTime.weekday(.wide))) at \(time)")
     }
 }
 
@@ -96,7 +96,7 @@ private struct CalendarToday: View {
                     Text("Today").font(.system(size: 13, weight: .semibold))
                     Spacer()
                     // Offline: EventKit's events still show; joining has to wait for the network.
-                    Text(offline ? "Offline · Join links work once you’re back online" : summary)
+                    Text(offline ? L("Offline · Join links work once you’re back online") : summary)
                         .font(.system(size: 11.5))
                         .foregroundStyle(.white.opacity(0.5))
                 }
@@ -116,7 +116,7 @@ private struct CalendarToday: View {
                     ScrollView(.vertical, showsIndicators: false) { rows.padding(.bottom, 28) }
                         .bottomFade(true)
                         .overlay(alignment: .bottom) {
-                            if below > 0 { CountPill(text: "+\(below) later today").padding(.bottom, 4).allowsHitTesting(false) }
+                            if below > 0 { CountPill(text: String(localized: "+\(below) later today")).padding(.bottom, 4).allowsHitTesting(false) }
                         }
                 }
             }
@@ -139,7 +139,8 @@ private struct CalendarToday: View {
 
     private var summary: String {
         let events = day.events.count, calendars = day.calendarCount
-        return "\(events) event\(events == 1 ? "" : "s") · \(calendars) calendar\(calendars == 1 ? "" : "s")"
+        return [events == 1 ? L("1 event") : String(localized: "\(events) events"),
+                calendars == 1 ? L("1 calendar") : String(localized: "\(calendars) calendars")].joined(separator: " · ")
     }
 }
 
@@ -157,7 +158,7 @@ private struct NextCard: View {
                     .font(.system(size: 11, weight: .semibold))
                     .tracking(1.32) // 0.12 em
                     .foregroundStyle(accent(.live))
-                Text(event?.title ?? "You're free")
+                Text(event?.title ?? L("You're free"))
                     .font(.system(size: 22, weight: .semibold))
                     .tracking(-0.44)
                     .lineLimit(2) // then an ellipsis; the full title is in the tooltip and for VoiceOver
@@ -196,7 +197,7 @@ private struct NextCard: View {
                         }
                         .buttonStyle(PressableStyle())
                         .keyboardFocusRing(true, radius: 14) // ⏎ joins
-                        .accessibilityHint("Opens the \(event.meeting!.provider.rawValue) link in your browser or the meeting app")
+                        .accessibilityHint(String(localized: "Opens the \(event.meeting!.provider.rawValue) link in your browser or the meeting app"))
                     } else {
                         Button { module.openInCalendar(event) } label: {
                             Label("Open in Calendar", systemImage: "calendar")
@@ -224,8 +225,8 @@ private struct NextCard: View {
 
     private func eyebrow(_ event: CalendarEvent?) -> String {
         guard let event else { return "TODAY" }
-        if event.isOngoing(at: day.now) { return "NOW · ENDS \(CalendarDay.countdown(to: event.end, from: day.now).uppercased())" }
-        return "NEXT · \(CalendarDay.countdown(to: event.start, from: day.now).uppercased())"
+        if event.isOngoing(at: day.now) { return String(localized: "NOW · ENDS \(CalendarDay.countdown(to: event.end, from: day.now).uppercased())") }
+        return String(localized: "NEXT · \(CalendarDay.countdown(to: event.start, from: day.now).uppercased())")
     }
 
     private func timeLine(_ event: CalendarEvent) -> String {
@@ -252,11 +253,11 @@ private struct Attendees: View {
                 .lineLimit(1)
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(names.isEmpty ? event.calendarTitle : "\(names.count) attendees, \(event.calendarTitle)")
+        .accessibilityLabel(names.isEmpty ? event.calendarTitle : String(localized: "\(names.count) attendees, \(event.calendarTitle)"))
     }
 
     private func avatar(_ text: String, _ color: Color) -> some View {
-        Text(text)
+        Text(L(text))
             .font(.system(size: 10, weight: .semibold))
             .frame(width: 24, height: 24)
             .background(color, in: Circle())
@@ -301,12 +302,12 @@ private struct EventRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Text(event.isAllDay ? "All day" : event.start.formatted(.dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits)))
+            Text(event.isAllDay ? L("All day") : event.start.formatted(.dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits)))
                 .font(.system(size: 12).monospacedDigit())
                 .foregroundStyle(.white.opacity(0.6))
                 .frame(width: 40, alignment: .leading)
             RoundedRectangle(cornerRadius: 2).fill(event.color.color).frame(width: 3, height: 20)
-            Text(event.title)
+            Text(L(event.title))
                 .font(.system(size: 13, weight: .medium))
                 .lineLimit(1)
                 .truncationMode(.tail)
@@ -320,7 +321,7 @@ private struct EventRow: View {
                     .background(SettingsDesign.amber.opacity(0.16), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                     .fixedSize()
             }
-            Text(source)
+            Text(L(source))
                 .font(.system(size: 11))
                 .foregroundStyle(.white.opacity(0.5))
                 .lineLimit(1)
@@ -330,9 +331,9 @@ private struct EventRow: View {
         .background(isNext ? Color.white.opacity(0.08) : .clear, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .opacity(event.hasEnded(at: now) ? 0.45 : 1)
         .contentShape(Rectangle())
-        .help("\(event.title) · Open in Calendar") // the full title, however long
+        .help(String(localized: "\(event.title) · Open in Calendar")) // the full title, however long
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(event.title), \(event.isAllDay ? "all day" : event.start.formatted(date: .omitted, time: .shortened)), \(event.calendarTitle)\(overlaps ? ", overlaps another event" : "")")
+        .accessibilityLabel(String(localized: "\(event.title), \(event.isAllDay ? String(localized: "all day") : event.start.formatted(date: .omitted, time: .shortened)), \(event.calendarTitle)") + (overlaps ? String(localized: ", overlaps another event") : ""))
         .accessibilityAddTraits(.isButton)
     }
 

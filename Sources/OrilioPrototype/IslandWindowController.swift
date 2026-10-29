@@ -10,7 +10,7 @@ enum IslandLayout {
     case notch, floating
 
     /// Where the island is, in words: "the notch", or "the island" on a display without one.
-    var place: String { self == .notch ? "the notch" : "the island" }
+    var place: String { self == .notch ? String(localized: "the notch") : String(localized: "the island") }
 }
 
 /// Where the island sits on one screen, in AppKit screen coordinates (origin bottom-left).

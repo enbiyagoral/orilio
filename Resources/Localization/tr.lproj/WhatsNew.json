@@ -1,0 +1,8 @@
+{
+  "version": "0.5",
+  "items": [
+    { "icon": "tray.full", "title": "Raf unutmuyor", "body": "Dosyalar ve ekran görüntüleri, siz kaldırana kadar yeniden başlatmadan sonra da Raf’ta kalır." },
+    { "icon": "keyboard", "title": "Baştan sona klavye", "body": "Adayı ⌃⌥Boşluk ile açın, izleme dörtgenine dokunmadan bütün modüllerde gezinin.", "tint": "mint" },
+    { "icon": "cup.and.saucer", "title": "Gerçekten mola gibi molalar", "body": "Odak artık oturumlar arasında sakin bir mola zamanlayıcısı, dört oturumdan sonra da daha uzun bir mola çalıştırır.", "tint": "blue" }
+  ]
+}

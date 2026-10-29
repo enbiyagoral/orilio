@@ -54,8 +54,8 @@ enum CatalogError: LocalizedError, Equatable {
         case .unsupported: "This catalog needs a newer Orilio."
         case .checksum: "The download doesn't match the catalog’s checksum, so it wasn't installed."
         case .notAPackage: "The download isn't an Orilio extension."
-        case .mismatch(let what): "The extension’s \(what) doesn't match the catalog, so it wasn't installed."
-        case .download(let reason): "The extension couldn't be downloaded: \(reason)"
+        case .mismatch(let what): String(localized: "The extension’s \(L(what)) doesn't match the catalog, so it wasn't installed.")
+        case .download(let reason): String(localized: "The extension couldn't be downloaded: \(reason)")
         }
     }
 }
@@ -186,7 +186,7 @@ extension ExtensionManifest.Permissions {
     /// The "Can access" lines: what each permission is, and its detail.
     var lines: [(symbol: String, label: String, detail: String, mono: Bool)] {
         var lines: [(String, String, String, Bool)] = []
-        if !network.isEmpty { lines.append(("globe", "Internet", network.joined(separator: ", ") + " only", true)) }
+        if !network.isEmpty { lines.append(("globe", "Internet", String(localized: "\(network.joined(separator: ", ")) only"), true)) }
         if notifications { lines.append(("bell", "Notifications", "reminders you turn on", false)) }
         if location != nil { lines.append(("mappin.and.ellipse", "Location", "a city you pick — no GPS", false)) }
         if storage { lines.append(("shippingbox", "Own storage", "its settings and data, on this Mac", false)) }

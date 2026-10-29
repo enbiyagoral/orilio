@@ -49,7 +49,7 @@ actor EventKitSource: CalendarSource {
             CalendarEvent(
                 id: "\(event.calendarItemIdentifier)@\(event.startDate.timeIntervalSinceReferenceDate)",
                 eventIdentifier: event.eventIdentifier,
-                title: event.title?.isEmpty == false ? event.title : "Untitled event",
+                title: event.title?.isEmpty == false ? event.title : L("Untitled event"),
                 start: event.startDate, end: event.endDate, isAllDay: event.isAllDay,
                 calendarID: event.calendar.calendarIdentifier, calendarTitle: event.calendar.title,
                 sourceTitle: event.calendar.source?.title ?? "", color: Self.color(event.calendar.cgColor),
@@ -263,7 +263,7 @@ final class CalendarModule {
         return day.timed.compactMap { event in
             let fire = event.start.addingTimeInterval(-Double(lead) * 60)
             guard fire > day.now else { return nil }
-            let when = lead == 0 ? "is starting" : "starts in \(lead) min"
+            let when = lead == 0 ? L("is starting") : String(localized: "starts in \(lead) min")
             return MeetingReminder(id: "\(event.id)#\(lead)", fireDate: fire, title: event.title,
                                    body: [when, event.meeting?.provider.rawValue].compactMap { $0 }.joined(separator: " · "))
         }

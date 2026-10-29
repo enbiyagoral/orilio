@@ -104,9 +104,11 @@ struct ExtensionEarPriorityTests {
 
     @Test func theCountdownRoundsUp() {
         let now = Date()
-        #expect(ExtensionCountdown.text(to: now.addingTimeInterval(61), from: now) == "00:02")
-        #expect(ExtensionCountdown.text(to: now.addingTimeInterval(3_600), from: now) == "01:00")
-        #expect(ExtensionCountdown.text(to: now.addingTimeInterval(-5), from: now) == "00:00")
+        // Hours and minutes in words, never "02:55" (which reads as a time of day).
+        #expect(ExtensionCountdown.text(to: now.addingTimeInterval(61), from: now) == "2 min")
+        #expect(ExtensionCountdown.text(to: now.addingTimeInterval(3_600), from: now) == "1 h")
+        #expect(ExtensionCountdown.text(to: now.addingTimeInterval(2 * 3_600 + 55 * 60), from: now) == "2 h 55 min")
+        #expect(ExtensionCountdown.text(to: now.addingTimeInterval(-5), from: now) == "0 min")
     }
 }
 

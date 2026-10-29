@@ -117,10 +117,10 @@ enum ClipboardPolicy {
     /// "now", "1 min", "6 min", "2 h", "3 d".
     static func age(of date: Date, at now: Date) -> String {
         let seconds = Int(now.timeIntervalSince(date))
-        if seconds < 60 { return "now" }
-        if seconds < 3_600 { return "\(seconds / 60) min" }
-        if seconds < 86_400 { return "\(seconds / 3_600) h" }
-        return "\(seconds / 86_400) d"
+        if seconds < 60 { return String(localized: "now") }
+        if seconds < 3_600 { return String(localized: "\(seconds / 60) min") }
+        if seconds < 86_400 { return String(localized: "\(seconds / 3_600) h") }
+        return String(localized: "\(seconds / 86_400) d")
     }
 
     /// Applies the size and age limits. Pinned items are never pruned.

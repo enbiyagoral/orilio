@@ -134,7 +134,7 @@ struct Preferences: Codable, Equatable {
         var errorDescription: String? {
             switch self {
             case .notSettings: "This file doesn't contain Orilio settings."
-            case .newerVersion(let v): "These settings come from a newer Orilio (format \(v)). Update Orilio to import them."
+            case .newerVersion(let v): String(localized: "These settings come from a newer Orilio (format \(v)). Update Orilio to import them.")
             }
         }
     }

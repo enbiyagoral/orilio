@@ -58,12 +58,12 @@ struct ControlFeedback: Equatable {
 
     static func message(for error: MediaError, source: String) -> String {
         switch error {
-        case .notRunning: "\(source) isn't running"
-        case .permissionDenied: "Orilio isn't allowed to control \(source)"
-        case .sessionGone: "\(source) stopped playing"
-        case .unsupported: "\(source) can't do that"
-        case .failed(let reason) where reason.contains("respond"): "\(source) isn't responding"
-        case .failed: "Couldn't reach \(source)"
+        case .notRunning: String(localized: "\(source) isn't running")
+        case .permissionDenied: String(localized: "Orilio isn't allowed to control \(source)")
+        case .sessionGone: String(localized: "\(source) stopped playing")
+        case .unsupported: String(localized: "\(source) can't do that")
+        case .failed(let reason) where reason.contains("respond"): String(localized: "\(source) isn't responding")
+        case .failed: String(localized: "Couldn't reach \(source)")
         }
     }
 }

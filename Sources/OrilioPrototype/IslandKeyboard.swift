@@ -165,13 +165,13 @@ struct KeyHintBar: View {
         HStack(spacing: 18) {
             ForEach(KeyHints.hints(for: tab), id: \.label) { hint in
                 HStack(spacing: 6) {
-                    Text(hint.key)
+                    Text(L(hint.key))
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 5)
                         .frame(minWidth: 18, minHeight: 20)
                         .background(.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
-                    Text(hint.label)
+                    Text(L(hint.label))
                 }
             }
         }

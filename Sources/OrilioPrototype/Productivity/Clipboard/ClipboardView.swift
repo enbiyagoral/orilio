@@ -28,12 +28,12 @@ struct ClipboardPanel: View {
             // Opt-in only: no system prompt here.
             StatusCard(tone: .ask(tile: SettingsDesign.mint.opacity(0.12), ink: SettingsDesign.mint), symbol: "list.clipboard",
                        title: "Keep a clipboard history?",
-                       detail: "Copied text, links and images stay on this Mac for \(keptFor). Password managers and hidden items are always skipped.",
+                       detail: String(localized: "Copied text, links and images stay on this Mac for \(keptFor). Password managers and hidden items are always skipped."),
                        primary: .init("Turn on") { Task { await module.enable() } },
                        secondary: .init("Not now") { module.decline() }, layout: .ask)
         case .off:
             StatusCard(tone: .empty, symbol: "list.clipboard", title: "Clipboard history is off",
-                       detail: module.retentionDays == 0 ? "Keep your copies, only on this Mac." : "Keep the last \(keptFor) of copies, only on this Mac.",
+                       detail: module.retentionDays == 0 ? "Keep your copies, only on this Mac." : String(localized: "Keep the last \(keptFor) of copies, only on this Mac."),
                        primary: .init("Turn on") { Task { await module.enable() } })
         case .blocked:
             StatusCard(tone: .warn, symbol: "hand.raised", title: "Clipboard access is off",
@@ -53,9 +53,9 @@ struct ClipboardPanel: View {
     /// The real retention ("7 days"), not a fixed number.
     private var keptFor: String {
         switch module.retentionDays {
-        case 0: "as long as you keep them"
-        case 1: "1 day"
-        case let days: "\(days) days"
+        case 0: L("as long as you keep them")
+        case 1: L("1 day")
+        case let days: String(localized: "\(days) days")
         }
     }
 }
@@ -151,7 +151,7 @@ private struct ClipRow: View {
                 if item.pinned {
                     Image(systemName: "pin.fill").font(.system(size: 10)).foregroundStyle(.white.opacity(0.5))
                 }
-                Text(copied ? "Copied" : ClipboardPolicy.age(of: item.copiedAt, at: now))
+                Text(copied ? L("Copied") : ClipboardPolicy.age(of: item.copiedAt, at: now))
                     .font(.system(size: 11.5))
                     .foregroundStyle(copied ? accent(.rest) : .white.opacity(0.5))
             }
@@ -178,7 +178,7 @@ private struct ClipRow: View {
         }
         // The full text, however long (capped: a 10,000-character tooltip helps no one).
         .help(Self.full(item))
-        .accessibilityLabel("\(item.kind.rawValue): \(Self.full(item))")
+        .accessibilityLabel(String(localized: "\(item.kind.rawValue): \(Self.full(item))"))
         .accessibilityHint(copied ? "Copied" : "Copies it to the clipboard")
     }
 }

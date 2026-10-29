@@ -246,7 +246,7 @@ enum SettingsWindow {
             let host = NSHostingController(rootView: SettingsView())
             host.sizingOptions = [] // the window is the design's size; SwiftUI mustn't add the title bar to it
             let window = NSWindow(contentViewController: host)
-            window.title = "Orilio Settings"
+            window.title = L("Orilio Settings")
             window.styleMask = [.titled, .closable, .miniaturizable, .fullSizeContentView]
             window.titlebarAppearsTransparent = true
             window.titleVisibility = .hidden

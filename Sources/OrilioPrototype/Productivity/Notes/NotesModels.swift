@@ -58,9 +58,9 @@ enum NotesPolicy {
     /// "Today", "Tomorrow", "Yesterday" or a short date; nil when there's no due date.
     static func dueText(_ due: Date?, now: Date, calendar: Calendar = .current) -> String? {
         guard let due else { return nil }
-        if calendar.isDate(due, inSameDayAs: now) { return "Today" }
-        if let tomorrow = calendar.date(byAdding: .day, value: 1, to: now), calendar.isDate(due, inSameDayAs: tomorrow) { return "Tomorrow" }
-        if let yesterday = calendar.date(byAdding: .day, value: -1, to: now), calendar.isDate(due, inSameDayAs: yesterday) { return "Yesterday" }
+        if calendar.isDate(due, inSameDayAs: now) { return L("Today") }
+        if let tomorrow = calendar.date(byAdding: .day, value: 1, to: now), calendar.isDate(due, inSameDayAs: tomorrow) { return L("Tomorrow") }
+        if let yesterday = calendar.date(byAdding: .day, value: -1, to: now), calendar.isDate(due, inSameDayAs: yesterday) { return L("Yesterday") }
         return due.formatted(.dateTime.day().month(.abbreviated))
     }
 

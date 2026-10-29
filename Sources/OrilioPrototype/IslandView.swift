@@ -41,11 +41,11 @@ extension View {
 struct CountPill: View {
     let text: String
     var body: some View {
-        Text(text).font(.system(size: 11.5, weight: .semibold))
+        Text(L(text)).font(.system(size: 11.5, weight: .semibold))
             .padding(.horizontal, 10)
             .frame(height: 24)
             .background(.white.opacity(0.12), in: Capsule())
-            .accessibilityLabel(text)
+            .accessibilityLabel(L(text))
     }
 }
 
@@ -445,8 +445,8 @@ private struct ModuleTab: View {
             }
         }
         .zIndex(badge == nil ? 0 : 1)
-        .help(tab.rawValue)
-        .accessibilityLabel(tab.rawValue)
+        .help(L(tab.rawValue))
+        .accessibilityLabel(L(tab.rawValue))
         .accessibilityValue(live ? "Active" : "")
         .accessibilityHint("Control-Tab moves between modules")
         .accessibilityAddTraits(selected ? [.isSelected, .isButton] : .isButton)
@@ -470,8 +470,8 @@ private struct HeaderButton: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(PressableStyle())
-        .help(label)
-        .accessibilityLabel(label)
+        .help(L(label))
+        .accessibilityLabel(L(label))
     }
 }
 
@@ -533,8 +533,8 @@ private struct MusicCard: View {
                 if let ask, let session {
                     let name = media.providerName(ask)
                     StatusCard(tone: .ask(tile: MusicEar.warm.opacity(0.16), ink: MusicEar.warm), symbol: "music.note",
-                               title: "Let Orilio control \(name)?",
-                               detail: "Needed for play, pause and skip from \(layout.place). macOS asks once for each music app.",
+                               title: String(localized: "Let Orilio control \(name)?"),
+                               detail: String(localized: "Needed for play, pause and skip from \(layout.place). macOS asks once for each music app."),
                                primary: .init("Continue") { Task { await media.requestControl(session.providerID) } },
                                secondary: .init("Not now") { access.decline(session.providerID) }, layout: .ask)
                         .padding(EdgeInsets(top: 10, leading: 20, bottom: 20, trailing: 20))
@@ -545,7 +545,7 @@ private struct MusicCard: View {
                         .transition(.opacity)
                 }
             case .revoked(let app):
-                StatusCard(tone: .warn, symbol: "exclamationmark.shield", title: "Orilio can no longer control \(app)",
+                StatusCard(tone: .warn, symbol: "exclamationmark.shield", title: String(localized: "Orilio can no longer control \(app)"),
                            detail: "Access was turned off. Re-enable it in Privacy & Security › Automation.",
                            primary: .init("Open System Settings") { PrivacyPane.open(PrivacyPane.automation) }, layout: .banner)
             case .nothingPlaying(let spotify, let music):
@@ -639,7 +639,7 @@ private struct NowPlaying: View {
                 HStack(alignment: .top, spacing: 10) {
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 8) {
-                            Text(session.title.isEmpty ? "Unknown title" : session.title)
+                            Text(session.title.isEmpty ? L("Unknown title") : session.title)
                                 .font(.system(size: 22, weight: .semibold))
                                 .tracking(-0.44)
                                 .foregroundStyle(.white)
@@ -673,7 +673,7 @@ private struct NowPlaying: View {
                     if denied && !caps.contains(.playPause) {
                         // The design's "Control denied": playback info still shows; one way back.
                         HStack(spacing: 10) {
-                            Label("Can’t control \(session.sourceName)", systemImage: "exclamationmark.shield")
+                            Label(String(localized: "Can’t control \(session.sourceName)"), systemImage: "exclamationmark.shield")
                                 .font(.system(size: 12.5, weight: .medium))
                                 .foregroundStyle(SettingsDesign.amber)
                             PermissionLink(text: "Fix in Settings")
@@ -713,7 +713,7 @@ private struct NowPlaying: View {
 
     private var subtitle: String {
         let artist = [session.artist, session.album].compactMap { $0 }.first { !$0.isEmpty } ?? "Unknown artist"
-        return "\(artist) · \(session.sourceName)"
+        return String(localized: "\(artist) · \(session.sourceName)")
     }
 
     private func run(_ action: ControlFeedback.Action, _ command: MediaCommand, step: Int = 0) {
@@ -800,7 +800,7 @@ private struct ProgressRow: View {
             .onChange(of: session.positionDate) { scrub = nil }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Position")
-            .accessibilityValue("\(clock(current(position, at: Date()))) of \(clock(duration))")
+            .accessibilityValue(String(localized: "\(clock(current(position, at: Date()))) of \(clock(duration))"))
             .accessibilityAdjustableAction { direction in
                 guard let onSeek else { return }
                 let step: TimeInterval = direction == .increment ? 10 : -10
@@ -872,7 +872,7 @@ private struct SourceBadge: View {
         let label = HStack(spacing: 4) {
             Image(systemName: session.kind == .video ? "play.rectangle"
                   : session.providerID == BrowserMediaProvider.providerID ? "globe" : "speaker.wave.2.fill")
-            Text(session.sourceName)
+            Text(L(session.sourceName))
             if media.sessions.count > 1 { Image(systemName: "chevron.down").font(.system(size: 8, weight: .bold)) }
         }
         .font(.system(size: 10, weight: .semibold))
@@ -888,18 +888,18 @@ private struct SourceBadge: View {
                 Divider()
                 ForEach(media.sessions) { other in
                     // Two tabs share a source name, so the track tells them apart.
-                    let name = "\(other.sourceName) — \(other.title)"
+                    let name = String(localized: "\(other.sourceName) — \(other.title)")
                     Button { media.select(other.sourceID) } label: {
                         if media.manualSourceID == other.sourceID {
                             Label(name, systemImage: "checkmark")
                         } else {
-                            Text(name)
+                            Text(L(name))
                         }
                     }
                 }
                 if canFocus {
                     Divider()
-                    Button("Show \(session.sourceName)") { focus() }
+                    Button(String(localized: "Show \(session.sourceName)")) { focus() }
                 }
             } label: { label }
             // The button style draws our label as-is; `.borderlessButton` re-renders it and drops the chevron.
@@ -907,14 +907,14 @@ private struct SourceBadge: View {
             .buttonStyle(.plain)
             .menuIndicator(.hidden)
             .fixedSize()
-            .accessibilityLabel("Source: \(session.sourceName)")
+            .accessibilityLabel(String(localized: "Source: \(session.sourceName)"))
         } else if canFocus {
             Button(action: focus) { label }
                 .buttonStyle(PressableStyle())
-                .help("Show \(session.sourceName)")
-                .accessibilityLabel("Source: \(session.sourceName). Show it")
+                .help(String(localized: "Show \(session.sourceName)"))
+                .accessibilityLabel(String(localized: "Source: \(session.sourceName). Show it"))
         } else {
-            label.accessibilityLabel("Source: \(session.sourceName)")
+            label.accessibilityLabel(String(localized: "Source: \(session.sourceName)"))
         }
     }
 
@@ -927,7 +927,7 @@ private struct PermissionLink: View {
     let text: String
 
     var body: some View {
-        Button(text) {
+        Button(L(text)) {
             NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation")!)
         }
         .buttonStyle(.plain)
@@ -953,8 +953,8 @@ struct IconButton: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(PressableStyle())
-        .help(label)
-        .accessibilityLabel(label)
+        .help(L(label))
+        .accessibilityLabel(L(label))
     }
 }
 
@@ -1045,7 +1045,7 @@ private struct MeetingEarView: View {
                 Text(MeetingEar.title(event, now: now)).lineLimit(1)
             }
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("\(event.title), \(CalendarDay.countdown(to: event.start, from: now))")
+            .accessibilityLabel(String(localized: "\(event.title), \(CalendarDay.countdown(to: event.start, from: now))"))
         } else if MeetingEar.showsJoin(event, now: now) {
             Button { model.join(event) } label: {
                 Text("Join")
@@ -1058,7 +1058,7 @@ private struct MeetingEarView: View {
             }
             .buttonStyle(PressableStyle())
             .padding(.trailing, -8) // the design's 6 pt right inset for the pill
-            .accessibilityLabel("Join \(event.title)")
+            .accessibilityLabel(String(localized: "Join \(event.title)"))
         } else {
             Text(CalendarDay.countdown(to: event.start, from: now))
                 .foregroundStyle(accent(.live))
@@ -1082,7 +1082,7 @@ private struct FocusEar: View {
         case .done(let label):
             HStack(spacing: 6) {
                 Image(systemName: "checkmark.circle.fill").font(.system(size: 12))
-                Text(label)
+                Text(L(label))
             }
             .foregroundStyle(accent(.live))
             .accessibilityElement(children: .combine)
@@ -1098,7 +1098,7 @@ private struct FocusEar: View {
             }
             .foregroundStyle(Self.breakBlue)
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Break, \(FocusSession.text(remaining)) left")
+            .accessibilityLabel(String(localized: "Break, \(FocusSession.text(remaining)) left"))
         }
     }
 
@@ -1120,7 +1120,7 @@ private struct FocusEar: View {
             .foregroundStyle(accent(.live).opacity(module.isRunning ? 1 : 0.55))
             .themeGlow(.live, radius: 5, opacity: module.isRunning ? 0.5 : 0)
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Focus timer \(FocusSession.text(remaining))\(module.isRunning ? "" : ", paused")")
+            .accessibilityLabel(module.isRunning ? String(localized: "Focus timer \(FocusSession.text(remaining))") : String(localized: "Focus timer \(FocusSession.text(remaining)), paused"))
         }
     }
 }
@@ -1134,19 +1134,19 @@ private struct TransientEar: View {
             HStack(spacing: 7) {
                 Image(systemName: transient.symbol).font(.system(size: 11, weight: .heavy))
                     .foregroundStyle(transient.warning ? SettingsDesign.amber : accent(.rest))
-                Text(transient.title).lineLimit(1)
+                Text(L(transient.title)).lineLimit(1)
                     .foregroundStyle(transient.warning ? SettingsDesign.amber : .white)
             }
             .accessibilityElement(children: .combine)
         } else if let pill = transient.pill {
             // The M5 System design's "Restart": 22 pt, 14% white.
-            Text(pill)
+            Text(L(pill))
                 .font(.system(size: 11.5, weight: .semibold))
                 .padding(.horizontal, 10)
                 .frame(height: 22)
                 .background(.white.opacity(0.14), in: Capsule())
         } else if let detail = transient.detail {
-            Text(detail)
+            Text(L(detail))
                 .font(.system(size: 12, design: transient.monospaced ? .monospaced : .default))
                 .foregroundStyle(.white.opacity(0.6))
                 .lineLimit(1)
@@ -1167,7 +1167,7 @@ private struct MusicEar: View {
     var body: some View {
         if side == .leading {
             Artwork(seed: session.title, url: session.artworkURL, size: 20, radius: 6)
-                .accessibilityLabel("Now playing: \(session.title)")
+                .accessibilityLabel(String(localized: "Now playing: \(session.title)"))
         } else if session.kind == .video {
             ActivityIndicator(session: session)
         } else {

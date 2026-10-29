@@ -33,11 +33,18 @@ enum ExtensionTint {
     }
 }
 
-/// "00:42": hours and minutes left, rounded up so it never reads 00:00 before the time.
+/// "2 h 55 min", "42 min": what's left, rounded up so it never reads 0 before the time. Never "02:55",
+/// which reads as a time of day.
 enum ExtensionCountdown {
-    static func text(to target: Date, from now: Date) -> String {
+    static func parts(to target: Date, from now: Date) -> (hours: Int, minutes: Int) {
         let minutes = max(0, Int((target.timeIntervalSince(now) / 60).rounded(.up)))
-        return String(format: "%02d:%02d", minutes / 60, minutes % 60)
+        return (minutes / 60, minutes % 60)
+    }
+
+    static func text(to target: Date, from now: Date) -> String {
+        let (h, m) = parts(to: target, from: now)
+        if h == 0 { return String(localized: "\(m) min") }
+        return m == 0 ? String(localized: "\(h) h") : String(localized: "\(h) h \(m) min")
     }
 }
 
@@ -57,7 +64,7 @@ struct ExtensionsPanel: View {
     }
 }
 
-private struct ExtensionIsland: View {
+struct ExtensionIsland: View {
     let name: String
     let island: ExtensionResult.Island
 
@@ -78,21 +85,21 @@ private struct ExtensionIsland: View {
                 .frame(maxHeight: .infinity, alignment: .top)
             }
             HStack(alignment: .lastTextBaseline) {
-                if let footnote { Text(footnote).font(.system(size: 11)).foregroundStyle(.white.opacity(0.45)).lineLimit(1) }
+                if let footnote { Text(L(footnote)).font(.system(size: 11)).foregroundStyle(.white.opacity(0.45)).lineLimit(1) }
                 Spacer(minLength: 8)
                 Text("EXTENSION")
                     .font(.system(size: 10.5, weight: .semibold)).tracking(0.63)
                     .foregroundStyle(.white.opacity(0.65))
                     .padding(.horizontal, 8).frame(height: 20)
                     .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(.white.opacity(0.18), lineWidth: 1))
-                    .help("\(name) is an extension: it supplies the data, Orilio draws it")
+                    .help(String(localized: "\(name) is an extension: it supplies the data, Orilio draws it"))
             }
         }
         // The design's soft mint glow behind the countdown.
         .background(RadialGradient(colors: [extensionMint.opacity(0.16), .clear], center: UnitPoint(x: 0.18, y: 0.7),
                                    startRadius: 0, endRadius: 260).padding(-20))
         .accessibilityElement(children: .contain)
-        .accessibilityLabel(name)
+        .accessibilityLabel(L(name))
     }
 }
 
@@ -104,19 +111,27 @@ private struct HeroView: View {
             if let label = hero.label {
                 Text(label.uppercased(with: Locale.current)).font(.system(size: 11.5, weight: .semibold)).tracking(1.38).foregroundStyle(extensionMint)
             }
-            Text(hero.title).font(.system(size: 30, weight: .semibold)).tracking(-0.6).lineLimit(1)
+            Text(L(hero.title)).font(.system(size: 30, weight: .semibold)).tracking(-0.6).lineLimit(1)
             if let target = hero.countdownTo {
                 // A minute is the finest step it shows, so it redraws once a minute.
                 TimelineView(.everyMinute) { context in
-                    Text(ExtensionCountdown.text(to: target, from: context.date))
-                        .font(.system(size: 64, weight: .semibold).monospacedDigit()).tracking(-2.56)
-                        .foregroundStyle(extensionMint)
-                        .shadow(color: extensionMint.opacity(0.35), radius: 12)
-                        .accessibilityLabel("\(ExtensionCountdown.text(to: target, from: context.date)) left")
+                    // Big numbers, small units: "2 sa 55 dk".
+                    let (h, m) = ExtensionCountdown.parts(to: target, from: max(context.date, Date()))
+                    let number = { (n: Int) in Text("\(n)").font(.system(size: 64, weight: .semibold).monospacedDigit()) }
+                    let unit = { (u: String) in Text(u).font(.system(size: 24, weight: .semibold)) }
+                    HStack(alignment: .firstTextBaseline, spacing: 0) {
+                        if h > 0 { number(h) + unit(" " + String(localized: "h", comment: "hours, after a number") + "  ") }
+                        if h == 0 || m > 0 { number(m) + unit(" " + String(localized: "min", comment: "minutes, after a number")) }
+                    }
+                    .tracking(-1.5)
+                    .foregroundStyle(extensionMint)
+                    .shadow(color: extensionMint.opacity(0.35), radius: 12)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(String(localized: "\(ExtensionCountdown.text(to: target, from: context.date)) left"))
                 }
             }
             if let caption = hero.caption {
-                Text(caption).font(.system(size: 13)).foregroundStyle(.white.opacity(0.6)).lineLimit(1)
+                Text(L(caption)).font(.system(size: 13)).foregroundStyle(.white.opacity(0.6)).lineLimit(1)
             }
         }
         .padding(.top, 6)

@@ -369,8 +369,8 @@ final class ShelfModel {
         items.removeAll { ids.contains($0.id) }
         selection.subtract(ids)
         if let previewing, ids.contains(previewing) { self.previewing = nil }
-        let name = lastRemoved.count == 1 ? lastRemoved[0].item.name : "\(lastRemoved.count) items"
-        show(Toast(text: "Removed \(name) from Shelf", undoable: true))
+        let name = lastRemoved.count == 1 ? lastRemoved[0].item.name : String(localized: "\(lastRemoved.count) items")
+        show(Toast(text: String(localized: "Removed \(name) from Shelf"), undoable: true))
         scheduleSave()
     }
 
@@ -475,12 +475,12 @@ final class ShelfModel {
         var seen = Set(items.map(\.url))
         let new = loaded.filter { seen.insert($0.url).inserted }
         items.insert(contentsOf: new, at: 0) // newest first
-        problem = missing > 0 ? (missing == 1 ? "One item couldn't be read" : "\(missing) items couldn't be read") : nil
+        problem = missing > 0 ? (missing == 1 ? "One item couldn't be read" : String(localized: "\(missing) items couldn't be read")) : nil
         guard !new.isEmpty else { return }
         scheduleSave()
         let ids = Set(new.map(\.id))
         recentlyAdded.formUnion(ids)
-        show(Toast(text: new.count == 1 ? "1 file added" : "\(new.count) files added", undoable: false))
+        show(Toast(text: new.count == 1 ? "1 file added" : String(localized: "\(new.count) files added"), undoable: false))
         Task { [weak self] in
             try? await Task.sleep(for: .seconds(1.2))
             self?.recentlyAdded.subtract(ids)
@@ -508,7 +508,7 @@ final class ShelfModel {
                     guard let self else { return }
                     self.pending.removeAll { $0.id == marker.id }
                     if error != nil {
-                        self.problem = "\(marker.name) couldn't be received"
+                        self.problem = String(localized: "\(marker.name) couldn't be received")
                     } else {
                         self.add([url], origin: .received)
                     }

@@ -55,12 +55,12 @@ struct StatusCard: View {
         let ask = layout == .ask
         return VStack(spacing: ask ? 12 : 8) {
             tile(size: ask ? 48 : 40, radius: ask ? 14 : 12, icon: ask ? 22 : 18)
-            Text(title)
+            Text(L(title))
                 .font(.system(size: ask ? 16 : 14.5, weight: .semibold))
                 .tracking(ask ? -0.16 : -0.145)
                 .lineLimit(1)
                 .minimumScaleFactor(0.85)
-            Text(detail)
+            Text(L(detail))
                 .font(.system(size: ask ? 12.5 : 12))
                 .lineSpacing(ask ? 12.5 * 0.45 - 2 : 12 * 0.4 - 2)
                 .foregroundStyle(.white.opacity(ask ? 0.62 : 0.58))
@@ -92,8 +92,8 @@ struct StatusCard: View {
         HStack(spacing: 16) {
             tile(size: 44, radius: 13, icon: 20)
             VStack(alignment: .leading, spacing: 3) {
-                Text(title).font(.system(size: 15, weight: .semibold)).lineLimit(1).minimumScaleFactor(0.75)
-                Text(detail).font(.system(size: 12.5)).foregroundStyle(.white.opacity(0.6)).lineLimit(2)
+                Text(L(title)).font(.system(size: 15, weight: .semibold)).lineLimit(1).minimumScaleFactor(0.75)
+                Text(L(detail)).font(.system(size: 12.5)).foregroundStyle(.white.opacity(0.6)).lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
@@ -138,7 +138,7 @@ struct StatusCard: View {
     private func button(_ action: Action, primary: Bool, ask: Bool) -> some View {
         let mint = primary && primaryIsMint
         return Button(action: action.run) {
-            Text(action.title)
+            Text(L(action.title))
                 .font(.system(size: ask ? 13 : 12, weight: primary ? .semibold : .medium))
                 .foregroundStyle(mint ? Self.ink : .white)
                 .padding(.horizontal, ask ? (primary ? 16 : 14) : 12)
@@ -152,7 +152,7 @@ struct StatusCard: View {
 
     private func bannerButton(_ action: Action) -> some View {
         Button(action: action.run) {
-            Text(action.title)
+            Text(L(action.title))
                 .font(.system(size: 13, weight: .semibold))
                 .padding(.horizontal, 14)
                 .frame(height: 36)

@@ -75,8 +75,8 @@ struct LocalFocusNotifier: FocusNotifier {
 
     func schedule(at date: Date, minutes: Int) async {
         let content = UNMutableNotificationContent()
-        content.title = "Focus session complete"
-        content.body = "\(minutes) minutes of focus. Time for a break."
+        content.title = L("Focus session complete")
+        content.body = String(localized: "\(minutes) minutes of focus. Time for a break.")
         content.sound = nil // Orilio chimes itself (Settings › General › Sounds)
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: max(1, date.timeIntervalSinceNow), repeats: false)
         // Same identifier every time: adding it again replaces the pending one.
