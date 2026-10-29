@@ -73,6 +73,28 @@ struct ScreenResolverTests {
         #expect(ScreenResolver.assign(["a": 1, "b": 2], open: [], to: []) == [:])
     }
 
+    @Test func theAppsIslandTakesOverWhenItsDisplayGoes() {
+        // "All displays", the lid closes: the app's island ("p", built-in 1) takes the external one.
+        #expect(ScreenResolver.assign(["p": 1, "x": 2], open: [], to: [2], keep: "p") == ["p": 2])
+        // A closed island's display before an open one's.
+        #expect(ScreenResolver.assign(["p": 1, "x": 2, "y": 3], open: ["y"], to: [2, 3], keep: "p") == ["p": 2, "y": 3])
+        // Its own display stays: nothing changes.
+        #expect(ScreenResolver.assign(["p": 1, "x": 2], open: [], to: [1, 2], keep: "p") == ["p": 1, "x": 2])
+        // Nothing left at all: it closes too.
+        #expect(ScreenResolver.assign(["p": 1], open: [], to: [], keep: "p") == [:])
+    }
+
+    @Test func overAFullscreenAppTheIslandShowsOnlyWhenItShould() {
+        let shows = IslandWindowController.shows
+        #expect(shows(nil, false, false, false)) // no fullscreen app: always
+        #expect(shows(.show, false, false, false))
+        #expect(!shows(.hide, true, false, false)) // "Hide": a reveal doesn't count
+        #expect(shows(.hide, false, false, true)) // … a meeting starting now does
+        #expect(shows(.hide, false, true, false)) // … and so does an open island (the shortcut)
+        #expect(!shows(.reveal, false, false, false))
+        #expect(shows(.reveal, true, false, false))
+    }
+
     @Test func mixedScaleFactorsSnapToEachPixelGrid() {
         // A centre that falls between pixels: whole points on 1x, half points allowed on 2x.
         var oneX = external.geometry // 1x

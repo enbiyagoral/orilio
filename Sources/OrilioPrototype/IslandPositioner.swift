@@ -62,14 +62,9 @@ final class IslandPositioner {
         let targets = ScreenResolver.targets(screens, settings: settings, pointer: pointerDisplay)
         let current = islands.mapValues(\.screen.id)
         let open = Set(islands.filter { $0.value.model.state.isOpen }.keys)
-        var assignment = ScreenResolver.assign(current, open: open, to: targets.map(\.id))
-        // The app's model keeps a window (onboarding and the status menu go to it): when its display
-        // goes, its island takes over another's, preferably a closed one.
-        if let own = islands.first(where: { $0.value.model === primary })?.key, assignment[own] == nil,
-           let (other, display) = assignment.first(where: { !open.contains($0.key) }) ?? assignment.first {
-            assignment[other] = nil
-            assignment[own] = display
-        }
+        // The app's model keeps a window (onboarding and the status menu go to it).
+        let assignment = ScreenResolver.assign(current, open: open, to: targets.map(\.id),
+                                               keep: islands.first { $0.value.model === primary }?.key)
 
         for (key, island) in islands where assignment[key] == nil {
             island.close()

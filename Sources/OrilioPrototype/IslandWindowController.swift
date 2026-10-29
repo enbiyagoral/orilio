@@ -460,10 +460,15 @@ final class IslandWindowController {
             guard case .meeting(let event)? = model.earLayout.primary?.payload else { return false }
             return MeetingEar.started(event, now: Date())
         }()
+        return Self.shows(fullscreen: fullscreen, revealed: revealed, open: model.state.isOpen, meetingNow: meetingNow)
+    }
+
+    /// Pure, for tests: whether the island is on screen.
+    nonisolated static func shows(fullscreen: DisplaySettings.Fullscreen?, revealed: Bool, open: Bool, meetingNow: Bool) -> Bool {
         switch fullscreen {
-        case nil, .show?: return true
-        case .hide?: return meetingNow || model.state.isOpen
-        case .reveal?: return revealed || model.state.isOpen || meetingNow
+        case nil, .show?: true
+        case .hide?: meetingNow || open
+        case .reveal?: revealed || open || meetingNow
         }
     }
 

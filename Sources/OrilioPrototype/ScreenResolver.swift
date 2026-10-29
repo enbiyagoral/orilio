@@ -113,9 +113,11 @@ enum ScreenResolver {
     /// Pairs the islands that exist with the displays that should have one. An island keeps its
     /// display if that display is still a target; one whose display went away moves to a free
     /// target, the open (pinned) ones first, so a pinned island survives an unplug with its state.
+    /// `keep` (the island holding the app's own model) never closes while any island stays: it takes
+    /// over another's display, a closed one's if it can.
     /// Returns island → display; islands left out are closed, displays left over get new ones.
     static func assign<Island: Hashable>(_ current: [Island: CGDirectDisplayID], open: Set<Island>,
-                                         to targets: [CGDirectDisplayID]) -> [Island: CGDirectDisplayID] {
+                                         to targets: [CGDirectDisplayID], keep: Island? = nil) -> [Island: CGDirectDisplayID] {
         var result: [Island: CGDirectDisplayID] = [:]
         var free = targets
         for (island, display) in current where free.contains(display) {
@@ -135,6 +137,11 @@ enum ScreenResolver {
             }
             result[island] = display
             free.removeFirst()
+        }
+        if let keep, current[keep] != nil, result[keep] == nil,
+           let (other, display) = result.first(where: { !open.contains($0.key) }) ?? result.first {
+            result[other] = nil
+            result[keep] = display
         }
         return result
     }
