@@ -153,7 +153,8 @@ actor BrowserMediaProvider: MediaProvider {
     }
 }
 
-/// Lets the provider's transport reach the server created after it. Set once, before the server starts.
+/// Lets the provider's transport reach the server created after it. Set once, before the server
+/// starts and before any reader exists, which is why it can be unchecked-Sendable.
 private final class ServerBox: @unchecked Sendable {
     var server: BridgeServer?
 }

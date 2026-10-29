@@ -504,6 +504,7 @@ struct ExtensionEarContent: Equatable {
 
 /// The app side of `orilio.fetch`: HTTPS to the extension's declared and allowed hosts only, redirects
 /// included, with size, time and in-flight limits. No cookies or cache are shared with anything else.
+/// Unchecked-Sendable: `permissions` is set once at init and `inFlight` is only touched under `lock`.
 final class FetchBroker: NSObject, ExtensionHostProtocol, @unchecked Sendable {
     /// The hosts an extension may reach (asked on the main actor). Set once: fetches read it on any thread.
     let permissions: @Sendable (String) async -> [String]

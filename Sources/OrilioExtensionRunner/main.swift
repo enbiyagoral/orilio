@@ -10,6 +10,8 @@ import Foundation
 import OrilioExtensionEngine
 import OrilioExtensionKit
 
+/// Unchecked-Sendable: XPC calls arrive on any thread, and each one hops onto `queue` before touching
+/// the engine; `connection` is set once at init.
 final class Runner: NSObject, ExtensionRunnerProtocol, @unchecked Sendable {
     /// Everything happens here, one call at a time (the engine is confined to it).
     /// Each work item drains its own autoreleased objects, so nothing keeps an unloaded context alive.

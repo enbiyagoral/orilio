@@ -34,6 +34,12 @@ private func settle(until done: () -> Bool) async {
     for _ in 0..<4_000 where !done() { await Task.yield() }
 }
 
+/// Until `done`, for up to 2 s of real time (an Undo window has to pass, not just a few turns).
+@MainActor
+private func eventually(_ done: () -> Bool) async throws {
+    for _ in 0..<200 where !done() { try await Task.sleep(for: .milliseconds(10)) }
+}
+
 @MainActor
 private func waitForSave(_ store: URL) async throws {
     let file = store.appending(path: "shelf.json")
@@ -95,7 +101,8 @@ struct ShelfStoreTests {
         try Data("{ \"version\": 99, broken".utf8).write(to: box.storeDirectory.appending(path: "shelf.json"))
         let shelf = box.shelf()
         await shelf.restore()
-        try await Task.sleep(for: .milliseconds(300)) // the sweep runs detached
+        // ponytail: proving the detached sweep never ran can only wait; a late sweep would pass, never fail.
+        try await Task.sleep(for: .milliseconds(300))
         #expect(FileManager.default.fileExists(atPath: copy.path))
         // The unreadable list is kept aside, so a later save can't write over it.
         let kept = try FileManager.default.contentsOfDirectory(atPath: box.storeDirectory.path).filter { $0.hasPrefix("shelf-unreadable-") }
@@ -133,8 +140,10 @@ struct ShelfPersistenceTests {
         let mine = box.file("mine.txt")
         shelf.accept(.files([mine]), sequence: 1)
         await settle { !shelf.items.isEmpty }
+        shelf.undoWindow = .milliseconds(50)
         shelf.remove(shelf.items)
-        try await Task.sleep(for: .milliseconds(200))
+        try await eventually { shelf.toast == nil } // Undo is over: the removal is final
+        #expect(shelf.toast == nil)
         #expect(FileManager.default.fileExists(atPath: mine.path))
     }
 
@@ -170,8 +179,9 @@ struct ShelfPersistenceTests {
         await settle { shelf.items.count == 2 }
         shelf.undoWindow = .milliseconds(50)
         shelf.remove(try #require(shelf.items.first { $0.url.lastPathComponent == "Invoice.pdf" }))
-        try await Task.sleep(for: .milliseconds(400))
-        #expect(FileManager.default.fileExists(atPath: second.path))
+        try await eventually { shelf.toast == nil } // Undo is over: the removal is final
+        #expect(shelf.toast == nil)
+        #expect(FileManager.default.fileExists(atPath: second.path)) // the shared folder is still in use
     }
 
     @Test func aReceivedItemOutsideOriliosFolderIsNeverDeleted() async throws {
@@ -183,8 +193,10 @@ struct ShelfPersistenceTests {
         forged.isAvailable = true
         try await ShelfStore(directory: box.storeDirectory).save([forged])
         await shelf.restore()
+        shelf.undoWindow = .milliseconds(50)
         shelf.remove(shelf.items)
-        try await Task.sleep(for: .milliseconds(200))
+        try await eventually { shelf.toast == nil }
+        #expect(shelf.toast == nil)
         #expect(FileManager.default.fileExists(atPath: user.path))
     }
 
@@ -279,10 +291,12 @@ struct ShelfKeyboardTests {
         shelf.accept(.files([keep, drop]), sequence: 1)
         await settle { shelf.items.count == 2 }
         let target = try #require(shelf.items.first { $0.name == "drop" })
+        shelf.undoWindow = .milliseconds(50)
         shelf.select(target.id, extending: false)
         #expect(shelf.handleKey(keyCode: 51, command: false))
         #expect(shelf.items.map(\.name) == ["keep"])
-        try await Task.sleep(for: .milliseconds(150))
+        try await eventually { shelf.toast == nil }
+        #expect(shelf.toast == nil)
         #expect(FileManager.default.fileExists(atPath: drop.path))
     }
 

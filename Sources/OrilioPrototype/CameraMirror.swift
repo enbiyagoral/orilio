@@ -201,7 +201,7 @@ private extension CameraMirrorState {
 
 /// The AVCaptureSession, touched only on its own serial queue (start and stop can block). It has a
 /// preview layer and nothing else: no movie, photo or video-data output, so no frame leaves the
-/// render server.
+/// render server. Unchecked-Sendable because of that queue confinement.
 final class CameraSession: @unchecked Sendable {
     let session = AVCaptureSession()
     private let queue = DispatchQueue(label: "com.enbiyagoral.orilio.camera")

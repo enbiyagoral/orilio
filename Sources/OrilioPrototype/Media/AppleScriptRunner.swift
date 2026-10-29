@@ -22,6 +22,7 @@ extension MediaError {
 
 /// Runs every AppleScript off the main actor, on one serial queue.
 /// One queue for all players: NSAppleScript isn't documented as thread-safe, and the calls are rare.
+/// Unchecked-Sendable because of that confinement: nothing is touched off the queue.
 final class AppleScriptRunner: @unchecked Sendable {
     static let shared = AppleScriptRunner()
 

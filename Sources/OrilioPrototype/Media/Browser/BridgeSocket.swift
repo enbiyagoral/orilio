@@ -93,6 +93,7 @@ struct LineBuffer {
 }
 
 /// Orilio's side: accepts host connections and hands messages to the browser provider.
+/// Unchecked-Sendable because every mutable field is confined to its serial `queue`.
 final class BridgeServer: @unchecked Sendable {
     enum Event: Sendable {
         case connected(Int)
