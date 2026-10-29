@@ -154,9 +154,14 @@ final class ClipboardModule {
     /// A password manager (an excluded app) is the app the user is in: nothing is recorded.
     private(set) var privacyPaused = false
 
-    private func frontmostChanged(_ bundleID: String?) {
+    /// An excluded app was in front at some point since the last check. The check runs once a second,
+    /// so asking only "who is in front now" missed a password copied just before a quick ⌘-Tab.
+    @ObservationIgnored private var excludedSinceCheck = false
+
+    func frontmostChanged(_ bundleID: String?) {
         guard bundleID != Bundle.main.bundleIdentifier else { return } // opening the island isn't switching away
         privacyPaused = bundleID.map(excludedApps.contains) ?? false
+        if privacyPaused { excludedSinceCheck = true }
     }
 
     var declined: Bool { defaults.bool(forKey: ClipboardKeys.declined) }
@@ -274,9 +279,12 @@ final class ClipboardModule {
             prune()
             scheduleSave()
         }
+        let excludedWasFront = excludedSinceCheck
+        excludedSinceCheck = privacyPaused // still in front: the next check is covered too
         let change = pasteboard.changeCount
         guard change != lastChange else { return }
         lastChange = change
+        if excludedWasFront { return } // the copy may have come from the excluded app
         if change == ownWrite { return } // Orilio's own copy-back
         updatePermission()
         guard status == .on else { return }

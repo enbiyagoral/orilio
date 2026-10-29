@@ -339,3 +339,22 @@ struct ClipboardModuleTests {
         #expect(h.module.query == "alph")
     }
 }
+
+/// QA-0 P1: the excluded-app check looked at the app in front when the 1 s check ran, not when the copy
+/// happened, so a password copied in a password manager followed by a quick ⌘-Tab was recorded.
+@MainActor
+struct ClipboardExcludedSwitchTests {
+    @Test func aCopyFromAPasswordManagerStaysOutAfterAQuickSwitch() async {
+        let h = Harness() // the check sees TextEdit in front
+        await h.module.enable()
+        h.module.frontmostChanged("com.1password.1password")
+        h.board.copy("hunter2")
+        h.module.frontmostChanged("com.apple.TextEdit") // ⌘-Tab before the next check
+        h.module.check()
+        #expect(h.module.items.isEmpty)
+        // Copies made after that are recorded as usual.
+        h.board.copy("hello")
+        h.module.check()
+        #expect(h.module.items.map(\.text) == ["hello"])
+    }
+}
