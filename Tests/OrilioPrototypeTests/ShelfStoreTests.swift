@@ -156,6 +156,24 @@ struct ShelfPersistenceTests {
         #expect(!FileManager.default.fileExists(atPath: copy.url.path))
     }
 
+    /// QA-0 P1: files received in one drop shared a folder, and removing one deleted the folder, so
+    /// the others (the only copies of Mail attachments, say) went with it.
+    @MainActor @Test func removingOneReceivedCopyKeepsTheOthersFromTheSameDrop() async throws {
+        let box = Sandbox()
+        let shared = box.receivedDirectory.appending(path: "DROP", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: shared, withIntermediateDirectories: true)
+        let first = shared.appending(path: "Invoice.pdf"), second = shared.appending(path: "Receipt.pdf")
+        try Data("one".utf8).write(to: first)
+        try Data("two".utf8).write(to: second)
+        let shelf = box.shelf()
+        shelf.add([first, second], origin: .received)
+        await settle { shelf.items.count == 2 }
+        shelf.undoWindow = .milliseconds(50)
+        shelf.remove(try #require(shelf.items.first { $0.url.lastPathComponent == "Invoice.pdf" }))
+        try await Task.sleep(for: .milliseconds(400))
+        #expect(FileManager.default.fileExists(atPath: second.path))
+    }
+
     @Test func aReceivedItemOutsideOriliosFolderIsNeverDeleted() async throws {
         let box = Sandbox()
         let shelf = box.shelf()

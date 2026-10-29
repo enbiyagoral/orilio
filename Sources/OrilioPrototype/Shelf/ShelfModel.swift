@@ -392,8 +392,11 @@ final class ShelfModel {
 
     /// Undo is gone: delete the received copies among the removed items (only Orilio's own folders).
     private func commitRemoval() {
+        // A folder another item still lives in stays (received before each file got its own folder).
+        let inUse = Set(items.map { $0.url.deletingLastPathComponent().standardizedFileURL.path })
         let ownFolders = lastRemoved.map(\.item).filter { $0.origin == .received }.map { $0.url.deletingLastPathComponent() }
             .filter { Self.isInside($0, receivedDirectory) } // never anything else
+            .filter { !inUse.contains($0.standardizedFileURL.path) }
         lastRemoved = []
         if !ownFolders.isEmpty {
             Task.detached(priority: .utility) {
@@ -501,8 +504,9 @@ final class ShelfModel {
     }
 
     private func receive(_ receivers: [NSFilePromiseReceiver]) {
-        guard let folder = newReceivingFolder() else { return }
         for receiver in receivers {
+            // A folder of its own: removing one received file deletes its folder, never a sibling's.
+            guard let folder = newReceivingFolder() else { return }
             let marker = Pending(name: receiver.fileNames.first ?? "Receiving…")
             pending.append(marker)
             receiver.receivePromisedFiles(atDestination: folder, options: [:], operationQueue: promiseQueue) { [weak self] url, error in
