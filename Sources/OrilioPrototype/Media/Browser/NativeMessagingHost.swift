@@ -7,11 +7,14 @@ import Foundation
 
 /// The process Chrome starts for `connectNative`. It is Orilio's own executable, launched with the
 /// extension origin as its argument. It relays Chrome's stdin/stdout framing to Orilio's socket and back.
-/// If Orilio isn't running it keeps trying (backing off to 30 s) for as long as Chrome keeps it alive.
+/// If Orilio isn't running it keeps trying (backing off to 5 s) for as long as Chrome keeps it alive.
 final class NativeMessagingHost: @unchecked Sendable {
     private let socketPath: String
     private let lock = NSLock()
     private var socketFD: Int32 = -1 // guarded by `lock`
+    /// The extension's last "hello" (which browser this is), sent again on every reconnect: the
+    /// extension says it once, and a restarted Orilio would otherwise show every tab as "Chrome".
+    private var hello: Data? // guarded by `lock`
     private let stdoutLock = NSLock()
 
     init(socketPath: String = BridgeSocket.defaultPath) {
@@ -50,6 +53,7 @@ final class NativeMessagingHost: @unchecked Sendable {
                   message.v == BridgeProtocol.version, var line = try? JSONEncoder().encode(message) else { continue }
             line.append(0x0A)
             lock.lock()
+            if message.type == "hello" { hello = line }
             let fd = socketFD
             lock.unlock()
             // While Orilio is unreachable, messages are dropped; on reconnect the extension resends everything.
@@ -64,13 +68,16 @@ final class NativeMessagingHost: @unchecked Sendable {
         while true {
             guard let fd = BridgeSocket.connect(to: socketPath) else {
                 Thread.sleep(forTimeInterval: delay)
-                delay = min(delay * 2, 30)
+                // A refused connect is cheap; a long wait would leave a just-opened Orilio without music.
+                delay = min(delay * 2, 5)
                 continue
             }
             delay = 0.5
             lock.lock()
             socketFD = fd
+            let hello = hello
             lock.unlock()
+            if let hello, !BridgeSocket.writeAll(fd, hello) { disconnect(fd); continue }
             // Orilio may have restarted and lost state: ask every tab to report again.
             writeToExtension(BridgeMessage(type: "resync"))
             relay(from: fd)

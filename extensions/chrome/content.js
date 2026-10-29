@@ -280,9 +280,13 @@
 
   // Media events don't bubble, but they can be captured at the document,
   // which also covers the element being replaced.
-  for (const type of ["play", "playing", "pause", "ended", "seeked", "durationchange", "loadedmetadata", "emptied",
-                      "ratechange", "waiting", "canplay", "stalled", "volumechange"]) {
+  // Play state goes at once; what comes in bursts (dragging a volume or seek slider, buffering)
+  // is gathered into one report.
+  for (const type of ["play", "playing", "pause", "ended", "emptied"]) {
     document.addEventListener(type, report, true);
+  }
+  for (const type of ["seeked", "durationchange", "loadedmetadata", "ratechange", "waiting", "canplay", "stalled", "volumechange"]) {
+    document.addEventListener(type, reportSoon, true);
   }
   // Tab shown or hidden: a background video must not take the island from music.
   document.addEventListener("visibilitychange", report);

@@ -773,7 +773,9 @@ private struct PlayPauseButton: View {
         let playing = feedback.isPlaying(actual: session.state == .playing)
         Button {
             guard feedback.begin(.playPause, expectingPlaying: !playing) else { return }
-            perform(.togglePlayPause, action: .playPause, on: session, media: media, feedback: $feedback)
+            // What the button shows is what it does: an explicit play or pause, never a toggle that
+            // a stale state could turn into the opposite.
+            perform(playing ? .pause : .play, action: .playPause, on: session, media: media, feedback: $feedback)
         } label: {
             Image(systemName: playing ? "pause.fill" : "play.fill")
                 .font(.system(size: diameter * (filled ? 0.44 : 0.52), weight: .bold))
@@ -804,7 +806,7 @@ private struct ProgressRow: View {
     var body: some View {
         // Without a known position (Music before permission) a bar would be a guess, so show none.
         if let duration = session.duration, duration > 0, let position = session.position {
-            TimelineView(.periodic(from: session.positionDate, by: Self.tick)) { context in
+            TimelineView(.animation(minimumInterval: Self.tick, paused: session.state != .playing)) { context in
                 let now = session.state == .playing ? current(position, at: context.date) : position
                 let shown = scrub.map { $0 * duration } ?? min(now, duration)
                 row(shown: shown, duration: duration)

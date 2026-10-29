@@ -413,7 +413,7 @@ final class IslandModel {
             }
         case .music:
             guard let current = media.current else { return false }
-            Task { try? await media.send(.togglePlayPause, to: current.sourceID) }
+            Task { try? await media.send(current.state == .playing ? .pause : .play, to: current.sourceID) }
         case .clipboard:
             guard let item = clipboard.selectedItem ?? clipboard.visibleItems.first else { return false }
             Task { await clipboard.copy(item) }

@@ -21,41 +21,47 @@ actor ArtworkCache {
     /// The largest cover on screen is 96 pt; 2x for Retina.
     static let maxPixelSize = 192
 
-    private var bytes: [URL: Data] = [:]
+    /// Bytes a provider handed over, until they're decoded; after that only the small cover is kept.
+    private var given: [URL: Data] = [:]
     private var decoded: [URL: CoverImage] = [:]
+    /// One load per URL: views asking at once wait for the same one.
+    private var loading: [URL: Task<CoverImage?, Never>] = [:]
     private var order: [URL] = []
     private let limit = 24
     private let session = URLSession(configuration: .ephemeral)
 
     func put(_ data: Data, for url: URL) {
         remember(url)
-        bytes[url] = data
+        given[url] = data
         decoded[url] = nil
     }
 
     func image(for url: URL) async -> CoverImage? {
         if let cached = decoded[url] { return cached }
-        guard let data = await data(for: url), let cover = Self.decode(data) else { return nil }
-        remember(url)
-        decoded[url] = cover
+        if let task = loading[url] { return await task.value }
+        let data = given[url], session = session
+        let task = Task<CoverImage?, Never> {
+            if let data { return Self.decode(data) }
+            guard url.scheme == "https", let (fetched, response) = try? await session.data(from: url),
+                  (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
+            return Self.decode(fetched)
+        }
+        loading[url] = task
+        let cover = await task.value
+        loading[url] = nil
+        if let cover {
+            remember(url)
+            decoded[url] = cover
+            given[url] = nil
+        }
         return cover
-    }
-
-    private func data(for url: URL) async -> Data? {
-        if let cached = bytes[url] { return cached }
-        guard url.scheme == "https",
-              let (data, response) = try? await session.data(from: url),
-              (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
-        remember(url)
-        bytes[url] = data
-        return data
     }
 
     private func remember(_ url: URL) {
         if !order.contains(url) { order.append(url) }
         while order.count > limit {
             let old = order.removeFirst()
-            bytes[old] = nil
+            given[old] = nil
             decoded[old] = nil
         }
     }
