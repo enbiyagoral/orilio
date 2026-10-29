@@ -85,6 +85,23 @@ struct ShelfStoreTests {
         #expect(!ShelfStore.isAvailable(trashed))
     }
 
+    /// QA-0 P0: an unreadable shelf.json used to load as an empty shelf, and the sweep that follows
+    /// deleted every received copy — the only copy of a file dropped from Mail or a browser.
+    @MainActor @Test func anUnreadableShelfFileNeverCostsTheReceivedCopies() async throws {
+        let box = Sandbox()
+        let copy = box.receivedDirectory.appending(path: "A1B2/Invoice.pdf")
+        try FileManager.default.createDirectory(at: copy.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("received".utf8).write(to: copy)
+        try Data("{ \"version\": 99, broken".utf8).write(to: box.storeDirectory.appending(path: "shelf.json"))
+        let shelf = box.shelf()
+        await shelf.restore()
+        try await Task.sleep(for: .milliseconds(300)) // the sweep runs detached
+        #expect(FileManager.default.fileExists(atPath: copy.path))
+        // The unreadable list is kept aside, so a later save can't write over it.
+        let kept = try FileManager.default.contentsOfDirectory(atPath: box.storeDirectory.path).filter { $0.hasPrefix("shelf-unreadable-") }
+        #expect(kept.count == 1)
+    }
+
     @Test func aMissingOrCorruptFileLoadsAnEmptyShelf() async throws {
         let box = Sandbox()
         let store = ShelfStore(directory: box.storeDirectory)

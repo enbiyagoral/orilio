@@ -206,3 +206,32 @@ struct NotesModuleTests {
         #expect(await recorder.deletes == 1)
     }
 }
+
+/// QA-0 P0: a notes file that exists but can't be read used to load as "no notes", and the next save
+/// wrote the empty list over it.
+@MainActor
+struct NotesUnreadableFileTests {
+    @Test func anUnreadableFileIsNeverWrittenOver() async throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: "orilio-notes-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let first = NotesModule(store: NotesStore(directory: directory))
+        await first.load()
+        first.newNote()
+        first.currentText = "Keep me"
+        await first.saveNow()
+        let file = directory.appending(path: "notes.json")
+        let original = try Data(contentsOf: file)
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: file.path) // can't be read
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: file.path) }
+
+        let second = NotesModule(store: NotesStore(directory: directory))
+        await second.load()
+        second.newNote()
+        second.currentText = "Typed while the file was unreadable"
+        await second.saveNow()
+
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: file.path)
+        #expect(try Data(contentsOf: file) == original)
+    }
+}
+

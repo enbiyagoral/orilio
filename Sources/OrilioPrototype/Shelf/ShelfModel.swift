@@ -168,6 +168,8 @@ final class ShelfModel {
         let saved = await store.load()
         var seen = Set(items.map(\.id))
         items.append(contentsOf: saved.filter { seen.insert($0.id).inserted })
+        // An unreadable list says nothing about which received copies are still wanted: keep them all.
+        guard await !store.unreadable else { return }
         sweepReceived()
     }
 

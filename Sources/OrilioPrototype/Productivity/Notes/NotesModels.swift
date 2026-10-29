@@ -101,6 +101,9 @@ actor NotesStore {
         case loaded(NotesFile)
         /// The file couldn't be read; it was kept next to the new one under this name.
         case recovered(NotesFile, backup: String)
+        /// The file is there but can't be read now (permissions, a disk error), or couldn't be put
+        /// aside: nothing may be saved over it this session.
+        case unavailable
     }
 
     let directory: URL
@@ -118,12 +121,14 @@ actor NotesStore {
     /// A missing file is an empty start. A corrupt file, or one from a newer Orilio, is never
     /// overwritten: it is renamed aside and loading starts empty.
     func load() -> LoadResult {
-        guard let data = try? Data(contentsOf: file) else { return .loaded(NotesFile()) }
+        // Only a file that isn't there means "no notes yet"; one that can't be read is never written over.
+        guard FileManager.default.fileExists(atPath: file.path) else { return .loaded(NotesFile()) }
+        guard let data = try? Data(contentsOf: file) else { return .unavailable }
         if let decoded = try? JSONDecoder.notes.decode(NotesFile.self, from: data), decoded.version <= NotesFile.currentVersion {
             return .loaded(migrate(decoded))
         }
         let backup = "notes-unreadable-\(Int(Date().timeIntervalSince1970)).json"
-        try? FileManager.default.moveItem(at: file, to: directory.appending(path: backup))
+        guard (try? FileManager.default.moveItem(at: file, to: directory.appending(path: backup))) != nil else { return .unavailable }
         return .recovered(NotesFile(), backup: backup)
     }
 

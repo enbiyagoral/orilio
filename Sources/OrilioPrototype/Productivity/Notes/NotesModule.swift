@@ -39,6 +39,8 @@ final class NotesModule {
             notes = file.notes
             tasks = file.tasks
             recoveredBackup = backup
+        case .unavailable:
+            return // `loaded` stays false, so nothing is saved over the file; the next launch tries again
         }
         loaded = true
         currentNoteID = NotesPolicy.ordered(notes).first?.id

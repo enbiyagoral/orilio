@@ -30,6 +30,10 @@ actor ShelfStore {
     }
 
     let fileURL: URL
+    /// The saved shelf was there but couldn't be read: it was put aside (or, failing that, saving is
+    /// off), and the received copies it pointed at must not be swept.
+    private(set) var unreadable = false
+    private var saveBlocked = false
 
     init(directory: URL = ShelfStore.defaultDirectory) {
         fileURL = directory.appending(path: "shelf.json")
@@ -42,12 +46,18 @@ actor ShelfStore {
 
     /// The saved shelf, with every item's location and availability checked now.
     func load() -> [ShelfItem] {
-        guard let data = try? Data(contentsOf: fileURL),
-              let file = try? JSONDecoder().decode(File.self, from: data) else { return [] }
+        guard FileManager.default.fileExists(atPath: fileURL.path) else { return [] }
+        guard let data = try? Data(contentsOf: fileURL), let file = try? JSONDecoder().decode(File.self, from: data) else {
+            unreadable = true
+            let aside = fileURL.deletingLastPathComponent().appending(path: "shelf-unreadable-\(Int(Date().timeIntervalSince1970)).json")
+            if (try? FileManager.default.moveItem(at: fileURL, to: aside)) == nil { saveBlocked = true }
+            return []
+        }
         return file.items.map(Self.resolve)
     }
 
     func save(_ items: [ShelfItem]) throws {
+        guard !saveBlocked else { throw CocoaError(.fileWriteNoPermission) } // never over a shelf we couldn't read
         try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         let file = File(items: items.map(Self.record))
         let encoder = JSONEncoder()
