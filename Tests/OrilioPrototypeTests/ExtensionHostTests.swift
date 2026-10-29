@@ -227,3 +227,32 @@ struct ExtensionCatalogTests {
         #expect(host.store.loadState()[manifest.id] == nil)
     }
 }
+
+/// QA-0 P1: the call timeout has to fire even when the work never answers (a runner stuck in a loop,
+/// a reply lost when the runner dies). It used to wait on the work forever, so a hung runner was never killed.
+struct ExtensionCallTimeoutTests {
+    final class Flag: @unchecked Sendable { // written once by the task, read after; the lock keeps it race-free
+        private let lock = NSLock()
+        private var value: String?
+        func set(_ new: String) { lock.withLock { value = new } }
+        var current: String? { lock.withLock { value } }
+    }
+
+    @Test func aCallThatNeverAnswersTimesOut() async throws {
+        let outcome = Flag()
+        let started = Date()
+        Task.detached {
+            do {
+                _ = try await withTimeout { await withCheckedContinuation { (_: CheckedContinuation<Int, Never>) in } }
+                outcome.set("answered")
+            } catch is CallTimeout {
+                outcome.set("timed out after \(Int(Date().timeIntervalSince(started))) s")
+            } catch {
+                outcome.set("other error")
+            }
+        }
+        // A guard of our own, so a regression fails the test instead of hanging the suite.
+        for _ in 0..<80 where outcome.current == nil { try await Task.sleep(for: .milliseconds(100)) }
+        #expect(outcome.current?.hasPrefix("timed out") == true, "\(outcome.current ?? "still waiting after 8 s")")
+    }
+}

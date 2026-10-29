@@ -338,6 +338,13 @@ final class ExtensionHost {
         return connection?.remoteObjectProxy as? ExtensionRunnerProtocol
     }
 
+    /// A proxy whose call ends with `onError` when the runner dies or the connection drops, so a
+    /// waiting call is never left without an answer.
+    private func runnerProxy(onError: @escaping @Sendable (String) -> Void) -> ExtensionRunnerProtocol? {
+        guard connectionProxy() != nil else { return nil }
+        return connection?.remoteObjectProxyWithErrorHandler { onError($0.localizedDescription) } as? ExtensionRunnerProtocol
+    }
+
     /// Hosts a fetch may go to: declared in the manifest AND allowed by the user.
     func grantedHosts(_ id: String) -> [String] {
         guard let ext = installed.first(where: { $0.id == id }) else { return [] }
@@ -359,11 +366,12 @@ final class ExtensionHost {
         guard !loadedScripts.contains(ext.id) else { return }
         let script = try String(contentsOf: store.folder(ext.id).appending(path: "main.js"), encoding: .utf8)
         let manifest = try Data(contentsOf: store.folder(ext.id).appending(path: "orilio-extension.json"))
-        guard let proxy = connectionProxy().map(XPCProxy.init) else { throw CallError("The extension runner isn't available") }
         let id = ext.id
-        let error: String? = try await withTimeout {
+        let error: String? = try await withTimeout { @MainActor in
             await withCheckedContinuation { continuation in
-                proxy.runner.load(extensionID: id, script: script, manifest: manifest) { continuation.resume(returning: $0) }
+                let done = ResumeOnce<String?> { continuation.resume(returning: $0) }
+                guard let proxy = self.runnerProxy(onError: { done($0) }) else { return done("The extension runner isn't available") }
+                proxy.load(extensionID: id, script: script, manifest: manifest) { done($0) }
             }
         }
         if let error { throw CallError(error) }
@@ -371,10 +379,11 @@ final class ExtensionHost {
     }
 
     private func send(_ id: String, function: String, context: CallContext) async throws -> CallReply {
-        guard let proxy = connectionProxy() else { throw CallError("The extension runner isn't available") }
         let data = try JSONEncoder().encode(context)
         let (reply, error): (Data?, String?) = await withCheckedContinuation { continuation in
-            proxy.call(extensionID: id, function: function, context: data) { continuation.resume(returning: ($0, $1)) }
+            let done = ResumeOnce<(Data?, String?)> { continuation.resume(returning: $0) }
+            guard let proxy = runnerProxy(onError: { done((nil, $0)) }) else { return done((nil, "The extension runner isn't available")) }
+            proxy.call(extensionID: id, function: function, context: data) { done(($0, $1)) }
         }
         if let error { throw CallError(error) }
         guard let reply, let decoded = try? JSONDecoder().decode(CallReply.self, from: reply) else { throw CallError("No answer") }
@@ -395,17 +404,37 @@ struct CallError: LocalizedError {
 
 struct CallTimeout: Error {}
 
-/// Runs `work`, giving up after `ExtensionLimits.callTimeout`.
+/// Runs `work`, giving up after `ExtensionLimits.callTimeout` whether or not `work` ever finishes.
+/// A race, not a task group: a group waits for all its children, and work parked on an XPC reply
+/// that never comes (a runner stuck in a loop) would keep the timeout from ever returning.
 func withTimeout<T: Sendable>(_ work: @escaping @Sendable () async throws -> T) async throws -> T {
-    try await withThrowingTaskGroup(of: T.self) { group in
-        group.addTask { try await work() }
-        group.addTask {
-            try await Task.sleep(for: ExtensionLimits.callTimeout)
-            throw CallTimeout()
+    try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<T, Error>) in
+        let finish = ResumeOnce<Result<T, Error>> { continuation.resume(with: $0) }
+        let worker = Task {
+            do { finish(.success(try await work())) } catch { finish(.failure(error)) }
         }
-        guard let first = try await group.next() else { throw CallTimeout() }
-        group.cancelAll()
-        return first
+        Task {
+            try? await Task.sleep(for: ExtensionLimits.callTimeout)
+            worker.cancel()
+            finish(.failure(CallTimeout()))
+        }
+    }
+}
+
+/// Hands a value on once and drops the rest: an XPC call ends with its reply or its connection's
+/// error, and a timeout may get there first. `NSLock` makes the one hand-off race-free across threads.
+final class ResumeOnce<T: Sendable>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var deliver: ((T) -> Void)?
+
+    init(_ deliver: @escaping (T) -> Void) { self.deliver = deliver }
+
+    func callAsFunction(_ value: T) {
+        let once = lock.withLock { () -> ((T) -> Void)? in
+            defer { deliver = nil }
+            return deliver
+        }
+        once?(value)
     }
 }
 
