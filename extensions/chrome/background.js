@@ -30,9 +30,13 @@ let native = null;
 let nativeRetries = 0;
 let nativeRetryTimer = null;
 
-// Messages wait for the browser id, and keep their order while they wait.
+// Messages wait for the browser id, and keep their order while they wait. Each goes to the port
+// open when it was posted, so the last tab's "removed" still leaves before that port is closed.
 function postNative(message) {
-  ready.then(() => native?.postMessage({ v: PROTOCOL, browser: browserId, ...message }));
+  const port = native;
+  ready.then(() => {
+    try { port?.postMessage({ v: PROTOCOL, browser: browserId, ...message }); } catch {} // the host went away meanwhile
+  });
 }
 
 function connectNative() {
@@ -124,8 +128,9 @@ chrome.runtime.onConnect.addListener((port) => {
     postNative({ type: "removed", tabId });
     // Let Chrome stop the host (and this worker sleep) once no music tab is left.
     if (tabs.size === 0 && native) {
-      native.disconnect();
+      const last = native;
       native = null;
+      ready.then(() => last.disconnect()); // after the "removed" above has gone out
     }
   });
 });
