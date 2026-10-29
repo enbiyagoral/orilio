@@ -21,14 +21,17 @@ public final class ExtensionEngine: @unchecked Sendable {
     public typealias Fetcher = (_ extensionID: String, _ url: String, _ method: String, _ body: Data?,
                                 _ completion: @escaping @Sendable (Data?, Int, String?) -> Void) -> Void
 
-    private struct Loaded {
+    struct Loaded {
         let vm: JSVirtualMachine
         let context: JSContext
         let manifest: ExtensionManifest
         var storage: [String: JSONValue] = [:]
+        /// Storage comes from the app on the first call only; after that the engine's copy is the newest,
+        /// so a call that starts while another waits on a fetch can't roll back what that one wrote.
+        var seeded = false
     }
 
-    private var loaded: [String: Loaded] = [:]
+    private(set) var loaded: [String: Loaded] = [:]
     private let fetcher: Fetcher
     /// Where work coming back from a fetch is run (the runner's serial queue).
     private let queue: DispatchQueue
@@ -67,8 +70,11 @@ public final class ExtensionEngine: @unchecked Sendable {
         guard let fn = js.objectForKeyedSubscript(function), !fn.isUndefined, fn.isObject else {
             return completion(.failure(.message("The script doesn't define \(function)")))
         }
-        entry.storage = entry.manifest.permissions.storage ? context.storage : [:]
-        loaded[id] = entry
+        if !entry.seeded {
+            entry.storage = entry.manifest.permissions.storage ? context.storage : [:]
+            entry.seeded = true
+            loaded[id] = entry
+        }
 
         var finished = false
         let finish: (Result<JSValue?, EngineError>) -> Void = { [weak self] outcome in
@@ -106,6 +112,8 @@ public final class ExtensionEngine: @unchecked Sendable {
 
     // MARK: The `orilio` object
 
+    /// The blocks find their context with `JSContext.current()`: one that captured `js` would keep the
+    /// context, and its whole virtual machine, alive after `unload`.
     private func installAPI(in js: JSContext, id: String, manifest: ExtensionManifest) {
         guard let orilio = JSValue(newObjectIn: js) else { return }
         let log: @convention(block) (JSValue?) -> Void = { message in NSLog("[extension %@] %@", id, message?.toString() ?? "") }
@@ -119,7 +127,7 @@ public final class ExtensionEngine: @unchecked Sendable {
                 return Self.foundation(value)
             }
             let set: @convention(block) (String, JSValue?) -> Void = { [weak self] key, value in
-                guard let self, var entry = self.loaded[id] else { return }
+                guard let self, var entry = self.loaded[id], let js = JSContext.current() else { return }
                 entry.storage[key] = value.flatMap { Self.jsonValue($0.toObject()) } ?? .null
                 if let data = try? JSONEncoder().encode(entry.storage), data.count > ExtensionLimits.storageBytes {
                     js.exception = JSValue(newErrorFromMessage: "Storage is full (\(ExtensionLimits.storageBytes / 1024) KB)", in: js)
@@ -134,7 +142,7 @@ public final class ExtensionEngine: @unchecked Sendable {
 
         if !manifest.permissions.network.isEmpty {
             let fetch: @convention(block) (String, JSValue?) -> JSValue? = { [weak self] url, given in
-                guard let self else { return nil }
+                guard let self, let js = JSContext.current() else { return nil }
                 // Reading a key of `undefined` throws in JavaScript: no options is no options.
                 let options = given?.isObject == true ? given : nil
                 let method = options?.objectForKeyedSubscript("method")?.toString().flatMap { $0 == "undefined" ? nil : $0 } ?? "GET"

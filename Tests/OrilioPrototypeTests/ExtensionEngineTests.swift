@@ -3,6 +3,7 @@
 // Copyright (C) 2026 Enbiya Goral and Orilio contributors
 
 import Foundation
+import JavaScriptCore
 import Testing
 @testable import OrilioExtensionEngine
 @testable import OrilioExtensionKit
@@ -54,6 +55,32 @@ struct PrayerTimesExtensionTests {
         try queue.sync { try engine.load(id: "probe", script: script, manifest: manifest) }
         let reply = try await run(engine, queue, id: "probe", istanbul("2026-10-28T13:30:00Z")).get()
         #expect(String(decoding: reply.result, as: UTF8.self) == #"{"compiled":0}"#)
+    }
+
+    @Test func aLaterCallDoesntRollBackStorage() async throws {
+        let engine = ExtensionEngine(queue: queue) { _, _, _, _, completion in completion(nil, 0, "offline") }
+        let manifest = try ManifestValidator.validate(Data(contentsOf: prayerFolder.appending(path: "orilio-extension.json")))
+        let script = #"function refresh() { const n = (orilio.storage.get("n") || 0) + 1; orilio.storage.set("n", n); return { n }; }"#
+        try queue.sync { try engine.load(id: "counter", script: script, manifest: manifest) }
+        _ = try await run(engine, queue, id: "counter", istanbul("2026-10-28T13:30:00Z")).get()
+        // The app still holds the first call's (empty) storage: the engine's newer copy wins.
+        let second = try await run(engine, queue, id: "counter", istanbul("2026-10-28T13:30:00Z")).get()
+        #expect(String(decoding: second.result, as: UTF8.self) == #"{"n":2}"#)
+    }
+
+    @Test func unloadingFreesTheContext() throws {
+        // Pools around each step, so nothing autoreleased keeps the context alive in its place.
+        var engine: ExtensionEngine?
+        try autoreleasepool { engine = try self.engine() }
+        weak var context: JSContext?
+        queue.sync {
+            autoreleasepool {
+                context = engine?.loaded["community.prayer-times"]?.context
+                engine?.unload(id: "community.prayer-times")
+            }
+        }
+        #expect(context == nil)
+        #expect(engine != nil) // freed by unload, not by the engine going away
     }
 
     @Test func theManifestIsValid() throws {

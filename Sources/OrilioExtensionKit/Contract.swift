@@ -136,6 +136,10 @@ public struct ExtensionResult: Codable, Equatable, Sendable {
 
     /// Dates are ISO 8601, with or without fractional seconds (`Date.toISOString()` adds them).
     public static func decode(_ data: Data) throws -> ExtensionResult {
+        // ponytail: one cap on the whole result rather than per string; the views clip every line anyway.
+        guard data.count <= ExtensionLimits.resultBytes else {
+            throw DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "The result is over \(ExtensionLimits.resultBytes / 1024) KB"))
+        }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .custom { decoder in
             let string = try decoder.singleValueContainer().decode(String.self)
@@ -196,6 +200,8 @@ public enum ExtensionLimits {
     /// After a call that left the runner bigger than this, the host restarts it.
     public static let memoryBudgetBytes: UInt64 = 256 * 1024 * 1024
     public static let storageBytes = 64 * 1024
+    /// A result (island, ear, reminders) larger than this is refused.
+    public static let resultBytes = 32 * 1024
     public static let fetchBytes = 1024 * 1024
     public static let fetchTimeout: TimeInterval = 10
     /// Fetches one extension may have in flight; more fail at once.

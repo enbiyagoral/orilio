@@ -12,7 +12,8 @@ import OrilioExtensionKit
 
 final class Runner: NSObject, ExtensionRunnerProtocol, @unchecked Sendable {
     /// Everything happens here, one call at a time (the engine is confined to it).
-    private let queue = DispatchQueue(label: "com.enbiyagoral.orilio.ExtensionRunner.js")
+    /// Each work item drains its own autoreleased objects, so nothing keeps an unloaded context alive.
+    private let queue = DispatchQueue(label: "com.enbiyagoral.orilio.ExtensionRunner.js", autoreleaseFrequency: .workItem)
     private weak var connection: NSXPCConnection?
     private lazy var engine = ExtensionEngine(queue: queue) { [weak self] id, url, method, body, completion in
         guard let host = self?.connection?.remoteObjectProxyWithErrorHandler({ error in

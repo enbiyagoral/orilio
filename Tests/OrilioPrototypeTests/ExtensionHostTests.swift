@@ -64,6 +64,11 @@ struct ExtensionContractTests {
         #expect(result.island?.sections.count == 2)
     }
 
+    @Test func anOversizedResultIsRefused() {
+        let long = String(repeating: "x", count: ExtensionLimits.resultBytes)
+        #expect(throws: DecodingError.self) { try ExtensionResult.decode(Data(#"{"island":{"sections":[{"type":"footnote","text":"\#(long)"}]}}"#.utf8)) }
+    }
+
     @Test func unknownSectionsAreRefused() {
         #expect(throws: DecodingError.self) { try ExtensionResult.decode(Data(#"{"island":{"sections":[{"type":"html","text":"<b>"}]}}"#.utf8)) }
     }
@@ -219,6 +224,11 @@ struct ExtensionCatalogTests {
         let sha = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
         let folder = try ExtensionCatalog.unpack(data, sha256: sha)
         #expect(try ExtensionPackage.read(folder).id == "community.prayer-times")
+        // The download's temporary folder is found for cleanup; the shipped copy never is.
+        let unpacked = try #require(ExtensionCatalog.unpackWork(of: folder))
+        #expect(unpacked.lastPathComponent.hasPrefix("orilio-extension-"))
+        #expect(ExtensionCatalog.unpackWork(of: prayerFolder) == nil)
+        try FileManager.default.removeItem(at: unpacked)
     }
 
     @Test func updatesAndNewPermissions() throws {

@@ -233,8 +233,17 @@ final class ExtensionHost {
 
     /// Installs a checked package folder with the permissions the user just allowed.
     func install(from folder: URL, granted: ExtensionManifest.Permissions, local: Bool) throws {
-        let manifest = try ExtensionPackage.read(folder)
-        try store.install(from: folder, id: manifest.id)
+        let source = try ExtensionPackage.read(folder)
+        try store.install(from: folder, id: source.id)
+        // The copy is what runs: it must still ask for exactly what the user allowed, even if the
+        // folder changed after the consent dialog read it.
+        guard let manifest = try? ExtensionPackage.read(store.folder(source.id)), manifest.id == source.id,
+              manifest.permissions.same(as: granted) else {
+            store.remove(source.id)
+            loadedScripts.remove(source.id)
+            reload()
+            throw ManifestError.invalid("permissions (the package changed during install)")
+        }
         var states = store.loadState()
         var state = states[manifest.id] ?? ExtensionState()
         state.granted = granted
@@ -357,11 +366,13 @@ final class ExtensionHost {
             connection.remoteObjectInterface = NSXPCInterface(with: ExtensionRunnerProtocol.self)
             connection.exportedInterface = NSXPCInterface(with: ExtensionHostProtocol.self)
             connection.exportedObject = broker
+            // A late handler of an earlier connection must not drop the current one.
+            let tag = ObjectIdentifier(connection)
             connection.invalidationHandler = {
-                Task { @MainActor in ExtensionHost.shared.runnerWentAway() }
+                Task { @MainActor in ExtensionHost.shared.runnerWentAway(tag) }
             }
             connection.interruptionHandler = {
-                Task { @MainActor in ExtensionHost.shared.runnerWentAway() }
+                Task { @MainActor in ExtensionHost.shared.runnerWentAway(tag) }
             }
             connection.resume()
             self.connection = connection
@@ -382,7 +393,8 @@ final class ExtensionHost {
         return ext.manifest.permissions.network.filter(ext.state.granted.network.contains)
     }
 
-    private func runnerWentAway() {
+    private func runnerWentAway(_ tag: ObjectIdentifier? = nil) {
+        if let tag, connection.map(ObjectIdentifier.init) != tag { return }
         connection = nil
         loadedScripts.removeAll() // a new process starts empty
     }

@@ -137,6 +137,21 @@ final class ExtensionCatalog {
         guard digest == sha256.lowercased() else { throw CatalogError.checksum }
         let work = FileManager.default.temporaryDirectory.appending(path: "orilio-extension-\(UUID().uuidString)", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
+        do { return try unpack(archiveAt: work, zip) } catch {
+            try? FileManager.default.removeItem(at: work)
+            throw error
+        }
+    }
+
+    /// The temporary folder `unpack` made for `folder`, if it made one.
+    nonisolated static func unpackWork(of folder: URL) -> URL? {
+        let temp = FileManager.default.temporaryDirectory.standardizedFileURL.pathComponents
+        let parts = folder.standardizedFileURL.pathComponents
+        guard parts.count > temp.count, Array(parts.prefix(temp.count)) == temp, parts[temp.count].hasPrefix("orilio-extension-") else { return nil }
+        return URL(fileURLWithPath: NSString.path(withComponents: Array(parts.prefix(temp.count + 1))), isDirectory: true)
+    }
+
+    private nonisolated static func unpack(archiveAt work: URL, _ zip: Data) throws -> URL {
         let archive = work.appending(path: "package.zip")
         try zip.write(to: archive)
         let ditto = Process()
@@ -166,6 +181,7 @@ final class ExtensionCatalog {
     /// Downloads, checks and installs an entry with the permissions the user just allowed.
     func install(_ entry: CatalogEntry, host: ExtensionHost = .shared) async throws {
         let folder = try await packageFolder(entry)
+        defer { if let work = Self.unpackWork(of: folder) { try? FileManager.default.removeItem(at: work) } }
         let manifest = try Self.verify(folder, against: entry)
         try host.install(from: folder, granted: manifest.permissions, local: false)
     }
