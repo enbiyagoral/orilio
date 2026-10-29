@@ -20,7 +20,9 @@ RW="build/Orilio-rw.dmg"
 trap 'rm -rf "$STAGE" "$RW"' EXIT
 
 # TODO(release): sign the app with the Developer ID first:
-#   codesign --force --deep --options runtime --timestamp --sign "Developer ID Application: …" "$APP"
+#   codesign --force --deep --options runtime --timestamp --entitlements build/app.entitlements \
+#     --sign "Developer ID Application: …" "$APP"
+#   (without those entitlements the hardened runtime blocks Spotify and Music control and the mirror)
 
 ditto "$APP" "$STAGE/Orilio.app"
 ln -s /Applications "$STAGE/Applications"

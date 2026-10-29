@@ -61,6 +61,16 @@ cat > build/runner.entitlements <<PLIST
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict><key>com.apple.security.app-sandbox</key><true/></dict></plist>
 PLIST
+# What the app needs under the hardened runtime (Developer ID): Apple Events for Spotify and Music,
+# the camera for the mirror. Ad-hoc signing carries them too.
+cat > build/app.entitlements <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>com.apple.security.automation.apple-events</key><true/>
+  <key>com.apple.security.device.camera</key><true/>
+</dict></plist>
+PLIST
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -98,5 +108,5 @@ codesign --force --sign - "$APP/Contents/Frameworks/Sparkle.framework/Versions/B
 codesign --force --sign - "$APP/Contents/Frameworks/Sparkle.framework/Versions/B/Updater.app"
 codesign --force --sign - "$APP/Contents/Frameworks/Sparkle.framework"
 codesign --force --sign - --entitlements build/runner.entitlements "$XPC"
-codesign --force --sign - "$APP"
+codesign --force --sign - --entitlements build/app.entitlements "$APP"
 echo "Built $APP — open it with: open $APP"
