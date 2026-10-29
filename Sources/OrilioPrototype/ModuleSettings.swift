@@ -62,7 +62,10 @@ final class ModuleSettings {
     var hidden: Set<IslandTab> {
         var hidden = Set(preferences.hiddenModules.compactMap(IslandTab.init(key:)))
         if !preferences.mirrorEnabled { hidden.insert(.mirror) } // off by default
-        return hidden.count == IslandTab.allCases.count ? [.mirror] : hidden // never all of them
+        // Never all of them. Extensions don't count: they're only shown while an extension has
+        // something for the island, which isn't the case at launch.
+        let always = IslandTab.allCases.filter { $0 != .extensions }
+        return always.allSatisfy(hidden.contains) ? [.mirror] : hidden
     }
 
     var openWith: Preferences.OpenWith { preferences.openWith }
@@ -86,7 +89,8 @@ final class ModuleSettings {
             if tab == .mirror { preferences.mirrorEnabled = true }
             preferences.hiddenModules.removeAll { $0 == tab.key }
         } else {
-            guard visible.count > 1, !hidden.contains(tab) else { return }
+            // A module other than Extensions has to stay (see `hidden`).
+            guard visible.contains(where: { $0 != tab && $0 != .extensions }), !hidden.contains(tab) else { return }
             if tab == .mirror { preferences.mirrorEnabled = false } else { preferences.hiddenModules.append(tab.key) }
             hideHandlers.forEach { $0(tab) }
         }

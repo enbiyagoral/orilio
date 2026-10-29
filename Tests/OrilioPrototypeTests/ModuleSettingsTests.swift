@@ -143,3 +143,16 @@ private struct SilentNotifier: FocusNotifier {
     func schedule(at date: Date, minutes: Int) async {}
     func cancel() async {}
 }
+
+/// QA-0 P1: with only Extensions left visible, the extension's content isn't there yet at launch, so
+/// no module was visible and `visible[0]` crashed Orilio on every launch.
+@MainActor
+struct ModuleFallbackTests {
+    @Test func extensionsAloneNeverLeaveTheIslandEmpty() {
+        let modules = ModuleSettings(defaults: UserDefaults(suiteName: "orilio.modules.\(UUID().uuidString)")!)
+        modules.extensionsAvailable = { true }
+        for tab in [IslandTab.calendar, .focus, .music, .clipboard, .notes, .shelf] { modules.setVisible(tab, false) }
+        modules.extensionsAvailable = { false } // the next launch, before the extension answers
+        #expect(!modules.visible.isEmpty)
+    }
+}
