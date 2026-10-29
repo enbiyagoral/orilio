@@ -61,7 +61,14 @@ final class IslandPositioner {
         let targets = ScreenResolver.targets(screens, settings: settings, pointer: pointerDisplay)
         let current = islands.mapValues(\.screen.id)
         let open = Set(islands.filter { $0.value.model.state.isOpen }.keys)
-        let assignment = ScreenResolver.assign(current, open: open, to: targets.map(\.id))
+        var assignment = ScreenResolver.assign(current, open: open, to: targets.map(\.id))
+        // The app's model keeps a window (onboarding and the status menu go to it): when its display
+        // goes, its island takes over another's, preferably a closed one.
+        if let own = islands.first(where: { $0.value.model === primary })?.key, assignment[own] == nil,
+           let (other, display) = assignment.first(where: { !open.contains($0.key) }) ?? assignment.first {
+            assignment[other] = nil
+            assignment[own] = display
+        }
 
         for (key, island) in islands where assignment[key] == nil {
             island.close()
@@ -74,7 +81,7 @@ final class IslandPositioner {
         for target in targets where !covered.contains(target.id) {
             // The first island uses the app's model; others share its modules and music.
             let model = islands.values.contains { $0.model === primary } ? makeModel() : primary
-            model.hoverOpens = primary.hoverOpens
+            applyPreferences(to: model)
             let island = IslandWindowController(model: model, screen: target, allSpaces: settings.allSpaces)
             islands[ObjectIdentifier(island)] = island
         }
@@ -90,15 +97,17 @@ final class IslandPositioner {
 
     private func settingsChanged() {
         let new = DisplaySettings(.standard)
-        let prefs = PreferencesStore.shared.value
-        for model in islands.values.map(\.model) + [primary] {
-            model.hoverOpens = prefs.openOnHover
-            model.hoverDelay = .milliseconds(prefs.hoverDelay)
-        }
+        for model in islands.values.map(\.model) + [primary] { applyPreferences(to: model) }
         guard new != settings else { return islands.values.forEach { $0.reposition() } }
         if new.allSpaces != settings.allSpaces { islands.values.forEach { $0.setSpaces(all: new.allSpaces) } }
         settings = new
         update()
+    }
+
+    private func applyPreferences(to model: IslandModel) {
+        let prefs = PreferencesStore.shared.value
+        model.hoverOpens = prefs.openOnHover
+        model.hoverDelay = .milliseconds(prefs.hoverDelay)
     }
 
     /// The global shortcut: closes whatever island is open, else opens the one on the pointer's
