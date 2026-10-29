@@ -80,6 +80,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ExtensionHost.shared.start() // the runner starts only when an installed extension is enabled
         Task { await ExtensionCatalog.shared.load() }
         let library = ScreenshotLibrary()
+        library.confirmsDeletingOnlyCopies = ScreenshotLibrary.askToDelete
         Task { await library.load() } // metadata only; thumbnails load as cells appear
         library.startWatchingIfEnabled()
         AppModules.library = library

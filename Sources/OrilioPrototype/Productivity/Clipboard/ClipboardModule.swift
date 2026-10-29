@@ -234,6 +234,7 @@ final class ClipboardModule {
     func disable() async {
         defaults.set(false, forKey: ClipboardKeys.enabled)
         stopTimer()
+        pendingSave?.cancel()
         items = []
         status = .off
         await store.deleteAll()
@@ -339,6 +340,8 @@ final class ClipboardModule {
             let size = NSImage(data: data)?.size
             Task {
                 guard let name = try? await store.writeImage(data, for: id) else { return }
+                // Turned off while the image was written: it isn't history any more.
+                guard isEnabled else { return await store.deleteImages([name]) }
                 items.append(ClipItem(id: id, kind: .image, text: nil, imageFileName: name, imageSize: size,
                                       copiedAt: time, sourceApp: app, pinned: false, contentHash: hash))
                 prune()

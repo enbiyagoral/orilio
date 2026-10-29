@@ -787,3 +787,7 @@
 "−" = "−";
 "⌘" = "⌘";
 "⏎" = "⏎";
+"Delete this screenshot?" = "Bu ekran görüntüsü silinsin mi?";
+"Delete %lld screenshots?" = "%lld ekran görüntüsü silinsin mi?";
+"Orilio has the only copy. It moves to the Trash, where you can still get it back." = "Tek kopya Orilio’da. Çöp Sepeti’ne taşınır, oradan yine geri alabilirsiniz.";
+"Move to Trash" = "Çöp Sepeti’ne Taşı";

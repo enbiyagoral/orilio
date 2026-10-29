@@ -193,6 +193,7 @@ final class CalendarModule {
     func disable() {
         defaults.set(false, forKey: CalendarKeys.enabled)
         stopObserving()
+        refreshing?.cancel()
         boundary?.cancel()
         day = CalendarDay(events: [], now: now())
         calendars = []
@@ -236,14 +237,17 @@ final class CalendarModule {
         let events = await source.events(from: start, to: end).filter { !hidden.contains($0.calendarID) }
         let later = Calendar.current.date(byAdding: .day, value: 7, to: end) ?? end
         let upcoming = await source.events(from: end, to: later).first { !$0.isAllDay && !hidden.contains($0.calendarID) }
-        guard !Task.isCancelled else { return }
-        calendars = await fetchedCalendars
+        let fetched = await fetchedCalendars
+        // Turned off while EventKit was read: nothing of it may come back.
+        guard !Task.isCancelled, isEnabled else { return }
+        calendars = fetched
         nextLater = upcoming
         day = CalendarDay(events: events, now: time)
         lastUpdated = time
         status = .ready
         scheduleBoundaryRefresh()
         await scheduleReminders()
+        if !isEnabled { await reminders.replaceAll([]) } // turned off while they were being set
     }
 
     /// The day as of now, without re-reading EventKit (for countdowns between refreshes).

@@ -233,6 +233,27 @@ final class ScreenshotLibrary {
         NSWorkspace.shared.activateFileViewerSelecting(items.map(imageURL))
     }
 
+    /// Asked before deleting screenshots that exist nowhere else (pasted, captured): the app shows
+    /// `askToDelete`; tests answer for it.
+    @ObservationIgnored var confirmsDeletingOnlyCopies: @MainActor (Int) -> Bool = { _ in true }
+
+    /// The menu's and the Delete key's way in: the only copies are confirmed first.
+    func removeAsking(_ removed: [ScreenshotItem]) {
+        let onlyCopies = removed.filter { !hasExternalOriginal($0) }.count
+        guard onlyCopies == 0 || confirmsDeletingOnlyCopies(onlyCopies) else { return }
+        remove(removed)
+    }
+
+    static func askToDelete(_ count: Int) -> Bool {
+        let alert = NSAlert()
+        alert.messageText = count == 1 ? L("Delete this screenshot?") : String(localized: "Delete \(count) screenshots?")
+        alert.informativeText = L("Orilio has the only copy. It moves to the Trash, where you can still get it back.")
+        alert.addButton(withTitle: L("Move to Trash"))
+        alert.addButton(withTitle: L("Cancel"))
+        NSApp.activate()
+        return alert.runModal() == .alertFirstButtonReturn
+    }
+
     /// Removes from the library and moves Orilio's copies to the Trash. Originals stay where they are.
     func remove(_ removed: [ScreenshotItem]) {
         guard !removed.isEmpty else { return }
@@ -249,7 +270,7 @@ final class ScreenshotLibrary {
         switch (keyCode, command) {
         case (9, true): paste(); return true // ⌘V works without a selection
         case (49, false) where !selection.isEmpty: QuickLook.show(urls: selectedItems.map(imageURL), toggle: true); return true
-        case (51, false) where !selection.isEmpty, (117, false) where !selection.isEmpty: remove(selectedItems); return true
+        case (51, false) where !selection.isEmpty, (117, false) where !selection.isEmpty: removeAsking(selectedItems); return true
         case (8, true) where !selection.isEmpty: copy(selectedItems); return true
         default: return false
         }

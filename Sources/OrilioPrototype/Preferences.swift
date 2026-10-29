@@ -161,22 +161,22 @@ struct Preferences: Codable, Equatable {
         if let data = defaults.data(forKey: key), let stored = try? JSONDecoder().decode(Preferences.self, from: data) {
             return stored.carryingOver(defaults)
         }
-        var migrated = Preferences().carryingOver(defaults)
+        var migrated = Preferences()
         if let order = defaults.stringArray(forKey: "modules.order") { migrated.moduleOrder = order }
         if let hidden = defaults.stringArray(forKey: "modules.hidden") { migrated.hiddenModules = hidden }
         if let indicators = defaults.stringArray(forKey: "modules.hiddenIndicators") { migrated.hiddenIndicators = indicators }
         // "Open to <module>" (M3.5) has no exact match; a fixed module is closest to "First in list".
         if defaults.string(forKey: "modules.default") != nil { migrated.openWith = .first }
-        return migrated
+        return migrated.carryingOver(defaults) // last: it may save, and then the module keys must be in
     }
 
-    /// "Open on hover" was its own key before M5.3.
+    /// "Open on hover" was its own key before M5.3. Saved before the old key goes.
     private func carryingOver(_ defaults: UserDefaults) -> Preferences {
         var p = self
         if let hover = defaults.object(forKey: SettingsKeys.openOnHover) as? Bool {
             p.openOnHover = hover
-            defaults.removeObject(forKey: SettingsKeys.openOnHover)
             p.save(to: defaults)
+            defaults.removeObject(forKey: SettingsKeys.openOnHover)
         }
         return p
     }

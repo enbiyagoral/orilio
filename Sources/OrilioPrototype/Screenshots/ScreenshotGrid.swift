@@ -204,7 +204,7 @@ enum ScreenshotMenu {
         let title = withOriginal
             ? (targets.count > 1 ? String(localized: "Remove \(targets.count) from Library") : "Remove from Library")
             : (targets.count > 1 ? String(localized: "Delete \(targets.count) Screenshots") : "Delete Screenshot")
-        let remove = MenuAction(title) { library.remove(targets) }
+        let remove = MenuAction(title) { library.removeAsking(targets) }
         remove.toolTip = withOriginal
             ? "Orilio's copy moves to the Trash. The original file stays where it is."
             : "Orilio's copy moves to the Trash. It's the only copy."

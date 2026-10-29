@@ -103,6 +103,16 @@ struct PreferencesTests {
         #expect(!Preferences.load(defaults).openOnHover) // saved, not just read once
     }
 
+    @Test func theOldModuleKeysSurviveTheHoverCarryOver() {
+        let defaults = freshDefaults()
+        defaults.set(["music", "calendar"], forKey: "modules.order")
+        defaults.set(false, forKey: SettingsKeys.openOnHover) // both old forms at once, no stored value yet
+        _ = Preferences.load(defaults)
+        let again = Preferences.load(defaults) // now from the saved value
+        #expect(Array(again.moduleOrder.prefix(2)) == ["music", "calendar"])
+        #expect(!again.openOnHover)
+    }
+
     @Test func panelSizeSetsTheOpenWidthAndScalesTheHeight() {
         var g = IslandGeometry(topInset: 32, notchWidth: 179, centerX: 0, screenTop: 0)
         g.panelWidth = Preferences.PanelSize.compact.width

@@ -203,6 +203,20 @@ struct ScreenshotLibraryModelTests {
         #expect(library.items.first?.source == .paste)
     }
 
+    @Test func theOnlyCopyIsDeletedOnlyWhenConfirmed() async throws {
+        let ws = Workspace()
+        let library = ws.library()
+        library.importData(try Data(contentsOf: ws.image("pasted.png", seed: 61)), source: .paste)
+        await settle(library) { library.items.count == 1 }
+        var asked: [Int] = []
+        library.confirmsDeletingOnlyCopies = { asked.append($0); return false }
+        library.removeAsking(library.items)
+        #expect(asked == [1] && library.items.count == 1) // declined: kept
+        library.confirmsDeletingOnlyCopies = { _ in true }
+        library.removeAsking(library.items)
+        #expect(library.items.isEmpty)
+    }
+
     @Test func keysActOnTheSelectionOnly() async {
         let ws = Workspace()
         let library = ws.library()
