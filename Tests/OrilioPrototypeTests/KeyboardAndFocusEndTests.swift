@@ -77,6 +77,14 @@ struct IslandKeyRouterTests {
         #expect(IslandKeyRouter.route(key(51, command: true), tab: .notes, editing: .text) == nil)
         #expect(IslandKeyRouter.route(key(19, command: true), tab: .notes, editing: .text) == .module(1))
         #expect(IslandKeyRouter.route(key(53), tab: .notes, editing: .text) == .close)
+        // A one-line field (search, rename, new task) is left first; the next Esc closes.
+        #expect(IslandKeyRouter.route(key(53), tab: .clipboard, editing: .search) == .endEditing)
+        #expect(IslandKeyRouter.route(key(53), tab: .notes, editing: .field) == .endEditing)
+        #expect(IslandKeyRouter.route(key(36), tab: .notes, editing: .field) == nil) // ⏎ submits the field
+        // ⌘⌫ in a field clears its text; it never deletes the selected clipboard item or task.
+        #expect(IslandKeyRouter.route(key(51, command: true), tab: .clipboard, editing: .search) == nil)
+        #expect(IslandKeyRouter.route(key(51, command: true), tab: .notes, editing: .field) == nil)
+        #expect(IslandKeyRouter.route(key(51, command: true), tab: .clipboard) == .deleteItem)
     }
 
     @Test func listCursorIsShared() {
@@ -181,6 +189,20 @@ struct FocusEndTests {
         #expect(notes.currentText == "h")
         #expect(notes.editorRequest == 1) // the editor takes the cursor for the rest
         try? FileManager.default.removeItem(at: dir)
+    }
+
+    @Test func inScreenshotsTheKeysLeaveTheHiddenFilesAlone() {
+        let island = IslandModel(focus: focus().0)
+        island.isPointerBusy = { false }
+        island.tab = .shelf
+        island.openFromKeyboard()
+        island.shelfSection = .screenshots
+        for code: UInt16 in [123, 124, 125, 126, 36, 49] { // ←→↓↑ ⏎ Space: the grid's own
+            #expect(!island.handleKey(KeyPress(keyCode: code), editing: .none))
+        }
+        #expect(!island.handleKey(KeyPress(keyCode: 51, command: true), editing: .none)) // ⌘⌫
+        #expect(island.handleKey(KeyPress(keyCode: 19, command: true), editing: .none)) // ⌘2 still switches
+        island.dismiss()
     }
 
     @Test func keyboardOpenShowsTheHintsAndAClickEndsThem() {

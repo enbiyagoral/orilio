@@ -312,10 +312,16 @@ struct ScreenshotScaleTests {
         let imported = try await clock.measure {
             for url in urls { _ = try await store.importFile(url) }
         }
-        var count = 0
-        let reloaded = try await clock.measure { count = try await ws.store().all().count }
-        #expect(count == 1_000)
-        print("PERF import 1000 (1440×900 PNG): \(imported); reload metadata: \(reloaded)")
+        var items: [ScreenshotItem] = []
+        let reloaded = try await clock.measure { items = try await ws.store().all() }
+        #expect(items.count == 1_000)
+        // Scrolling through all of them: each cell asks the cache for its thumbnail.
+        var shown = 0
+        let thumbnails = await clock.measure {
+            for item in items where await ThumbnailCache.shared.image(for: item, in: store) != nil { shown += 1 }
+        }
+        #expect(shown == 1_000)
+        print("PERF import 1000 (1440×900 PNG): \(imported); reload metadata: \(reloaded); 1000 thumbnails: \(thumbnails)")
     }
 }
 

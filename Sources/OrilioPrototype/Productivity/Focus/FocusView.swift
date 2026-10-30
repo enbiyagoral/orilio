@@ -125,7 +125,8 @@ private struct FocusRing: View {
                 .stroke(accent(.live), style: StrokeStyle(lineWidth: 10, lineCap: .round))
                 .rotationEffect(.degrees(-90))
                 .themeGlow(.live, radius: 10, opacity: module.isRunning ? 0.45 : 0)
-                .animation(reduceMotion ? nil : .linear(duration: 1), value: remaining)
+                // No animation between ticks: a 1 s linear one each second redrew the ring and its glow
+                // every frame for the whole session, for a step of a fraction of a degree.
             VStack(spacing: 2) {
                 Text(FocusSession.text(remaining))
                     .font(.system(size: 38, weight: .semibold).monospacedDigit())
@@ -135,7 +136,7 @@ private struct FocusRing: View {
         }
         .frame(width: 152, height: 152)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(String(localized: "Focus timer, \(FocusSession.text(remaining)) remaining, \(module.stateText)"))
+        .accessibilityLabel(String(localized: "Focus timer, \(FocusSession.text(remaining)) remaining, \(L(module.stateText))"))
     }
 }
 

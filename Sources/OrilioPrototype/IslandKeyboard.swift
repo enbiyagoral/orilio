@@ -59,12 +59,21 @@ enum IslandKeyAction: Equatable {
     case close
     /// ⌘W.
     case closeAndUnpin
+    /// Esc in a one-line field: leave the field (a rename is cancelled); the next Esc closes.
+    case endEditing
+
+    var actsOnTheShelfList: Bool {
+        switch self {
+        case .move, .primary, .preview, .deleteItem: true
+        default: false
+        }
+    }
 }
 
 enum IslandKeyRouter {
     /// What has the keyboard inside the island: nothing (the panel), the clipboard's search field,
-    /// or a text editor (a note, a task being typed).
-    enum Editing { case none, search, text }
+    /// a note being written, or another one-line field (the Notes search, a task being added or renamed).
+    enum Editing { case none, search, text, field }
 
     static let listModules: Set<IslandTab> = [.clipboard, .shelf, .notes]
 
@@ -80,14 +89,15 @@ enum IslandKeyRouter {
             case (13, false): return .closeAndUnpin                     // ⌘W
             case (43, false): return .settings                          // ⌘,
             case (3, false): return tab == .clipboard ? .search : nil   // ⌘F
-            case (51, false): return list && editing != .text ? .deleteItem : nil // ⌘⌫
+            case (51, false): return list && editing == .none ? .deleteItem : nil // ⌘⌫ (in a field it clears text)
             default: return nil
             }
         }
         if key.control, key.keyCode == 48 { return .adjacentModule(key.shift ? -1 : 1) } // ⌃⇥, ⌃⇧⇥
-        if key.keyCode == 53 { return .close } // esc
+        // Esc closes, also while writing a note; a one-line field is left first, as anywhere on the Mac.
+        if key.keyCode == 53 { return editing == .search || editing == .field ? .endEditing : .close }
         switch editing {
-        case .text: return nil // the editor keeps every other key
+        case .text, .field: return nil // the editor keeps every other key
         case .search:
             switch key.keyCode {
             case 126: return .move(-1)
@@ -182,7 +192,7 @@ struct KeyHintBar: View {
         .background(.black)
         .overlay(alignment: .top) { Rectangle().fill(.white.opacity(0.08)).frame(height: 1) }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Keyboard: " + KeyHints.hints(for: tab).map { "\($0.key) \($0.label)" }.joined(separator: ", "))
+        .accessibilityLabel(L("Keyboard: ") + KeyHints.hints(for: tab).map { "\($0.key) \(L($0.label))" }.joined(separator: ", "))
     }
 }
 

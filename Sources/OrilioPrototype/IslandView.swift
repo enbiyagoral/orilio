@@ -62,14 +62,19 @@ struct IslandShape: Shape {
     /// Floating and collapsed: the capsule also stays this far above the window's bottom.
     var floatBottom: CGFloat = 0
 
-    var animatableData: AnimatablePair<CGFloat, CGFloat> {
-        get { AnimatablePair(ear, bottom) }
-        set { (ear, bottom) = (newValue.first, newValue.second) }
+    /// The floating insets animate too: changed in one frame, the pill would vanish at the start of
+    /// an open (its inset is taller than the small window) and the panel jump up at a close.
+    var animatableData: AnimatablePair<AnimatablePair<CGFloat, CGFloat>, AnimatablePair<CGFloat, CGFloat>> {
+        get { AnimatablePair(AnimatablePair(ear, bottom), AnimatablePair(floatTop, floatBottom)) }
+        set {
+            (ear, bottom) = (newValue.first.first, newValue.first.second)
+            (floatTop, floatBottom) = (newValue.second.first, newValue.second.second)
+        }
     }
 
     func path(in rect: CGRect) -> Path {
         if floatTop > 0 {
-            let panel = CGRect(x: rect.minX, y: rect.minY + floatTop, width: rect.width, height: rect.height - floatTop - floatBottom)
+            let panel = CGRect(x: rect.minX, y: rect.minY + floatTop, width: rect.width, height: max(0, rect.height - floatTop - floatBottom))
             return Path(roundedRect: panel, cornerRadius: min(bottom, panel.height / 2), style: .continuous)
         }
         let e = ear
@@ -107,7 +112,8 @@ private extension AnyTransition {
 
 struct IslandView: View {
     let model: IslandModel
-    @Environment(\.reducesMotion) private var reduceMotion
+    /// Read here, not from the environment: this view is the one that puts it there.
+    private var reduceMotion: Bool { Theme.current.reducesMotion }
     /// The open panel's shadow, only once the shape has settled: a blurred shadow on a shape that is
     /// growing or shrinking is recomputed every frame, and that was where the open and close hitched.
     @State private var shadowShown = false
@@ -499,6 +505,12 @@ private struct Artwork: View {
     let radius: CGFloat
     @State private var loaded: (url: URL, image: CGImage)?
 
+    init(seed: String, url: URL? = nil, size: CGFloat, radius: CGFloat) {
+        (self.seed, self.url, self.size, self.radius) = (seed, url, size, radius)
+        // A cover already shown starts on screen: no gradient flash each time the island opens or closes.
+        _loaded = State(initialValue: url.flatMap { url in ShownCovers.images[url].map { (url, $0) } })
+    }
+
     var body: some View {
         let hue = Double(seed.unicodeScalars.reduce(0) { $0 + Int($1.value) } % 360)
         let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
@@ -516,11 +528,23 @@ private struct Artwork: View {
         .clipShape(shape)
         .animation(.easeInOut(duration: 0.25), value: loaded?.url)
         .task(id: url) {
-            guard let url else { return }
+            guard let url, loaded?.url != url else { return }
             let cover = await ArtworkCache.shared.image(for: url)
             guard !Task.isCancelled, let cover else { return } // the track changed while loading
             loaded = (url, cover.image)
+            ShownCovers.remember(cover.image, for: url)
         }
+    }
+}
+
+/// The few covers on screen lately, for a cover view that appears again.
+@MainActor
+private enum ShownCovers {
+    static var images: [URL: CGImage] = [:]
+
+    static func remember(_ image: CGImage, for url: URL) {
+        if images[url] == nil, images.count >= 8 { images.removeAll() } // ponytail: a handful of covers is all that's ever on screen
+        images[url] = image
     }
 }
 
@@ -726,7 +750,7 @@ private struct NowPlaying: View {
     }
 
     private var subtitle: String {
-        let artist = [session.artist, session.album].compactMap { $0 }.first { !$0.isEmpty } ?? "Unknown artist"
+        let artist = [session.artist, session.album].compactMap { $0 }.first { !$0.isEmpty } ?? L("Unknown artist")
         return String(localized: "\(artist) · \(session.sourceName)")
     }
 
@@ -977,12 +1001,14 @@ struct IconButton: View {
 /// Quick press-down feedback; releases with a small spring. Disabled controls are dimmed.
 struct PressableStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.reducesMotion) private var reduceMotion
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(configuration.isPressed ? 0.88 : 1)
+            // Animation off: the press still dims, without the bounce.
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.88 : 1)
             .opacity(isEnabled ? (configuration.isPressed ? 0.75 : 1) : 0.3)
-            .animation(.spring(duration: 0.2, bounce: 0.3), value: configuration.isPressed)
+            .animation(reduceMotion ? nil : .spring(duration: 0.2, bounce: 0.3), value: configuration.isPressed)
             .animation(.easeInOut(duration: 0.2), value: isEnabled)
     }
 }

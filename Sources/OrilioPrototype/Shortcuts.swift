@@ -28,7 +28,7 @@ struct HotKeyCombo: Codable, Hashable, Sendable {
 
     var spoken: String {
         let names = [(controlKey, "Control"), (optionKey, "Option"), (shiftKey, "Shift"), (cmdKey, "Command")]
-        return (names.filter { modifiers & UInt32($0.0) != 0 }.map(\.1) + [key]).joined(separator: " ")
+        return (names.filter { modifiers & UInt32($0.0) != 0 }.map { L($0.1) } + [key]).joined(separator: " ")
     }
 
     /// A key press while recording. Nil unless it has ⌃, ⌥ or ⌘: a global shortcut needs one.

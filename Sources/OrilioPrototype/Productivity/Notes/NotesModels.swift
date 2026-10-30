@@ -14,7 +14,7 @@ struct Note: Identifiable, Equatable, Sendable, Codable {
     /// The first non-empty line, for the notes list.
     var title: String {
         text.split(separator: "\n", omittingEmptySubsequences: true).first
-            .map { $0.trimmingCharacters(in: .whitespaces) }.flatMap { $0.isEmpty ? nil : $0 } ?? "Empty note"
+            .map { $0.trimmingCharacters(in: .whitespaces) }.flatMap { $0.isEmpty ? nil : $0 } ?? L("Empty note")
     }
 
     var isBlank: Bool { text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }

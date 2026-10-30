@@ -224,7 +224,7 @@ private struct NextCard: View {
     }
 
     private func eyebrow(_ event: CalendarEvent?) -> String {
-        guard let event else { return "TODAY" }
+        guard let event else { return L("TODAY") }
         if event.isOngoing(at: day.now) { return String(localized: "NOW · ENDS \(CalendarDay.countdown(to: event.end, from: day.now).uppercased())") }
         return String(localized: "NEXT · \(CalendarDay.countdown(to: event.start, from: day.now).uppercased())")
     }
@@ -298,6 +298,7 @@ private struct EventRow: View {
     let event: CalendarEvent
     let isNext: Bool
     var overlaps = false
+    @Environment(\.colorSchemeContrast) private var contrast
     let now: Date
 
     var body: some View {
@@ -329,7 +330,8 @@ private struct EventRow: View {
         .padding(.horizontal, 10)
         .frame(height: 38)
         .background(isNext ? Color.white.opacity(0.08) : .clear, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .opacity(event.hasEnded(at: now) ? 0.45 : 1)
+        // Ended events step back, but stay readable with Increase Contrast.
+        .opacity(event.hasEnded(at: now) ? (contrast == .increased ? 0.75 : 0.45) : 1)
         .contentShape(Rectangle())
         .help(String(localized: "\(event.title) · Open in Calendar")) // the full title, however long
         .accessibilityElement(children: .ignore)

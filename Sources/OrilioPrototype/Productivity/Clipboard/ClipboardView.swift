@@ -178,7 +178,7 @@ private struct ClipRow: View {
         }
         // The full text, however long (capped: a 10,000-character tooltip helps no one).
         .help(Self.full(item))
-        .accessibilityLabel(String(localized: "\(item.kind.rawValue): \(Self.full(item))"))
+        .accessibilityLabel(String(localized: "\(L(item.kind.rawValue)): \(Self.full(item))"))
         .accessibilityHint(copied ? "Copied" : "Copies it to the clipboard")
     }
 }

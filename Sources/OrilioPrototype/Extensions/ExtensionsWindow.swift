@@ -507,7 +507,7 @@ private struct ConsentSheet: View {
                         (Text(L(line.label)) + Text(" — " + L(line.detail)).foregroundColor(fade(0.5)))
                             .font(.system(size: 13)).lineSpacing(13 * 0.4 - 2).fixedSize(horizontal: false, vertical: true)
                         if added.contains(line.label) {
-                            Text("New").font(.system(size: 10.5, weight: .semibold)).foregroundStyle(SettingsDesign.amber)
+                            Text("New").font(.system(size: 10.5, weight: .semibold)).foregroundStyle(SettingsDesign.warn)
                                 .padding(.horizontal, 6).frame(height: 18)
                                 .background(SettingsDesign.amber.opacity(0.14), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
                         }

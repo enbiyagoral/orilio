@@ -328,6 +328,7 @@ private struct TaskRow: View {
     let module: NotesModule
     @Binding var editing: UUID?
     @State private var title = ""
+    @FocusState private var renaming: Bool
 
     var body: some View {
         HStack(spacing: 10) {
@@ -353,9 +354,15 @@ private struct TaskRow: View {
                     .textFieldStyle(.plain)
                     .font(.system(size: 13))
                     .modifier(ActivateOnFocus())
+                    .focused($renaming)
                     .onSubmit { commit() }
                     .onExitCommand { editing = nil }
-                    .onAppear { title = task.title }
+                    .onAppear {
+                        title = task.title
+                        renaming = true // Rename, or a double-click: the field takes the keyboard at once
+                    }
+                    // Esc (or a click elsewhere) leaves the field: the rename is cancelled.
+                    .onChange(of: renaming) { if !renaming, editing == task.id { editing = nil } }
             } else {
                 Text(task.title)
                     .font(.system(size: 13))

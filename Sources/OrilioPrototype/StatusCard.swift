@@ -9,7 +9,7 @@ import SwiftUI
 /// Permissions and States designs). It never animates: empty states are still.
 struct StatusCard: View {
     enum Tone: Equatable {
-        /// Nothing here yet: a 8% white tile, a 75% white icon.
+        /// Nothing here yet: an 8% tile, a 75% icon, in the primary color (white on the island).
         case empty
         /// All good: mint.
         case good
@@ -39,7 +39,7 @@ struct StatusCard: View {
     var layout: Layout = .card
 
     private static let mint = SettingsDesign.mint
-    private static let amber = SettingsDesign.amber
+    private static let amber = SettingsDesign.warn // adaptive: the island's amber, darker on a light window
     private static let ink = SettingsDesign.hex(0x00140D)
 
     var body: some View {
@@ -63,7 +63,7 @@ struct StatusCard: View {
             Text(L(detail))
                 .font(.system(size: ask ? 12.5 : 12))
                 .lineSpacing(ask ? 12.5 * 0.45 - 2 : 12 * 0.4 - 2)
-                .foregroundStyle(.white.opacity(ask ? 0.62 : 0.58))
+                .foregroundStyle(Color.primary.opacity(ask ? 0.62 : 0.58))
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
                 .frame(maxWidth: ask ? 360 : 320)
@@ -80,7 +80,7 @@ struct StatusCard: View {
                 Button("Report this") { FeedbackWindow.show(kind: .bug, context: title) }
                     .buttonStyle(.plain)
                     .font(.system(size: 11.5, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.5))
+                    .foregroundStyle(Color.primary.opacity(0.5))
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -93,7 +93,7 @@ struct StatusCard: View {
             tile(size: 44, radius: 13, icon: 20)
             VStack(alignment: .leading, spacing: 3) {
                 Text(L(title)).font(.system(size: 15, weight: .semibold)).lineLimit(1).minimumScaleFactor(0.75)
-                Text(L(detail)).font(.system(size: 12.5)).foregroundStyle(.white.opacity(0.6)).lineLimit(2)
+                Text(L(detail)).font(.system(size: 12.5)).foregroundStyle(Color.primary.opacity(0.6)).lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
@@ -111,8 +111,8 @@ struct StatusCard: View {
 
     private var colors: (tile: Color, ink: Color) {
         switch tone {
-        case .empty: (.white.opacity(0.08), .white.opacity(0.75))
-        case .good: (Self.mint.opacity(0.12), Self.mint)
+        case .empty: (Color.primary.opacity(0.08), Color.primary.opacity(0.75))
+        case .good: (Self.mint.opacity(0.12), SettingsDesign.accentText)
         case .warn: (Self.amber.opacity(0.14), Self.amber)
         case .ask(let tile, let ink): (tile, ink)
         }
@@ -140,10 +140,10 @@ struct StatusCard: View {
         return Button(action: action.run) {
             Text(L(action.title))
                 .font(.system(size: ask ? 13 : 12, weight: primary ? .semibold : .medium))
-                .foregroundStyle(mint ? Self.ink : .white)
+                .foregroundStyle(mint ? Self.ink : Color.primary)
                 .padding(.horizontal, ask ? (primary ? 16 : 14) : 12)
                 .frame(height: ask ? 36 : 30)
-                .background(mint ? Self.mint : .white.opacity(primary ? 0.14 : 0.1),
+                .background(mint ? Self.mint : Color.primary.opacity(primary ? 0.14 : 0.1),
                             in: RoundedRectangle(cornerRadius: ask ? 11 : 9, style: .continuous))
                 .shadow(color: mint && ask ? Self.mint.opacity(0.4) : .clear, radius: 10)
         }
@@ -156,7 +156,7 @@ struct StatusCard: View {
                 .font(.system(size: 13, weight: .semibold))
                 .padding(.horizontal, 14)
                 .frame(height: 36)
-                .background(.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                .background(Color.primary.opacity(0.12), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
                 .fixedSize()
         }
         .buttonStyle(PressableStyle())

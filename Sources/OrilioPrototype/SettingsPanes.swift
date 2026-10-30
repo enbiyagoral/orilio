@@ -414,8 +414,13 @@ private struct ClipboardPaneContent: View {
                     ExcludedRow(name: "Keychain Access", note: "Added by default", tile: [Design.hex(0x8E8E93), Design.hex(0x48484A)])
                     ForEach(module.userExcludedApps, id: \.self) { id in
                         RowLine()
-                        ExcludedRow(name: AppInfo.name(id), note: "Added by you", icon: AppInfo.icon(id), selected: selectedApp == id)
-                            .onTapGesture { selectedApp = selectedApp == id ? nil : id }
+                        // A button, so the keyboard (Full Keyboard Access) and VoiceOver can select it for "Remove app".
+                        Button { selectedApp = selectedApp == id ? nil : id } label: {
+                            ExcludedRow(name: AppInfo.name(id), note: "Added by you", icon: AppInfo.icon(id), selected: selectedApp == id)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityAddTraits(selectedApp == id ? .isSelected : [])
+                        .accessibilityAction(named: Text("Remove app")) { module.removeExcludedApp(id); selectedApp = nil }
                     }
                     RowLine()
                     HStack(spacing: 4) {
@@ -617,7 +622,7 @@ private struct Recorder: View {
         }
         .buttonStyle(.plain)
         .focusEffectDisabled()
-        .accessibilityLabel(recording ? "Recording, press keys" : combo.isNone ? "No shortcut" : combo.spoken)
+        .accessibilityLabel(recording ? L("Recording, press keys") : combo.isNone ? L("No shortcut") : combo.spoken)
     }
 }
 
@@ -777,7 +782,7 @@ private struct FailureCard: View {
                     .frame(width: 44, height: 44)
                     .background(Design.warn.opacity(0.14), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(version.map { String(localized: "Orilio \($0) wasn’t installed") } ?? "The update wasn’t installed").font(.system(size: 15, weight: .semibold))
+                    Text(version.map { String(localized: "Orilio \($0) wasn’t installed") } ?? L("The update wasn’t installed")).font(.system(size: 15, weight: .semibold))
                     Text("\(reason), so nothing on your Mac was changed. You’re still on \(AboutPane.version).")
                         .font(.system(size: 12.5)).foregroundStyle(Design.muted(0.6)).fixedSize(horizontal: false, vertical: true)
                 }

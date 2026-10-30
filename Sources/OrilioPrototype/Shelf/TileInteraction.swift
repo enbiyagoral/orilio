@@ -169,12 +169,20 @@ enum QuickLook {
         source.urls = urls
         // Previewing is deliberate: Quick Look needs Orilio active to receive Space, arrows and Esc.
         NSApp.activate(ignoringOtherApps: true)
-        NSApp.windows.first { $0 is IslandPanel }?.makeKey()
+        // The island the user is in (with two displays, the first one may be another, collapsed island).
+        let islands = NSApp.windows.filter { $0 is IslandPanel && $0.isVisible }
+        (islands.first { $0.isKeyWindow } ?? islands.first { $0.frame.contains(NSEvent.mouseLocation) } ?? islands.first)?.makeKey()
         if panel.isVisible {
             panel.reloadData()
         } else {
             panel.makeKeyAndOrderFront(nil)
         }
+    }
+
+    /// The preview goes with the island it came from.
+    static func close() {
+        guard QLPreviewPanel.sharedPreviewPanelExists(), let panel = QLPreviewPanel.shared(), panel.isVisible else { return }
+        panel.orderOut(nil)
     }
 }
 

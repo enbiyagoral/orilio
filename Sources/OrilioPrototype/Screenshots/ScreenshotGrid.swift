@@ -33,7 +33,7 @@ struct ScreenshotGrid: NSViewRepresentable {
         grid.setDraggingSourceOperationMask([], forLocal: true)
         grid.onOpen = { [weak coordinator = context.coordinator] in coordinator?.open($0) }
         grid.menuProvider = { [weak coordinator = context.coordinator] in coordinator?.menu(for: $0) }
-        grid.setAccessibilityLabel("Screenshots")
+        grid.setAccessibilityLabel(L("Screenshots"))
 
         let scroll = NSScrollView()
         scroll.documentView = grid

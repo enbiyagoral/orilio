@@ -213,7 +213,10 @@ final class IslandHostingView: NSHostingView<IslandView> {
     // MARK: NSDraggingDestination
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
-        dragIsValid = DropContent.isSupported(sender.draggingPasteboard.types ?? [])
+        // A tile or screenshot being dragged out starts over this view: it isn't a drop for the island
+        // (only drags from other apps have no source here).
+        dragIsValid = sender.draggingSource == nil && DropContent.isSupported(sender.draggingPasteboard.types ?? [])
+        guard sender.draggingSource == nil else { return [] }
         let count = sender.draggingPasteboard.pasteboardItems?.count ?? 1
         if dragIsValid { sender.numberOfValidItemsForDrop = count } // the badge on the dragged files
         onDragEntered?(dragIsValid, count)
@@ -261,6 +264,9 @@ final class IslandWindowController {
     private var outsideClickMonitor: Any?
     private var insideClickMonitor: Any?
     private var keyMonitor: Any?
+    /// While the window is larger than the island (open, or shrinking after a close), these keep
+    /// its empty margin, the shadow, from catching clicks meant for the app below.
+    private var marginMonitors: [Any] = []
     private var swipeMonitor: Any?
     private var swipe = SwipeTracker()
     private var widthTask: Task<Void, Never>?
@@ -293,12 +299,15 @@ final class IslandWindowController {
         IslandWindowPolicy.apply(to: panel, allSpaces: allSpaces)
 
         let host = IslandHostingView(rootView: IslandView(model: model))
+        // The island is black in Light Mode too: its controls, menus and adaptive colors are dark ones.
+        host.appearance = NSAppearance(named: .darkAqua)
         host.sizingOptions = [] // the controller owns the frame; don't let SwiftUI resize the panel
         host.onHover = { [weak model] in model?.hover($0) }
         host.onDragEntered = { [weak model] in model?.dragEntered(valid: $0, count: $1) }
         host.onDragExited = { [weak model] in model?.dragExited() }
         host.onDrop = { [weak model] in model?.dropped($0, sequence: $1) ?? false }
         panel.contentView = host
+        model.onEndEditing = { [weak panel] in _ = panel?.makeFirstResponder(nil) }
         panel.onEscape = { [weak model] in
             guard let model else { return }
             // Esc first closes the Shelf's Quick Look, then the island.
@@ -327,8 +336,11 @@ final class IslandWindowController {
                     return false
                 }
                 if self.model.onboarding != nil { return false } // the first-run flow keeps its own keys
-                let editing: IslandKeyRouter.Editing = self.panel.firstResponder is NSTextView
-                    ? (self.model.tab == .clipboard ? .search : .text) : .none
+                let editing: IslandKeyRouter.Editing = {
+                    guard let text = self.panel.firstResponder as? NSTextView else { return .none }
+                    if self.model.tab == .clipboard { return .search }
+                    return text.isFieldEditor ? .field : .text // a TextField's editor, or the note itself
+                }()
                 return self.model.handleKey(key, editing: editing)
             }
             return consumed ? nil : event
@@ -353,6 +365,7 @@ final class IslandWindowController {
             return event
         }
         model.onWillChangeState = { [weak self] in self?.apply($0) }
+        model.isPointerOverIsland = { [weak self] in self?.pointerIsOverIsland ?? false }
         // A click anywhere in the hover panel keeps it: the user is now working in it (typing in a
         // note must not end when the pointer drifts off). The click itself still goes through.
         insideClickMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
@@ -367,7 +380,10 @@ final class IslandWindowController {
         // Another app came forward (including the source the user just jumped to): put the controller away.
         observers.append(NotificationCenter.default.addObserver(forName: NSApplication.didResignActiveNotification,
                                                                 object: nil, queue: .main) { [weak model] _ in
-            MainActor.assumeIsolated { if model?.state == .pinned, model?.onboarding == nil { model?.dismiss() } }
+            MainActor.assumeIsolated {
+                // The camera permission prompt is another process: answering it isn't leaving.
+                if model?.state == .pinned, model?.onboarding == nil, model?.mirror.state != .requesting { model?.dismiss() }
+            }
         })
 
         reposition()
@@ -504,6 +520,7 @@ final class IslandWindowController {
         observers.forEach(NotificationCenter.default.removeObserver)
         observers = []
         model.onWillChangeState = nil
+        passClicksThroughMargin(false)
         hint?.orderOut(nil)
         hint = nil
         panel.orderOut(nil)
@@ -512,6 +529,10 @@ final class IslandWindowController {
     private func apply(_ state: IslandState) {
         shrinkTask?.cancel()
         watchOutsideClicks(state == .pinned)
+        if state.isOpen { passClicksThroughMargin(true) }
+        // Closed: hand the keyboard back even if Orilio wasn't active (a pin by a drop doesn't
+        // activate it, yet a click on a button there makes the panel key).
+        if !state.isOpen, panel.isKeyWindow { panel.resignKey() }
         // Revealed over a fullscreen app and now closing with the pointer gone from the top: hide
         // again (no further pointer event may come to do it).
         if state == .collapsed, revealed, NSEvent.mouseLocation.y < screen.frame.maxY - 80 { revealed = false }
@@ -533,6 +554,7 @@ final class IslandWindowController {
         if target.width >= panel.frame.width, target.height >= panel.frame.height {
             panel.setFrame(target, display: true)
             panel.contentView?.layoutSubtreeIfNeeded() // settle the current island in the bigger window
+            if !state.isOpen { passClicksThroughMargin(false) }
         } else {
             // Taller but narrower (or the reverse), as when the mirror opens: grow to hold both
             // sizes now, so nothing is cut off while the shape animates.
@@ -543,15 +565,61 @@ final class IslandWindowController {
                 panel.setFrame(CGRect(x: x, y: model.geometry.screenTop - height, width: width, height: height), display: true)
                 panel.contentView?.layoutSubtreeIfNeeded()
             }
-            // Keep the window large until the SwiftUI shrink animation has finished, then shrink it
-            // so the empty area stops catching clicks.
-            let delay = Theme.current.reducesMotion ? 0 : IslandModel.closeDuration
+            // Keep the window large until the SwiftUI shrink animation has finished (a spring is
+            // still a few points out at its nominal duration), then shrink it.
+            let delay = Theme.current.reducesMotion ? 0 : IslandModel.closeDuration + 0.12
             shrinkTask = Task { [weak self] in
                 try? await Task.sleep(for: .seconds(delay))
                 guard let self, !Task.isCancelled, self.model.state == state else { return }
-                self.panel.setFrame(target, display: true)
+                // Measured now: the ears may have widened while it closed (music started).
+                self.panel.setFrame(self.model.geometry.windowFrame(for: state, tall: self.model.isTall(state),
+                                                                    collapsedWidth: self.model.liveCollapsedWidth,
+                                                                    panel: self.model.customPanel(for: state), dropHint: self.model.dropHint),
+                                    display: true)
+                if !state.isOpen { self.passClicksThroughMargin(false) }
             }
         }
+    }
+
+    /// Where the island is drawn, in screen coordinates (its ears included).
+    private var islandFrame: CGRect {
+        let g = model.geometry
+        let size = g.size(for: model.state, tall: model.wantsTallPanel, collapsedWidth: model.liveCollapsedWidth,
+                          panel: model.customPanel(for: model.state), dropHint: model.dropHint)
+        let ears = model.state.isOpen ? IslandGeometry.earRadius : 0
+        return CGRect(x: g.centerX - size.width / 2 - ears, y: g.screenTop - size.height, width: size.width + 2 * ears, height: size.height)
+    }
+
+    private var pointerIsOverIsland: Bool { islandFrame.insetBy(dx: -1, dy: -1).contains(NSEvent.mouseLocation) }
+
+    /// The window lets clicks through wherever the island isn't drawn. Pointer monitors need no
+    /// permission and exist only while the window is larger than the island.
+    private func passClicksThroughMargin(_ on: Bool) {
+        if on, marginMonitors.isEmpty {
+            panel.acceptsMouseMovedEvents = true
+            let events: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseDragged]
+            if let global = NSEvent.addGlobalMonitorForEvents(matching: events, handler: { [weak self] _ in
+                MainActor.assumeIsolated { self?.updateMarginPassThrough() }
+            }) { marginMonitors.append(global) }
+            if let local = NSEvent.addLocalMonitorForEvents(matching: events, handler: { [weak self] event in
+                MainActor.assumeIsolated { self?.updateMarginPassThrough() }
+                return event
+            }) { marginMonitors.append(local) }
+            updateMarginPassThrough()
+        } else if !on, !marginMonitors.isEmpty {
+            marginMonitors.forEach(NSEvent.removeMonitor)
+            marginMonitors = []
+            panel.ignoresMouseEvents = false
+        }
+    }
+
+    private func updateMarginPassThrough() {
+        let through = !pointerIsOverIsland
+        guard panel.ignoresMouseEvents != through else { return }
+        panel.ignoresMouseEvents = through
+        // The margin isn't the island: leaving for it is leaving (a window that ignores the mouse
+        // may get no exit event), and coming back over the island is a hover.
+        model.hover(!through)
     }
 
     /// The collapsed island widens for a live meeting and narrows again; follow it without a timer.
@@ -632,6 +700,7 @@ final class IslandWindowController {
 
     private func outsideEvent(_ type: NSEvent.EventType, at point: NSPoint) {
         guard model.onboarding == nil else { return } // the flow ends with Done or Esc, not a stray click
+        guard model.mirror.state != .requesting else { return } // a click on the camera permission prompt
         switch type {
         case .leftMouseDown:
             outsidePress = point

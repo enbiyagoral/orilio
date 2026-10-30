@@ -184,6 +184,7 @@ private struct FilesStrip: View {
     let shelf: ShelfModel
     let screenshotsComeIn: Bool
     let draggedOut: () -> Void
+    @Environment(\.reducesMotion) private var reduceMotion
     /// Dense: the last tile counts what's hidden ("+9"); clicking it shows everything, scrolling.
     @State private var showsAll = false
     static let denseTiles = 12
@@ -235,13 +236,13 @@ private struct FilesStrip: View {
                         ForEach(shelf.pending.prefix(Self.denseTiles - 1)) { PendingTile(pending: $0, dense: dense) }
                         ForEach(shelf.items.prefix(shown)) { item in
                             ShelfTile(item: item, shelf: shelf, dense: dense, draggedOut: draggedOut)
-                                .transition(.scale(scale: 0.9).combined(with: .opacity))
+                                .transition(reduceMotion ? .opacity : .scale(scale: 0.9).combined(with: .opacity))
                         }
                         if folded {
                             MoreTile(count: count - (Self.denseTiles - 1)) { showsAll = true }
                         }
                     }
-                    .animation(.spring(duration: 0.3, bounce: 0), value: shelf.items)
+                    .animation(reduceMotion ? .easeOut(duration: 0.15) : .spring(duration: 0.3, bounce: 0), value: shelf.items)
                 }
                 .scrollIndicators(.never)
                 .scrollDisabled(count <= (dense ? Self.denseTiles : 5) || (dense && !showsAll))
@@ -313,7 +314,7 @@ private struct ShelfTile: View {
         .animation(.easeOut(duration: 0.6), value: fresh)
         .help(item.name)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(item.name), \(detail)")
+        .accessibilityLabel(spokenName)
         .accessibilityAddTraits(selected ? .isSelected : [])
         .accessibilityAction { shelf.select(item.id, extending: false) }
         .accessibilityAction(named: "Open") { shelf.open([item]) }
@@ -328,6 +329,8 @@ private struct ShelfTile: View {
         if hovering { return .white.opacity(0.5) }
         return .clear
     }
+
+    private var spokenName: String { "\(item.name), \(L(detail))" }
 
     private var detail: String {
         if !item.isAvailable { return "Missing" }

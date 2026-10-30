@@ -413,7 +413,7 @@ private struct ModuleTile: View {
         .focused(focus, equals: .module(tab))
         .onKeyPress(.space) { action(); return .handled }
         .focusRing(focus.wrappedValue == .module(tab), radius: 16)
-        .accessibilityLabel(String(localized: "\(tab.onboardingTitle), \(tab.onboardingNote)"))
+        .accessibilityLabel(L(tab.onboardingTitle) + ", " + L(tab.onboardingNote))
         .accessibilityAddTraits(on ? [.isSelected, .isButton] : .isButton)
     }
 }

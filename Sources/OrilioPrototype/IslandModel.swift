@@ -272,6 +272,8 @@ final class IslandModel {
     @ObservationIgnored var onWillChangeState: ((IslandState) -> Void)?
     /// A held mouse button (dragging the progress bar past the edge) must not close the island.
     @ObservationIgnored var isPointerBusy: () -> Bool = { NSEvent.pressedMouseButtons != 0 }
+    /// Is the pointer over the island itself (not the window's margin)? Set by the window.
+    @ObservationIgnored var isPointerOverIsland: () -> Bool = { false }
     @ObservationIgnored private var pending: Task<Void, Never>?
     /// False while the shelf opens after a drop: the user is still in their own app, so the
     /// panel shows without taking keyboard focus.
@@ -342,11 +344,17 @@ final class IslandModel {
     }
 
     /// A key while the island is key. Returns false when it isn't the island's.
+    /// The window's part of Esc in a field: it takes the keyboard back from the field.
+    @ObservationIgnored var onEndEditing: (() -> Void)?
+
     func handleKey(_ key: KeyPress, editing: IslandKeyRouter.Editing) -> Bool {
         commandHold.cancel() // ⌘ plus a key is a shortcut, not a hold
         badgeTask?.cancel()
         showsModuleBadges = false
         guard state == .pinned, let action = IslandKeyRouter.route(key, tab: tab, editing: editing) else { return false }
+        // In the Shelf's Screenshots part the grid has its own keys (arrows, Space, ⌫): the Files
+        // part's list actions would act on tiles the user can't see.
+        if tab == .shelf, shelfSection == .screenshots, action.actsOnTheShelfList { return false }
         return perform(action)
     }
 
@@ -391,6 +399,7 @@ final class IslandModel {
             if tab == .notes { notes.requestEditor(typing: text) } else { clipboard.requestSearch(typing: text) }
         case .settings: SettingsWindow.show()
         case .togglePin: togglePin()
+        case .endEditing: onEndEditing?()
         case .close:
             if tab == .shelf, shelf.previewing != nil { shelf.closePreview() } else { dismiss() }
         case .closeAndUnpin: dismiss()
@@ -526,7 +535,10 @@ final class IslandModel {
             pinnedByClick = nil
             return
         }
-        set(state == .pinned ? .expanded : .pinned)
+        let unpinning = state == .pinned
+        set(unpinning ? .expanded : .pinned)
+        // Unpinned from the keyboard with the pointer elsewhere: no mouse-exit will come to close it.
+        if unpinning, !isPointerOverIsland() { schedule(.collapsed, after: Self.closeDelay) }
     }
     func dismiss() {
         if onboarding != nil { return finishOnboarding() } // never a half state
@@ -574,12 +586,15 @@ final class IslandModel {
     func set(_ new: IslandState) {
         pending?.cancel()
         pending = nil
+        // Already pinned (a module shortcut on an island a drop opened): still take the keyboard.
+        if new == .pinned, state == .pinned { return onWillChangeState?(new) ?? () }
         guard new != state else { return }
         // Window first, state second: the panel must already be its new size when SwiftUI
         // starts animating, or one frame renders the island offset from the top edge.
         onWillChangeState?(new)
         if !new.isOpen {
             shelf.closePreview() // Quick Look closes with the island
+            if tab == .shelf { QuickLook.close() } // the screenshot preview too
             keyboardOpened = false
             showsModuleBadges = false
         }
